@@ -1,0 +1,41 @@
+# ============================================================
+# Cấu hình trọng số chấm điểm — Rating Agent LamsonRetail
+# Điểm mỗi trục = trung bình có trọng số các chỉ số con (thang 0-100).
+# Điểm tổng = trọng số 3 trục.
+# Các trọng số trong cùng một nhóm không bắt buộc cộng bằng 1;
+# scorer sẽ tự chuẩn hoá.
+# ============================================================
+
+# Trọng số giữa 3 trục chính
+axis_weights:
+  performance: 0.4
+  collaboration: 0.3
+  grow: 0.3
+
+# Chỉ số con của từng trục.
+# higher_is_better: false => chỉ số càng thấp càng tốt (vd thời gian phản hồi)
+metrics:
+  collaboration:
+    response_rate:        { weight: 0.3, higher_is_better: true }
+    avg_response_time:    { weight: 0.2, higher_is_better: false }
+    cross_team_tasks:     { weight: 0.3, higher_is_better: true }
+    doc_coauthor:         { weight: 0.2, higher_is_better: true }
+
+  grow:
+    skill_trend:          { weight: 0.35, higher_is_better: true }
+    task_complexity_up:   { weight: 0.25, higher_is_better: true }
+    learning_docs:        { weight: 0.20, higher_is_better: true }
+    feedback_adoption:    { weight: 0.20, higher_is_better: true }
+
+  performance:
+    task_completion_rate: { weight: 0.30, higher_is_better: true }
+    on_time_rate:         { weight: 0.25, higher_is_better: true }
+    sales_kpi:            { weight: 0.30, higher_is_better: true }
+    quality_score:        { weight: 0.15, higher_is_better: true }
+
+# Ngưỡng xếp loại theo điểm tổng (0-100)
+grade_bands:
+  - { min: 85, label: "A - Xuất sắc" }
+  - { min: 70, label: "B - Tốt" }
+  - { min: 55, label: "C - Đạt" }
+  - { min: 0,  label: "D - Cần cải thiện" }
