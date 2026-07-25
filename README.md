@@ -10,9 +10,13 @@ Dữ liệu lấy từ **Lark** (chat, document, task) và **BigQuery** data war
 
 ```bash
 cd RatingAgent-LamsonRetail
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate   # macOS thường chỉ có python3
 pip install -e ".[dev]"        # hoặc: pip install -r requirements.txt
 ```
+
+> Sau khi `source .venv/bin/activate`, lệnh `python` và `pytest` mới có trong
+> PATH. Nếu chưa activate, gọi trực tiếp: `./.venv/bin/python` và
+> `./.venv/bin/python -m pytest`.
 
 ## Cấu hình
 
