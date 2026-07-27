@@ -1,160 +1,200 @@
 # Rating Agent — LamsonRetail
 
-Hệ thống agent nội bộ đánh giá nhân viên/agent của LamsonRetail dựa trên dữ liệu
-làm việc thực tế trên **Lark** (chat, document, task) và **BigQuery** (data
+Hệ thống nội bộ đánh giá **Squad** và **Agent** của LamsonRetail dựa trên dữ liệu
+làm việc thực tế trên **Lark** (chat, document, task, base) và **BigQuery** (data
 warehouse vận hành kinh doanh).
 
-Ba trục đánh giá:
+> **Cấu trúc master data (Lark Base) đang chờ confirm** — xem
+> [MASTER_DATA.md](MASTER_DATA.md). Các bước code tiếp theo chờ bạn duyệt schema.
 
-- **Collaboration** — mức độ phối hợp với đồng đội.
-- **Grow** — sự phát triển, học hỏi, cải thiện theo thời gian.
-- **Performance** — hiệu quả công việc, kết quả kinh doanh.
+## Hai nhánh đánh giá tách biệt
+
+| Đối tượng | Chấm theo | Nguồn chính |
+|-----------|-----------|-------------|
+| **Squad** (đội người) | **Hiệu quả theo mục tiêu** (OKR/KR achievement, đúng tiến độ) | `squad_objectives`, Lark Task, BigQuery |
+| **Agent** (AI/software agent) | **Skill · Mức độ sử dụng · Kết quả trả về** + cổng chặn bằng **test** | `agents`, `agent_test_runs`, `agent_usage` |
+
+Mọi agent trước khi **golive** phải được **đăng ký** vào registry `agents` trên
+Lark Base với đầy đủ thông tin, và **pass bộ test** thì mới được kích hoạt. Test
+tự động chạy **định kỳ**; agent **fail** sẽ bị **deactivate**.
 
 ---
 
 ## 1. Kiến trúc tổng thể
 
 ```
-                        ┌────────────────────────────────────────────┐
-                        │                Rating Agent                 │
-                        └────────────────────────────────────────────┘
-                                          │
-        ┌─────────────────────────────────┼─────────────────────────────────┐
-        │                                 │                                 │
-┌───────▼────────┐              ┌─────────▼─────────┐              ┌────────▼────────┐
-│  Nguồn dữ liệu  │              │     Pipeline      │              │     Đầu ra       │
-├────────────────┤              ├───────────────────┤              ├─────────────────┤
-│ Lark Chat       │──collect──►  │ 1. Thu thập        │──►           │ Bản đánh giá     │
-│ Lark Document   │              │ 2. Chuẩn hoá       │              │ (per employee)   │
-│ Lark Task       │              │ 3. Trích đặc trưng │              │ Xếp hạng (rank)  │
-│ BigQuery DWH    │──query───►   │ 4. Tính điểm       │──►           │ Báo cáo/Export   │
-└────────────────┘              │ 5. Tổng hợp báo cáo│              └─────────────────┘
-                                └───────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                               Rating Agent                                 │
+└──────────────────────────────────────────────────────────────────────────┘
+        │                          │                            │
+┌───────▼────────┐        ┌────────▼─────────┐         ┌────────▼─────────┐
+│  Master data    │        │    Thu thập &     │         │   Đánh giá &      │
+│  (Lark Base)    │        │    trích tín hiệu │         │   Governance      │
+├────────────────┤        ├──────────────────┤         ├──────────────────┤
+│ squads          │        │ Lark Chat/Task/Doc│         │ Squad scorer      │
+│ squad_objectives│──đọc──►│ BigQuery KPI      │──►      │ Agent scorer      │
+│ agents (registry)│       │ Agent test runner │         │ Test gate →       │
+│ agent_skills    │        │ Agent usage       │         │   deactivate      │
+│ agent_test_cases│        └──────────────────┘         └────────┬─────────┘
+│ agent_usage     │                                              │ ghi lại
+└────────────────┘◄─────────────────────────────────────────────┘
+        ▲                                                         │
+        └──────────── squad_evaluations / agent_evaluations ◄─────┘
+                                    │
+                            ┌───────▼────────┐
+                            │  Màn hình (§6)  │  scoreboard, registry, test dashboard
+                            └────────────────┘
 ```
 
-### Thành phần code
+### Thành phần code (dự kiến sau confirm)
 
 | Lớp | Module | Vai trò |
 |-----|--------|---------|
-| Cấu hình | `src/rating_agent/config.py` | Đọc biến môi trường, load config chấm điểm |
-| Kết nối Lark | `src/rating_agent/lark/` | Client OAuth app + wrapper chat/doc/task |
-| Kết nối BigQuery | `src/rating_agent/bq/` | Client + query builder + ví dụ query |
-| Đánh giá | `src/rating_agent/evaluation/` | Data model, tiêu chí, hàm tính điểm |
-| Điều phối | `src/rating_agent/pipeline.py` | Ghép nối thu thập → chấm điểm → báo cáo |
+| Cấu hình | `src/rating_agent/config.py` | Env + config chấm điểm |
+| Lark Base | `src/rating_agent/lark/base.py` | Đọc/ghi master data, registry, test, usage |
+| Lark tín hiệu | `src/rating_agent/lark/` | chat/doc/task → tín hiệu squad & usage agent |
+| BigQuery | `src/rating_agent/bq/` | KPI kinh doanh cho `squad_objectives.actual` |
+| Đánh giá squad | `src/rating_agent/evaluation/squad_scorer.py` | Chấm hiệu quả theo mục tiêu |
+| Đánh giá agent | `src/rating_agent/evaluation/agent_scorer.py` | Chấm skill/usage/result + cổng test |
+| Test agent | `src/rating_agent/agent_testing/` | Runner chạy test, ghi run, gate deactivate |
+| Điều phối | `src/rating_agent/pipeline.py` | Ghép nối thu thập → chấm → ghi kết quả |
 
 ---
 
-## 2. Các nguồn dữ liệu
+## 2. Nguồn dữ liệu
 
-### 2.1 Lark (Feishu/Lark Open Platform)
+### 2.1 Lark Base — system of record
+Toàn bộ master data, registry agent, test case/run, usage nằm trên Lark Base.
+Truy cập qua **Lark MCP** (`base_record_list`, `base_data_query`,
+`base_record_create`) hoặc Open API. Chi tiết bảng: [MASTER_DATA.md](MASTER_DATA.md).
 
-Dùng **Custom App** trong Lark Developer Console, xác thực bằng
-`app_id` + `app_secret` → lấy `tenant_access_token`.
+### 2.2 Lark Chat / Task / Doc — tín hiệu vận hành
+| Nguồn | API/MCP | Dùng cho |
+|-------|---------|----------|
+| Chat | `im_chat_list`, `im/v1/messages` | hoạt động squad; usage agent chạy trong chat |
+| Task | `task_search`, `task/v2/tasks` | tiến độ mục tiêu squad (`data_source=lark_task`) |
+| Doc/Wiki/Drive | `wiki_node_list`, `drive_search` | báo cáo/kết quả squad |
 
-| Nguồn | API chính | Tín hiệu khai thác |
-|-------|-----------|---------------------|
-| **Chat** | `im/v1/chats`, `im/v1/messages` | tần suất trả lời, thời gian phản hồi, mức tham gia thảo luận, @mention, hỗ trợ đồng đội |
-| **Document** | `docx/v1/documents`, `wiki/v2` | đóng góp tài liệu, đồng tác giả, review/comment |
-| **Task** | `task/v2/tasks` | số task hoàn thành, đúng hạn, độ khó, phối hợp task chung |
+### 2.3 BigQuery — KPI kinh doanh
+Cấp `actual` cho các KR có `data_source=bigquery`. Xác thực bằng service account
+(`GOOGLE_APPLICATION_CREDENTIALS`) hoặc BigQuery MCP.
 
-Quyền (scopes) cần bật cho app: `im:message:readonly`, `im:chat:readonly`,
-`docx:document:readonly`, `task:task:readonly`, `contact:user.base:readonly`.
-
-> **Lưu ý riêng tư:** Agent chỉ đọc metadata và tín hiệu tổng hợp phục vụ đánh
-> giá công việc. Việc bot tham gia/theo dõi nhóm chat cần được thông báo minh
-> bạch tới nhân viên và tuân thủ chính sách nội bộ.
-
-### 2.2 BigQuery Data Warehouse
-
-Chứa dữ liệu vận hành kinh doanh (bán hàng, đơn, KPI theo nhân viên). Xác thực
-bằng **Service Account** (JSON key) qua biến `GOOGLE_APPLICATION_CREDENTIALS`.
-
-Ví dụ bảng giả định:
-- `dwh.employees` — danh mục nhân viên (map `lark_user_id` ↔ `employee_id`).
-- `dwh.sales_fact` — giao dịch bán hàng theo nhân viên/thời gian.
-- `dwh.kpi_monthly` — KPI đã tổng hợp theo tháng.
+Quyền/scope Lark cần: `bitable:app`, `im:message:readonly`, `im:chat:readonly`,
+`task:task:readonly`, `docx:document:readonly`, `contact:user.base:readonly`.
 
 ---
 
-## 3. Pipeline: thu thập → tính điểm → báo cáo
+## 3. Pipeline
 
-1. **Thu thập (collect)** — gọi Lark API + BigQuery, lấy dữ liệu theo kỳ đánh
-   giá (ví dụ 1 tháng/quý).
-2. **Chuẩn hoá (normalize)** — quy về `employee_id`, đơn vị thời gian thống nhất.
-3. **Trích đặc trưng (features)** — tính các chỉ số thô cho từng trục.
-4. **Tính điểm (score)** — áp trọng số theo `config/scoring_config.yaml`, chuẩn
-   hoá về thang 0–100.
-5. **Tổng hợp (report)** — sinh `EmployeeEvaluation` + bảng xếp hạng, export.
+1. **Nạp master data** — đọc `squads`, `squad_objectives`, `agents`,
+   `agent_test_cases` từ Lark Base.
+2. **Thu thập tín hiệu** — Lark chat/task/doc + BigQuery + `agent_usage`.
+3. **Chạy test agent** — runner thực thi `agent_test_cases` theo `schedule`, ghi
+   `agent_test_runs`.
+4. **Chấm điểm** — squad scorer (mục tiêu) + agent scorer (skill/usage/result).
+5. **Governance gate** — agent fail test → set `status = deactivated`.
+6. **Ghi kết quả** — `squad_evaluations`, `agent_evaluations` về Lark Base + render
+   màn hình (§6).
 
 ---
 
-## 4. Tiêu chí chấm điểm đề xuất
+## 4. Tiêu chí chấm điểm
 
-Mỗi trục là trung bình có trọng số của các chỉ số con, chuẩn hoá 0–100.
-
-### Collaboration (phối hợp)
+### 4.1 Squad — hiệu quả theo mục tiêu
 | Chỉ số | Nguồn | Ý nghĩa |
 |--------|-------|---------|
-| response_rate | Lark chat | tỉ lệ phản hồi tin nhắn được @mention |
-| avg_response_time | Lark chat | tốc độ phản hồi (điểm nghịch đảo) |
-| cross_team_tasks | Lark task | số task phối hợp liên nhóm |
-| doc_coauthor | Lark doc | số tài liệu đồng tác giả/comment hữu ích |
+| objective_achievement | `squad_objectives` | TB có trọng số `progress = actual/target` các KR |
+| on_time_rate | Lark Task | tỉ lệ mốc/việc đúng hạn |
+| (tuỳ chọn) collaboration | Lark Chat | phối hợp nội bộ squad |
 
-### Grow (phát triển)
+`total_squad = 0.7 * objective_achievement + 0.3 * on_time_rate` (cấu hình được).
+
+### 4.2 Agent — skill / usage / kết quả
 | Chỉ số | Nguồn | Ý nghĩa |
 |--------|-------|---------|
-| skill_trend | BigQuery/Lark | xu hướng cải thiện KPI theo kỳ |
-| task_complexity_up | Lark task | độ khó task tăng dần |
-| learning_docs | Lark doc | tài liệu học tập/chia sẻ kiến thức tạo ra |
-| feedback_adoption | Lark chat/task | mức độ tiếp thu góp ý (định tính, giai đoạn sau) |
+| skill_score | `agent_test_runs` theo `skill_id` | tỉ lệ pass test theo từng skill |
+| usage_score | `agent_usage` | chuẩn hoá `invocations`, `unique_users` |
+| result_score | `agent_usage` | `success_rate`, `user_rating`, `latency` (nghịch) |
+| test_pass_rate | `agent_test_runs` | % test pass trong kỳ |
 
-### Performance (hiệu quả)
-| Chỉ số | Nguồn | Ý nghĩa |
-|--------|-------|---------|
-| task_completion_rate | Lark task | tỉ lệ hoàn thành task |
-| on_time_rate | Lark task | tỉ lệ đúng hạn |
-| sales_kpi | BigQuery | đạt/ vượt KPI kinh doanh |
-| quality_score | BigQuery | chỉ số chất lượng (đổi trả, hài lòng KH) |
+`total_agent = 0.4*skill + 0.3*result + 0.3*usage` (cấu hình được).
 
-Trọng số mặc định giữa 3 trục: Performance 0.4 / Collaboration 0.3 / Grow 0.3 —
-cấu hình được trong `config/scoring_config.yaml`.
+**Cổng chặn (governance):** nếu test định kỳ gần nhất = `fail` (hoặc fail N lần
+liên tiếp — chờ bạn chốt N), `status_recommendation = deactivate` và tự set
+`agents.status = deactivated`, bất kể điểm số.
+
+Ngưỡng xếp loại A/B/C/D áp riêng cho từng nhánh (config).
 
 ---
 
-## 5. Lộ trình theo giai đoạn
+## 5. Governance & vòng đời agent
 
-### MVP (bản này)
-- [x] Scaffold, cấu trúc module, config.
-- [x] Khung client Lark (chat/doc/task) + BigQuery.
-- [x] Data model + hàm tính điểm chạy được với dữ liệu mẫu.
-- [ ] Kết nối thật Lark app + service account (cần credential).
+```
+draft ──đăng ký đủ thông tin──► registered ──chạy full test──► testing
+                                                                  │
+                              pass ───────────────────────────────┤
+                                                                  ▼
+   deactivated ◄──test định kỳ FAIL / fail N lần── active ◄──golive
+        │                                            ▲
+        └────────sửa + test lại pass────────────────┘
+```
 
-### Giai đoạn 2 — Kết nối thật
-- Triển khai token cache cho Lark, phân trang API.
-- Query BigQuery thật, map `lark_user_id` ↔ `employee_id`.
-- Persist dữ liệu thô (BigQuery/Postgres) để tính xu hướng theo kỳ.
-
-### Giai đoạn 3 — Chất lượng đánh giá
-- Chỉ số định tính bằng LLM (tóm tắt đóng góp, phân tích sentiment phối hợp).
-- Chuẩn hoá theo phòng ban/vị trí (so sánh công bằng).
-- Dashboard báo cáo + xuất PDF/Sheet.
-
-### Giai đoạn 4 — Tự động hoá
-- Lịch chạy định kỳ (cron), cảnh báo, vòng phản hồi với quản lý.
+- **Đăng ký bắt buộc trước golive:** `agent_id, name, version, owner,
+  served_squads, skills, data_sources, endpoint_ref` phải đầy đủ.
+- **Pre-golive test:** chạy toàn bộ `agent_test_cases enabled` → phải pass.
+- **Test định kỳ:** theo `schedule` (daily/weekly) → ghi `agent_test_runs`.
+- **Auto-deactivate:** vi phạm chính sách test → `status=deactivated` +
+  `deactivate_reason`, thông báo owner.
 
 ---
 
-## 6. Credential cần cấu hình
+## 6. Màn hình đánh giá (ưu tiên làm rõ trước)
 
-Xem `.env.example`. Tối thiểu:
+| # | Màn hình | Nội dung chính | Nguồn |
+|---|----------|----------------|-------|
+| 1 | **Squad Scoreboard** | Xếp hạng squad theo `total_squad`, đèn tiến độ mục tiêu | `squad_evaluations` |
+| 2 | **Squad Detail** | KR & progress, link chat/task/drive/dashboard/plan, thành viên | `squads`, `squad_objectives` |
+| 3 | **Agent Registry** | Danh sách agent + `status` + `health` + lần test gần nhất | `agents` |
+| 4 | **Agent Detail** | Skill, xu hướng usage, lịch sử test, kết quả | `agents`, `agent_usage`, `agent_test_runs` |
+| 5 | **Agent Test Dashboard** | Lịch test, pass/fail, agent đang bị deactivate + lý do | `agent_test_runs` |
+| 6 | **Agent Leaderboard** | Xếp hạng agent theo skill/usage/result | `agent_evaluations` |
+
+Định dạng render đề xuất: HTML dashboard tĩnh (self-contained) hoặc Lark
+Dashboard/Base view. Sẽ chốt sau khi duyệt master data.
+
+---
+
+## 7. Lộ trình
+
+### Giai đoạn 0 — Chốt thiết kế (đang ở đây)
+- [ ] Confirm cấu trúc master data ([MASTER_DATA.md](MASTER_DATA.md)).
+- [ ] Confirm tiêu chí (§4) và danh sách màn hình (§6).
+
+### MVP — sau confirm
+- Tạo/nạp Lark Base theo schema; connector đọc/ghi Base.
+- Squad scorer + Agent scorer chạy với dữ liệu thật.
+- Test runner + auto-deactivate; render màn hình 1,3,5.
+
+### Giai đoạn 2 — Tự động hoá
+- Lịch chạy định kỳ (cron) cho test + chấm điểm; cảnh báo owner.
+- Đầy đủ 6 màn hình; export báo cáo.
+
+### Giai đoạn 3 — Nâng cao
+- Chấm định tính bằng LLM (assertion `semantic`), chuẩn hoá theo nhóm, phân tích
+  xu hướng nhiều kỳ.
+
+---
+
+## 8. Credential cần cấu hình
+
+Xem [.env.example](.env.example). Tối thiểu:
 
 | Biến | Mô tả |
 |------|-------|
-| `LARK_APP_ID` | App ID của Custom App trên Lark |
-| `LARK_APP_SECRET` | App Secret |
+| `LARK_APP_ID` / `LARK_APP_SECRET` | Custom App Lark (bật quyền `bitable:app` cho Base) |
 | `LARK_DOMAIN` | `https://open.larksuite.com` (Lark) hoặc `https://open.feishu.cn` (Feishu) |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Đường dẫn file JSON service account |
-| `BQ_PROJECT_ID` | Project ID trên Google Cloud |
-| `BQ_DATASET` | Dataset chứa dữ liệu vận hành |
+| `LARK_BASE_APP_TOKEN` | Token app Lark Base chứa master data |
+| `GOOGLE_APPLICATION_CREDENTIALS` | JSON service account BigQuery |
+| `BQ_PROJECT_ID` / `BQ_DATASET` | Project & dataset DWH |
 
-> Không commit file `.env` và JSON key vào git (đã liệt kê trong `.gitignore`).
+> Không commit `.env` và JSON key (đã có trong `.gitignore`).
