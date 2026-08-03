@@ -1,41 +1,45 @@
 # ============================================================
-# Cấu hình trọng số chấm điểm — Rating Agent LamsonRetail
-# Điểm mỗi trục = trung bình có trọng số các chỉ số con (thang 0-100).
-# Điểm tổng = trọng số 3 trục.
-# Các trọng số trong cùng một nhóm không bắt buộc cộng bằng 1;
-# scorer sẽ tự chuẩn hoá.
+# Cấu hình chấm điểm — Rating Agent LamsonRetail
+# Hai nhánh tách biệt: SQUAD (hiệu quả theo mục tiêu) và
+# AGENT (skill / usage / kết quả + cổng test).
+# Điểm chuẩn hoá thang 0-100. Trọng số không bắt buộc cộng bằng 1;
+# scorer tự chuẩn hoá.
 # ============================================================
 
-# Trọng số giữa 3 trục chính
-axis_weights:
-  performance: 0.4
-  collaboration: 0.3
-  grow: 0.3
+# ---------------- SQUAD: hiệu quả theo mục tiêu ----------------
+squad:
+  weights:
+    objective_achievement: 0.7   # mức đạt KR (actual/target)
+    on_time_rate: 0.3            # đúng tiến độ
+  # Trần điểm cho một KR (vượt chỉ tiêu vẫn tính tối đa 100 khi chấm)
+  kr_progress_cap: 100
+  grade_bands:
+    - { min: 85, label: "A - Xuất sắc" }
+    - { min: 70, label: "B - Tốt" }
+    - { min: 55, label: "C - Đạt" }
+    - { min: 0,  label: "D - Cần cải thiện" }
 
-# Chỉ số con của từng trục.
-# higher_is_better: false => chỉ số càng thấp càng tốt (vd thời gian phản hồi)
-metrics:
-  collaboration:
-    response_rate:        { weight: 0.3, higher_is_better: true }
-    avg_response_time:    { weight: 0.2, higher_is_better: false }
-    cross_team_tasks:     { weight: 0.3, higher_is_better: true }
-    doc_coauthor:         { weight: 0.2, higher_is_better: true }
+# ---------------- AGENT: skill / usage / kết quả ----------------
+agent:
+  weights:
+    skill_score: 0.4     # tỉ lệ pass test theo skill
+    result_score: 0.3    # chất lượng kết quả trả về
+    usage_score: 0.3     # mức độ sử dụng
+  # Thành phần của result_score
+  result_components:
+    success_rate: 0.5    # tỉ lệ trả về thành công (0-1)
+    user_rating: 0.3     # điểm phản hồi người dùng (thang 1-5)
+    latency: 0.2         # độ trễ (càng thấp càng tốt)
+  grade_bands:
+    - { min: 85, label: "A - Xuất sắc" }
+    - { min: 70, label: "B - Tốt" }
+    - { min: 55, label: "C - Đạt" }
+    - { min: 0,  label: "D - Cần cải thiện" }
 
-  grow:
-    skill_trend:          { weight: 0.35, higher_is_better: true }
-    task_complexity_up:   { weight: 0.25, higher_is_better: true }
-    learning_docs:        { weight: 0.20, higher_is_better: true }
-    feedback_adoption:    { weight: 0.20, higher_is_better: true }
-
-  performance:
-    task_completion_rate: { weight: 0.30, higher_is_better: true }
-    on_time_rate:         { weight: 0.25, higher_is_better: true }
-    sales_kpi:            { weight: 0.30, higher_is_better: true }
-    quality_score:        { weight: 0.15, higher_is_better: true }
-
-# Ngưỡng xếp loại theo điểm tổng (0-100)
-grade_bands:
-  - { min: 85, label: "A - Xuất sắc" }
-  - { min: 70, label: "B - Tốt" }
-  - { min: 55, label: "C - Đạt" }
-  - { min: 0,  label: "D - Cần cải thiện" }
+  # ---- Chính sách governance / auto-deactivate ----
+  deactivate_policy:
+    # mode: consecutive_fail | single_fail | pass_rate
+    mode: consecutive_fail
+    consecutive_fail_threshold: 2   # fail N lần liên tiếp -> deactivate
+    pass_rate_threshold: 0.8        # dùng khi mode=pass_rate
+    watch_pass_rate: 0.9            # dưới ngưỡng này -> cảnh báo "watch"
