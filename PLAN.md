@@ -160,7 +160,11 @@ draft ──đăng ký đủ thông tin──► registered ──chạy full te
 | 6 | **Agent Leaderboard** | Xếp hạng agent theo skill/usage/result | `agent_evaluations` |
 
 Định dạng render đề xuất: HTML dashboard tĩnh (self-contained) hoặc Lark
-Dashboard/Base view. Sẽ chốt sau khi duyệt master data.
+Dashboard/Base view.
+
+> **Prototype đã có:** cả 6 màn hình được dựng trong `src/rating_agent/reporting/`
+> (dữ liệu điểm từ scorer thật + dữ liệu mẫu). Sinh bằng
+> `python -m rating_agent.reporting.dashboard` → `output/dashboard.html`.
 
 ---
 

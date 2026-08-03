@@ -40,6 +40,17 @@ python -m rating_agent.pipeline
 Kết quả: **Squad Scoreboard** + **Agent Leaderboard**, trong đó có 1 agent mẫu
 fail test 2 lần liên tiếp và bị khuyến nghị `deactivate`.
 
+## Sinh prototype dashboard (6 màn hình)
+
+```bash
+python -m rating_agent.reporting.dashboard
+```
+
+Tạo `output/dashboard.html` — trang HTML self-contained (mở bằng trình duyệt),
+gồm: Squad Scoreboard, Squad Detail, Agent Registry, Agent Detail, Agent Test
+Dashboard, Agent Leaderboard. Có sidebar điều hướng và nút đổi giao diện
+sáng/tối. Dữ liệu điểm lấy từ scorer thật + dữ liệu mẫu.
+
 ## Chạy test
 
 ```bash
@@ -62,8 +73,9 @@ RatingAgent-LamsonRetail/
 │   ├── lark/                     # Client Lark: base, chat, docs, task
 │   ├── bq/                       # Client BigQuery + ví dụ query
 │   ├── evaluation/               # models, criteria, squad_scorer, agent_scorer
-│   └── agent_testing/            # runner test agent + assertion + gate
-└── tests/                        # test_scorer, test_config, test_agent_testing
+│   ├── agent_testing/            # runner test agent + assertion + gate
+│   └── reporting/                # sinh prototype dashboard HTML (6 màn hình)
+└── tests/                        # test_scorer, test_config, test_agent_testing, test_reporting
 ```
 
 ## Trạng thái (MVP)
@@ -71,8 +83,8 @@ RatingAgent-LamsonRetail/
 - [x] Hai nhánh scorer (squad/agent) chạy với dữ liệu mẫu.
 - [x] Module test agent: runner, assertion, chính sách auto-deactivate.
 - [x] Khung client Lark (base/chat/doc/task) và BigQuery.
+- [x] Prototype 6 màn hình đánh giá (HTML) — `rating_agent.reporting`.
 - [ ] Kết nối nguồn thật (`collect_*_from_sources`) — sau khi confirm master data.
-- [ ] Render 6 màn hình đánh giá (PLAN §6).
 
 ## Lưu ý riêng tư & tuân thủ
 
