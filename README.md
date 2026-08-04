@@ -9,6 +9,7 @@ Dữ liệu lấy từ **Lark** (Base, chat, doc, task) và **BigQuery** data wa
 
 > - Kiến trúc, nguồn dữ liệu, tiêu chí, màn hình, lộ trình: [PLAN.md](PLAN.md).
 > - Cấu trúc master data trên Lark Base (đang chờ confirm): [MASTER_DATA.md](MASTER_DATA.md).
+> - Tích hợp/giám sát agent VPS↔Lark, token, log, đo 6 chỉ số tool: [AGENT_INTEGRATION.md](AGENT_INTEGRATION.md).
 
 ## Cài đặt
 
@@ -74,8 +75,9 @@ RatingAgent-LamsonRetail/
 │   ├── bq/                       # Client BigQuery + ví dụ query
 │   ├── evaluation/               # models, criteria, squad_scorer, agent_scorer
 │   ├── agent_testing/            # runner test agent + assertion + gate
+│   ├── telemetry/                # trace + đo 6 chỉ số hành vi tool + token + SDK
 │   └── reporting/                # sinh prototype dashboard HTML (6 màn hình)
-└── tests/                        # test_scorer, test_config, test_agent_testing, test_reporting
+└── tests/                        # test_scorer, test_config, test_agent_testing, test_reporting, test_metrics
 ```
 
 ## Trạng thái (MVP)
