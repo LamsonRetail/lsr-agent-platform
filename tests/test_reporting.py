@@ -34,3 +34,8 @@ def test_platform_prototype_has_three_parts():
     for tab in ("-config", "-dash", "-sched"):        # 3 tab backend
         assert f"AG-ORDER-BOT{tab}" in html
     assert "Vercel" in html and "Mở backend" in html
+    # Màn Test & Learn: view + 3 tab + nav
+    assert "view-testlearn" in html
+    for tab in ("tl-tests", "tl-results", "tl-training"):
+        assert tab in html
+    assert "nav-testlearn" in html and "Training (HR)" in html

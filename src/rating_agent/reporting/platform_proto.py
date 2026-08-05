@@ -18,8 +18,18 @@ from ..config import load_scoring_config, load_settings
 from ..evaluation import AgentScorer, SquadScorer
 from ..pipeline import build_sample_agents, build_sample_squads
 from . import sample
-from .dashboard import _esc, badge, bar, grade_badge, kpi, sparkline
+from .dashboard import _esc, badge, bar, chips, grade_badge, kpi, sparkline
 from .platform_sample import AGENT_BACKEND
+from ..testlearn import (
+    Answer,
+    Question,
+    TakerType,
+    Test,
+    TestStatus,
+    TrainingMaterial,
+    grade,
+    recommend_training,
+)
 
 _STATUS_KIND = {"active": "good", "registered": "neutral", "deactivated": "critical"}
 _LOG_KIND = {"ok": "good", "warn": "warning", "fail": "critical"}
@@ -209,6 +219,147 @@ def render_agent_backend(a: dict, squad_krs: list[dict]) -> str:
     </section>"""
 
 
+# --------------------------- TEST & LEARN ---------------------------
+
+_TEST_STATUS_KIND = {"draft": "neutral", "in_review": "warning", "active": "good", "archived": "neutral"}
+_SOURCE_KIND = {"auto": "series", "manual": "neutral"}
+
+
+def _testlearn_sample():
+    order_q = [
+        Question(question_id="q1", prompt="Trạng thái đơn đã giao?", expected="delivered",
+                 assertion_type="contains", skill_id="order", tags=["order"]),
+        Question(question_id="q2", prompt="Mã đơn hợp lệ có tiền tố?", expected="A-",
+                 assertion_type="contains", skill_id="order", tags=["order"]),
+    ]
+    t_active = Test(test_id="TL-1", title="KT đơn hàng", status=TestStatus.ACTIVE,
+                    reviewed_by="hr.lan", source="manual", questions=order_q, pass_threshold=0.8)
+    t_review = Test(test_id="TL-2", title="KT vận hành kho", status=TestStatus.IN_REVIEW,
+                    source="auto", pass_threshold=0.7,
+                    questions=[Question(question_id="q1", prompt="Nguyên tắc xuất kho?",
+                                        expected="fifo", skill_id="ops", tags=["ops"])])
+    t_draft = Test(test_id="TL-3", title="An toàn dữ liệu KH", status=TestStatus.DRAFT,
+                   source="manual", pass_threshold=0.8,
+                   questions=[Question(question_id="q1", prompt="PII là gì?",
+                                       expected="pii", skill_id="security", tags=["security"])])
+    tests = [t_active, t_review, t_draft]
+    mats = [
+        TrainingMaterial(material_id="M-order", title="Quy trình đơn hàng", md_content="# Đơn hàng...",
+                         tags=["order"], provided_by="HR", source_file="quy_trinh_don_hang.md"),
+        TrainingMaterial(material_id="M-ops", title="Vận hành kho (FIFO)", md_content="# Kho...",
+                         tags=["ops"], provided_by="HR", source_file="kho_fifo.docx"),
+        TrainingMaterial(material_id="M-sec", title="Bảo mật dữ liệu KH", md_content="# Bảo mật...",
+                         tags=["security"], provided_by="HR", source_file="bao_mat.pdf"),
+    ]
+
+    def _attempt(taker_type, taker_id, ans):
+        score, passed, _ = grade(t_active, ans)
+        rec = [] if passed else recommend_training(t_active, mats)
+        return {"taker_id": taker_id, "taker_type": taker_type.value, "test": t_active.title,
+                "score": round(score * 100), "passed": passed, "training": [m.title for m in rec]}
+
+    attempts = [
+        _attempt(TakerType.AGENT, "Order Lookup Bot",
+                 [Answer(question_id="q1", response="order is delivered"),
+                  Answer(question_id="q2", response="mã A-1023")]),
+        _attempt(TakerType.AGENT, "Chat Helper Bot",
+                 [Answer(question_id="q1", response="không rõ"),
+                  Answer(question_id="q2", response="123")]),
+        _attempt(TakerType.HUMAN, "nv.binh",
+                 [Answer(question_id="q1", response="delivered"),
+                  Answer(question_id="q2", response="mã A-9")]),
+    ]
+    return tests, attempts, mats
+
+
+def render_testlearn() -> str:
+    tests, attempts, mats = _testlearn_sample()
+    n_active = sum(1 for t in tests if t.status == TestStatus.ACTIVE)
+    n_review = sum(1 for t in tests if t.status in (TestStatus.DRAFT, TestStatus.IN_REVIEW))
+
+    test_rows = ""
+    for t in tests:
+        st = t.status.value
+        actions = (
+            f'<button class="btn btn-sm btn-primary" onclick="assignTest(\'{t.test_id}\')">Giao bài</button>'
+            if st == "active" else
+            f'<button class="btn btn-sm" id="tlreview-{t.test_id}" onclick="reviewTest(\'{t.test_id}\')">Duyệt →</button>'
+        )
+        test_rows += (
+            f'<tr><td><b>{_esc(t.title)}</b><div class="muted">{_esc(t.test_id)}</div></td>'
+            f'<td>{badge(t.source, _SOURCE_KIND.get(t.source,"neutral"))}</td>'
+            f'<td id="tlstatus-{t.test_id}">{badge(st, _TEST_STATUS_KIND.get(st,"neutral"))}</td>'
+            f'<td class="num">{len(t.questions)}</td>'
+            f'<td class="num">{t.pass_threshold:.0%}</td>'
+            f'<td>{_esc(t.reviewed_by or "—")}</td>'
+            f'<td class="actions">{actions}</td></tr>'
+        )
+
+    att_rows = ""
+    for a in attempts:
+        tkind = "series" if a["taker_type"] == "agent" else "neutral"
+        training = chips(a["training"]) if a["training"] else '<span class="muted">—</span>'
+        att_rows += (
+            f'<tr><td><b>{_esc(a["taker_id"])}</b></td>'
+            f'<td>{badge(a["taker_type"], tkind)}</td><td>{_esc(a["test"])}</td>'
+            f'<td>{bar(a["score"])}</td>'
+            f'<td>{badge("pass" if a["passed"] else "fail", "good" if a["passed"] else "critical")}</td>'
+            f'<td>{training}</td></tr>'
+        )
+
+    mat_rows = "".join(
+        f'<tr><td><b>{_esc(m.title)}</b></td><td>{chips(m.tags)}</td>'
+        f'<td>{_esc(m.provided_by)}</td><td class="muted">{_esc(m.source_file)}</td></tr>'
+        for m in mats
+    )
+
+    return f"""
+    <section id="view-testlearn" class="view">
+      <h1>Test &amp; Learn</h1>
+      <p class="lead">Tạo bài test (nhiều case) → <b>người review mới active</b> → giao
+         cho agent/nhân sự làm → trượt thì <b>training lại</b> (tài liệu do HR cung cấp).</p>
+      <div class="tabs">
+        <button class="tab active" onclick="showTL('tests',this)">Bài test</button>
+        <button class="tab" onclick="showTL('results',this)">Kết quả</button>
+        <button class="tab" onclick="showTL('training',this)">Training (HR)</button>
+      </div>
+
+      <div class="tabpane active" id="tl-tests">
+        <div class="kpis">
+          {kpi("Tổng bài test", str(len(tests)))}
+          {kpi("Đang active", str(n_active))}
+          {kpi("Chờ review", str(n_review))}
+        </div>
+        <table>
+          <thead><tr><th>Bài test</th><th>Nguồn</th><th>Trạng thái</th><th>Số câu</th>
+          <th>Ngưỡng</th><th>Người duyệt</th><th>Hành động</th></tr></thead>
+          <tbody>{test_rows}</tbody>
+        </table>
+        <p class="muted" style="margin-top:8px">Bài <code>auto</code> do hệ sinh tự động
+           vẫn phải <b>Duyệt</b> mới dùng được.</p>
+      </div>
+
+      <div class="tabpane" id="tl-results">
+        <table>
+          <thead><tr><th>Người làm</th><th>Loại</th><th>Bài test</th><th>Điểm</th>
+          <th>Kết quả</th><th>Training gợi ý (nếu trượt)</th></tr></thead>
+          <tbody>{att_rows}</tbody>
+        </table>
+      </div>
+
+      <div class="tabpane" id="tl-training">
+        <div class="card-head" style="margin-bottom:12px">
+          <h3 style="margin:0">Tài liệu training (HR cung cấp)</h3>
+          <button class="btn btn-sm btn-primary" onclick="importTraining()">+ Import file → markdown</button>
+        </div>
+        <table>
+          <thead><tr><th>Tài liệu</th><th>Tags</th><th>Nguồn</th><th>File gốc</th></tr></thead>
+          <tbody>{mat_rows}</tbody>
+        </table>
+      </div>
+    </section>"""
+
+
 # --------------------------- Lắp trang ---------------------------
 
 def _assemble():
@@ -270,7 +421,7 @@ def render_html() -> str:
         krs = [{"name": kr.objective_name, "kr": kr.key_result, "progress": kr.progress()}
                for kr in sq.key_results]
         backends += render_agent_backend(a, krs)
-    body = render_platform(agents, squad_rows) + backends
+    body = render_platform(agents, squad_rows) + backends + render_testlearn()
     return _TEMPLATE.replace("{{BODY}}", body)
 
 
@@ -310,6 +461,10 @@ body{margin:0;background:var(--plane);color:var(--text-primary);
 .spacer{flex:1}
 .theme-btn{border:1px solid var(--border);background:transparent;color:var(--text-secondary);
   padding:6px 10px;border-radius:8px;cursor:pointer;font-family:inherit}
+.navlink{border:0;background:transparent;color:var(--text-secondary);padding:6px 12px;
+  border-radius:8px;cursor:pointer;font-family:inherit;font-size:14px}
+.navlink:hover{background:var(--series-soft)}
+.navlink.active{background:var(--series-soft);color:var(--text-primary);font-weight:600}
 .wrap{max-width:1080px;margin:0 auto;padding:24px 22px}
 .view{display:none}.view.active{display:block}
 h1{font-size:24px;margin:0 0 4px}h3{font-size:16px;margin:22px 0 10px}
@@ -386,6 +541,8 @@ input.cfg,select.cfg,select{font-size:13px;padding:7px 10px;border-radius:8px;bo
 <body>
 <div class="topbar">
   <div class="brand">LSR Agent Platform <span>· prototype</span></div>
+  <button class="navlink active" id="nav-platform" onclick="goView('platform')">Platform</button>
+  <button class="navlink" id="nav-testlearn" onclick="goView('testlearn')">Test &amp; Learn</button>
   <div class="spacer"></div>
   <span class="muted" id="crumb"></span>
   <button class="theme-btn" onclick="toggleTheme()">◐</button>
@@ -394,8 +551,20 @@ input.cfg,select.cfg,select{font-size:13px;padding:7px 10px;border-radius:8px;bo
 <script>
 function show(id){document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));
   window.scrollTo(0,0);}
+function goView(name){show('view-'+name);
+  document.querySelectorAll('.navlink').forEach(n=>n.classList.toggle('active',n.id==='nav-'+name));
+  document.getElementById('crumb').textContent='';}
 function openAgent(id){show('view-agent-'+id);document.getElementById('crumb').textContent='Backend: '+id;}
-function backToPlatform(){show('view-platform');document.getElementById('crumb').textContent='';}
+function backToPlatform(){show('view-platform');document.getElementById('crumb').textContent='';
+  document.querySelectorAll('.navlink').forEach(n=>n.classList.toggle('active',n.id==='nav-platform'));}
+function showTL(tab,btn){document.querySelectorAll('#view-testlearn .tabpane').forEach(p=>p.classList.toggle('active',p.id==='tl-'+tab));
+  btn.parentNode.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');}
+function reviewTest(id){var c=document.getElementById('tlstatus-'+id);
+  c.innerHTML='<span class="badge badge-good"><span class="badge-i">✓</span>active</span>';
+  var b=document.getElementById('tlreview-'+id);if(b)b.remove();
+  alert('(prototype) Đã duyệt '+id+' → active. Giờ mới giao bài được.');}
+function assignTest(id){alert('(prototype) Chọn agent đã đăng ký để giao bài '+id);}
+function importTraining(){alert('(prototype) Import file training của công ty → chuyển sang markdown → lưu lại.');}
 function showTab(aid,tab,btn){
   document.querySelectorAll('#view-agent-'+aid+' .tabpane').forEach(p=>p.classList.toggle('active',p.id===aid+'-'+tab));
   btn.parentNode.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active');
