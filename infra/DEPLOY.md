@@ -97,7 +97,7 @@ Rồi chỉ cần: `ssh lsr-gcp`.
 |---------|---------|---------------|-----------|
 | Postgres | lưu key/spend (LiteLLM) + trace (collector) | 5432 (nội bộ) | ✅ chạy |
 | Collector API | nhận trace + resource index | 127.0.0.1:8081 | ✅ chạy (control point) |
-| Platform API | register agent, cấp telemetry key, hook Minh Anh, active/deactivate | 127.0.0.1:8090 | ✅ chạy |
+| Platform API | register agent + hook Minh Anh + active/deactivate + **Test & Learn** | 127.0.0.1:8090 | ✅ chạy |
 | Minh Anh bot | listener Lark long-connection (WebSocket outbound) | — (không cần port) | ✅ chạy (DRY_RUN) |
 | LiteLLM Gateway | *optional* — chỉ cho agent dùng API key | 127.0.0.1:4000 | ⏸ tắt |
 | Scorer/Dashboard | chấm điểm + phục vụ dashboard | 8082 | ⏳ chưa làm |

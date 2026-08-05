@@ -35,6 +35,8 @@ kết nối vào để tự tạo agent của mình**, tự yêu cầu thêm ski
 5. **Meeting agent "Minh Anh"** (nền tảng): share từ điển thư mục `meeting-notes`
    cho agent mới; khi vào họp thì viết biên bản (transcript → nội dung chính →
    owner confirm → tạo task). Xem [agents/minh-anh/](agents/minh-anh/WORKFLOW.md).
+6. **Test & Learn:** bài test (nhiều case, review→active), chọn agent/người làm,
+   trượt → training (HR import file → md). Xem [TEST_LEARN.md](TEST_LEARN.md).
 
 ---
 

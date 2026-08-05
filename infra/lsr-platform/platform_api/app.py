@@ -15,13 +15,16 @@ Auth admin: header Authorization: Bearer <PLATFORM_ADMIN_TOKEN>.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
+import re
 import secrets
 
 import psycopg
 import requests
 from fastapi import FastAPI, Header, HTTPException
 from psycopg.rows import dict_row
+from psycopg.types.json import Json
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 COLLECTOR_URL = os.environ.get("COLLECTOR_URL", "http://collector:8081").rstrip("/")
@@ -55,6 +58,51 @@ def _ensure_schema() -> None:
                 telemetry_key_hash text,
                 registered_at      timestamptz DEFAULT now(),
                 golive_at          timestamptz
+            )
+            """
+        )
+        # --- Test & Learn ---
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tests (
+                test_id        text PRIMARY KEY,
+                title          text,
+                description    text,
+                questions      jsonb,
+                status         text DEFAULT 'draft',
+                source         text DEFAULT 'manual',
+                created_by     text,
+                reviewed_by    text,
+                pass_threshold real DEFAULT 0.8,
+                created_at     timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS attempts (
+                attempt_id  text PRIMARY KEY,
+                test_id     text,
+                taker_type  text,
+                taker_id    text,
+                score       real,
+                passed      boolean,
+                answers     jsonb,
+                detail      jsonb,
+                at          timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS training_materials (
+                material_id text PRIMARY KEY,
+                title       text,
+                md_content  text,
+                tags        text[],
+                provided_by text DEFAULT 'HR',
+                source_file text,
+                created_at  timestamptz DEFAULT now()
             )
             """
         )
@@ -194,3 +242,219 @@ def set_status(agent_id: str, body: dict, authorization: str = Header(default=""
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="not found")
     return {"agent_id": agent_id, "status": status}
+
+
+# ======================= Test & Learn =======================
+
+def _assert_answer(expected: str, actual: str, atype: str, tol: float = 0.0) -> bool:
+    a = (actual or "").strip()
+    e = (expected or "").strip()
+    if atype == "exact":
+        return a == e
+    if atype == "regex":
+        try:
+            return re.search(expected or "", actual or "") is not None
+        except re.error:
+            return False
+    if atype == "numeric_tolerance":
+        try:
+            return abs(float(actual) - float(expected)) <= tol
+        except (TypeError, ValueError):
+            return False
+    # contains + semantic (fallback)
+    return e.lower() in a.lower()
+
+
+def _grade(questions: list[dict], answers: list[dict], threshold: float):
+    by_id = {a.get("question_id"): a.get("response", "") for a in answers}
+    total_w = sum(float(q.get("weight", 1.0)) for q in questions) or 1.0
+    got = 0.0
+    detail = []
+    for q in questions:
+        ok = _assert_answer(
+            q.get("expected", ""), by_id.get(q.get("question_id"), ""),
+            q.get("assertion_type", "contains"), float(q.get("tolerance", 0.0)),
+        )
+        if ok:
+            got += float(q.get("weight", 1.0))
+        detail.append({"question_id": q.get("question_id"), "ok": ok,
+                       "skill_id": q.get("skill_id", "")})
+    score = round(got / total_w, 4)
+    return score, score >= threshold, detail
+
+
+@app.post("/v1/tests")
+def create_test(test: dict, authorization: str = Header(default="")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    test_id = test.get("test_id")
+    if not test_id:
+        raise HTTPException(status_code=422, detail="test_id required")
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO tests (test_id, title, description, questions, status,
+                               source, created_by, pass_threshold)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (test_id) DO UPDATE SET
+              title=EXCLUDED.title, description=EXCLUDED.description,
+              questions=EXCLUDED.questions, source=EXCLUDED.source,
+              pass_threshold=EXCLUDED.pass_threshold
+            """,
+            (
+                test_id, test.get("title"), test.get("description"),
+                Json(test.get("questions") or []),
+                test.get("status", "draft"), test.get("source", "manual"),
+                test.get("created_by"), float(test.get("pass_threshold", 0.8)),
+            ),
+        )
+        conn.commit()
+    return {"test_id": test_id, "status": test.get("status", "draft")}
+
+
+@app.post("/v1/tests/{test_id}/review")
+def review_test(test_id: str, body: dict, authorization: str = Header(default="")) -> dict:
+    """Người review DUYỆT → active (bắt buộc có reviewed_by)."""
+
+    _require_admin(authorization)
+    _ensure_schema()
+    reviewer = body.get("reviewed_by")
+    if not reviewer:
+        raise HTTPException(status_code=422, detail="reviewed_by required")
+    with _db() as conn:
+        cur = conn.execute(
+            "UPDATE tests SET status='active', reviewed_by=%s WHERE test_id=%s",
+            (reviewer, test_id),
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="not found")
+    return {"test_id": test_id, "status": "active", "reviewed_by": reviewer}
+
+
+@app.get("/v1/tests")
+def list_tests() -> list[dict]:
+    _ensure_schema()
+    with _db() as conn:
+        return conn.execute(
+            "SELECT test_id, title, status, source, reviewed_by, pass_threshold, "
+            "jsonb_array_length(coalesce(questions,'[]'::jsonb)) AS num_questions "
+            "FROM tests ORDER BY created_at DESC"
+        ).fetchall()
+
+
+@app.get("/v1/tests/{test_id}")
+def get_test(test_id: str) -> dict:
+    _ensure_schema()
+    with _db() as conn:
+        row = conn.execute("SELECT * FROM tests WHERE test_id=%s", (test_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="not found")
+    return row
+
+
+@app.post("/v1/attempts")
+def submit_attempt(body: dict, authorization: str = Header(default="")) -> dict:
+    """Làm bài — dùng chung cho AGENT và NGƯỜI (taker_type)."""
+
+    _ensure_schema()
+    test_id = body.get("test_id")
+    taker_type = body.get("taker_type", "human")
+    taker_id = body.get("taker_id", "")
+    answers = body.get("answers") or []
+    with _db() as conn:
+        test = conn.execute(
+            "SELECT questions, status, pass_threshold FROM tests WHERE test_id=%s",
+            (test_id,),
+        ).fetchone()
+        if not test:
+            raise HTTPException(status_code=404, detail="test not found")
+        if test["status"] != "active":
+            raise HTTPException(status_code=409, detail="test chưa active (chưa review xong)")
+        questions = test["questions"] or []
+        score, passed, detail = _grade(questions, answers, float(test["pass_threshold"]))
+        attempt_id = "at_" + secrets.token_hex(8)
+        conn.execute(
+            """
+            INSERT INTO attempts (attempt_id, test_id, taker_type, taker_id,
+                                  score, passed, answers, detail)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            """,
+            (attempt_id, test_id, taker_type, taker_id, score, passed,
+             Json(answers), Json(detail)),
+        )
+        conn.commit()
+
+        training: list = []
+        if not passed:
+            topics = set()
+            for q in questions:
+                topics.update(q.get("tags") or [])
+                if q.get("skill_id"):
+                    topics.add(q["skill_id"])
+            if topics:
+                training = conn.execute(
+                    "SELECT material_id, title, tags FROM training_materials "
+                    "WHERE tags && %s::text[]",
+                    (list(topics),),
+                ).fetchall()
+            else:
+                training = conn.execute(
+                    "SELECT material_id, title, tags FROM training_materials LIMIT 10"
+                ).fetchall()
+
+    return {
+        "attempt_id": attempt_id, "test_id": test_id, "taker_type": taker_type,
+        "taker_id": taker_id, "score": score, "passed": passed, "detail": detail,
+        "needs_training": (not passed), "training": training,
+    }
+
+
+@app.get("/v1/attempts")
+def list_attempts(taker_id: str | None = None, test_id: str | None = None) -> list[dict]:
+    _ensure_schema()
+    where, args = [], []
+    if taker_id:
+        where.append("taker_id=%s"); args.append(taker_id)
+    if test_id:
+        where.append("test_id=%s"); args.append(test_id)
+    sql = "SELECT attempt_id, test_id, taker_type, taker_id, score, passed, at FROM attempts"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY at DESC LIMIT 50"
+    with _db() as conn:
+        return conn.execute(sql, args).fetchall()
+
+
+@app.post("/v1/training")
+def add_training(m: dict, authorization: str = Header(default="")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    mid = m.get("material_id")
+    if not mid:
+        raise HTTPException(status_code=422, detail="material_id required")
+    tags = m.get("tags") or []
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO training_materials (material_id, title, md_content, tags,
+                                            provided_by, source_file)
+            VALUES (%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (material_id) DO UPDATE SET
+              title=EXCLUDED.title, md_content=EXCLUDED.md_content, tags=EXCLUDED.tags
+            """,
+            (mid, m.get("title"), m.get("md_content"), tags,
+             m.get("provided_by", "HR"), m.get("source_file")),
+        )
+        conn.commit()
+    return {"material_id": mid, "ok": True}
+
+
+@app.get("/v1/training")
+def list_training() -> list[dict]:
+    _ensure_schema()
+    with _db() as conn:
+        return conn.execute(
+            "SELECT material_id, title, tags, provided_by, source_file, created_at "
+            "FROM training_materials ORDER BY created_at DESC"
+        ).fetchall()

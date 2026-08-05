@@ -28,6 +28,8 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+# Test viết dạng function; tắt collection theo class để tránh nhầm model tên Test*.
+python_classes = ["*Suite"]
 
 [tool.ruff]
 line-length = 100
