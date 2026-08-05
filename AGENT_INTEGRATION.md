@@ -99,11 +99,14 @@ Hai mức, nên làm cả hai:
 1. **Đo (observability):** SDK ghi token mỗi `LLMCall`; `compute_token_stats()`
    tổng hợp theo agent/kỳ → hiển thị trên Agent Detail, cảnh báo khi vượt xu hướng.
 2. **Chặn (enforcement):**
-   - **Tại chỗ (soft):** `TokenBudget(limit_tokens=...)` trong SDK — vượt hạn mức
-     ném `TokenBudgetExceeded`, agent tự dừng lượt. Đã code sẵn.
-   - **Tại gateway (hard, khuyến nghị):** mọi lời gọi model đi qua LLM gateway
-     (vd LiteLLM proxy) với **virtual key theo agent** + budget ngày/tháng. Đây là
-     hàng rào cứng, độc lập với code agent, và là nguồn token đáng tin nhất.
+   - **Tại gateway (hard — ĐÃ CHỐT, bắt buộc):** mọi lời gọi model đi qua
+     **LiteLLM gateway tự host** với **virtual key theo agent** + budget ngày/tháng.
+     Đây là nguồn token đáng tin nhất và là **kill switch** (revoke key = deactivate).
+   - **Tại chỗ (soft, bổ trợ):** `TokenBudget(limit_tokens=...)` trong SDK — đã code sẵn.
+
+> **Lưu ý (do chọn "MCP skill tự do"):** gateway chỉ proxy **model call**, KHÔNG
+> proxy **tool/skill call**. Nên token lấy từ gateway; còn dữ liệu tool cho 6 chỉ
+> số bên dưới **bắt buộc lấy từ telemetry SDK** nhúng trong agent (§5).
 
 ---
 

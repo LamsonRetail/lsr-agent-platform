@@ -182,17 +182,28 @@ Thêm/mở rộng trên Lark Base (hoặc DB của platform):
 
 ---
 
-## 12. Cần confirm trước khi làm tiếp
+## 12. Quyết định đã chốt & còn mở
 
-1. **Control point:** đồng ý bắt buộc **mọi agent đi qua LLM Gateway của platform**
-   (virtual key, kill switch) — cách duy nhất "nắm hết + deactivate" chắc chắn?
-   Hay chấp nhận mô hình telemetry-only (yếu hơn, dựa vào hợp tác)?
-2. **Định danh/khoá:** platform **cấp virtual key** cho mỗi người (không cầm khoá
-   Anthropic thô) — đúng ý "mỗi người login SDK riêng nhưng platform nắm hết"?
-3. **Squad qua agent:** squad agent là **đầu mối đo/báo cáo KR** (đề xuất). Điểm
-   agent có ảnh hưởng vào điểm squad không? (a) không, chỉ là kênh dữ liệu;
-   (b) có, là một hệ số; (c) squad bị chặn đánh giá nếu squad agent bị deactivate.
-4. **Skill:** skill = **MCP server do platform host** + luồng duyệt (đề xuất)?
-5. **Hạ tầng gateway:** tự host **LiteLLM** trên VPS (gọn, mã nguồn mở) hay dùng
-   dịch vụ khác?
-6. **Provider LLM** chính (Anthropic/Claude?) để chuẩn hoá gateway + đọc token.
+**Đã chốt (2026-07):**
+1. **Control point = Gateway bắt buộc.** Mọi agent trỏ `ANTHROPIC_BASE_URL` về LLM
+   Gateway của platform; virtual key + budget + kill switch. Đây là cách nắm hết
+   token/request và deactivate chắc chắn.
+2. **Định danh = platform cấp virtual key** cho mỗi người/agent (không ai cầm khoá
+   Anthropic thô).
+3. **Squad ↔ agent = chỉ là kênh dữ liệu.** Squad agent là đầu mối đo/báo cáo KR;
+   điểm squad = hiệu quả mục tiêu như hiện tại, **không** cộng điểm agent. (Vẫn giữ
+   ràng buộc squad phải có ≥1 agent để có kênh đo.)
+4. **Skill = MCP tự do.** User tự gắn MCP bất kỳ cho agent; platform **đăng ký +
+   log danh sách** chứ không bắt duyệt. → bỏ luồng `skill_requests`/duyệt.
+5. **Gateway = LiteLLM tự host** trên VPS.
+
+**Hệ quả quan trọng của (4) + (1):**
+> Platform proxy **model call** (qua gateway) nhưng **không proxy tool/skill call**
+> (MCP chạy trực tiếp giữa agent và server). Vì vậy **token** lấy từ gateway, còn
+> **dữ liệu tool để tính 6 chỉ số** (TSR/CTUR/RIR/OFR/UTR) **phải lấy từ telemetry
+> SDK bắt buộc nhúng trong agent**. Template `lsr-agent init` phải gắn sẵn SDK này;
+> agent không gửi trace → coi như vi phạm, không cho golive.
+
+**Còn mở:**
+6. **Provider LLM** chính (mặc định Anthropic/Claude) để chuẩn hoá gateway + đọc token.
+7. Kết nối Lark: **bot** (khuyến nghị) hay có ca bắt buộc user account (AGENT_INTEGRATION §2).
