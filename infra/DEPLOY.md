@@ -3,14 +3,31 @@
 Backend platform (LLM Gateway, Collector, Platform API, Scorer/Dashboard) chạy
 trên **Google Cloud Compute Engine**.
 
-## VM mục tiêu
+## VM mục tiêu ✅ ĐÃ KẾT NỐI
 
 | Thuộc tính | Giá trị |
 |-----------|---------|
 | Project | `ganesha-381907` |
 | Zone | `asia-southeast1-b` |
 | Instance | `digital-transformation-hosting` |
+| External IP | `34.126.154.135` |
+| Máy | n2-standard-2 · 2 vCPU · 7.8Gi RAM · disk 49G (dùng ~64%) |
+| OS | Ubuntu 22.04.5 LTS |
+| Runtime sẵn | Docker 29.1.3 · Python 3.10.12 (chưa có node, nginx) |
+| SSH user | `ntranthi` (sudo không cần mật khẩu) |
 | Console | https://console.cloud.google.com/compute/instancesDetail/zones/asia-southeast1-b/instances/digital-transformation-hosting?project=ganesha-381907 |
+
+> ⚠️ VM **dùng chung** — đang có service chạy ở **port 3000 và 8080** (không được
+> đụng). Platform sẽ dùng port khác (xem bảng bố trí service).
+
+### Kết nối nhanh
+Đã cấu hình alias trong `~/.ssh/config`:
+```bash
+ssh lsr-gcp
+```
+(tương đương `ssh -i ~/.ssh/lsr-deploy ntranthi@34.126.154.135`). Deploy key đã
+được thêm vào metadata của VM và xác nhận hoạt động (cả `gcloud compute ssh` lẫn
+`ssh` trực tiếp).
 
 ## SSH
 
@@ -25,8 +42,8 @@ Public key:
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG858TwCYFoh8+iEFAxX268v9miE7O455rLLDAhtkUDR lsr-agent-platform-deploy@ganesha-381907
 ```
 
-> **Chưa kết nối được từ máy này** vì `gcloud` chưa cài và chưa đăng nhập GCP
-> (cần OAuth tương tác). Chọn 1 trong 2 đường dưới để hoàn tất.
+> ✅ Đã kết nối thành công (xem "Kết nối nhanh" ở trên). Hai cách bên dưới giữ lại
+> để tham khảo / máy khác.
 
 ### Cách A — gcloud tự quản lý key (khuyến nghị)
 
@@ -74,21 +91,18 @@ Host lsr-gcp
 ```
 Rồi chỉ cần: `ssh lsr-gcp`.
 
-## Điều tôi cần để tự chạy tiếp giúp bạn
-
-- Cài `gcloud` + `gcloud auth login` (đường tương tác — bạn chạy), **hoặc**
-- Cung cấp **external IP** sau khi đã thêm deploy key vào metadata (Cách B).
-
-Sau khi SSH thông, bước tiếp là bố trí các service trên VM (xem dưới).
-
-## Bố trí service trên VM (dự kiến)
+## Bố trí service trên VM (port đã né 3000/8080 đang bận)
 
 | Service | Vai trò | Port (nội bộ) |
 |---------|---------|---------------|
 | LiteLLM Gateway | proxy model, virtual key, budget, kill switch | 4000 |
 | Collector API | nhận trace từ Telemetry SDK | 8081 |
-| Platform API | đăng ký agent, cấp key, Lark connect | 8080 |
+| Platform API | đăng ký agent, cấp key, Lark connect | 8090 |
 | Scorer/Dashboard | chấm điểm + phục vụ dashboard | 8082 |
 
-Reverse proxy (Caddy/Nginx) + TLS phía trước; tên nội bộ `gateway.lsr.internal`,
-`collector.lsr.internal` map vào VM. Chi tiết hoá khi bắt đầu Giai đoạn 1.
+Chạy bằng **Docker** (đã có sẵn); reverse proxy (Caddy — tự lo TLS) phía trước,
+map tên nội bộ `gateway.lsr.internal` / `collector.lsr.internal`. Cần mở firewall
+GCP cho các port public (qua HTTPS 443 của Caddy là đủ, không mở thẳng 4000/808x).
+
+> Vì VM dùng chung, khuyến nghị đặt toàn bộ stack platform trong thư mục riêng
+> (vd `/opt/lsr-platform`) + `docker compose` riêng để không ảnh hưởng app hiện có.
