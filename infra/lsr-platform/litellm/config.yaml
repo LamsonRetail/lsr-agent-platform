@@ -1,0 +1,18 @@
+# LiteLLM Gateway — cấu hình proxy
+# Passthrough mọi model Anthropic: client xin model nào -> gọi anthropic model đó.
+# Nhờ vậy agent (Claude Agent SDK) xin "claude-sonnet-4-5", "claude-opus-*"... đều đi qua.
+
+model_list:
+  - model_name: "*"
+    litellm_params:
+      model: "anthropic/*"
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+
+litellm_settings:
+  drop_params: true
+  # Ghi log request để đối soát token (spend theo virtual key nằm ở DB).
+  set_verbose: false

@@ -93,12 +93,18 @@ Rồi chỉ cần: `ssh lsr-gcp`.
 
 ## Bố trí service trên VM (port đã né 3000/8080 đang bận)
 
-| Service | Vai trò | Port (nội bộ) |
-|---------|---------|---------------|
-| LiteLLM Gateway | proxy model, virtual key, budget, kill switch | 4000 |
-| Collector API | nhận trace từ Telemetry SDK | 8081 |
-| Platform API | đăng ký agent, cấp key, Lark connect | 8090 |
-| Scorer/Dashboard | chấm điểm + phục vụ dashboard | 8082 |
+| Service | Vai trò | Port (nội bộ) | Trạng thái |
+|---------|---------|---------------|-----------|
+| Postgres | lưu key/spend (LiteLLM) + trace (collector) | 5432 (nội bộ) | ✅ chạy |
+| LiteLLM Gateway | proxy model, virtual key, budget, kill switch | 127.0.0.1:4000 | ✅ chạy |
+| Collector API | nhận trace từ Telemetry SDK | 127.0.0.1:8081 | ✅ chạy |
+| Platform API | đăng ký agent, cấp key, Lark connect | 8090 | ⏳ chưa làm |
+| Scorer/Dashboard | chấm điểm + phục vụ dashboard | 8082 | ⏳ chưa làm |
+
+> Stack Giai đoạn 1 đã deploy tại `/opt/lsr-platform` (`docker compose`).
+> **Còn thiếu:** dán `ANTHROPIC_API_KEY` thật vào `/opt/lsr-platform/.env` rồi
+> `sudo docker compose restart litellm` để gateway gọi model được. Và Caddy + HTTPS
+> để công khai `gateway.lsr.internal` / `collector.lsr.internal`.
 
 Chạy bằng **Docker** (đã có sẵn); reverse proxy (Caddy — tự lo TLS) phía trước,
 map tên nội bộ `gateway.lsr.internal` / `collector.lsr.internal`. Cần mở firewall
