@@ -95,6 +95,17 @@ def _ensure_schema() -> None:
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS test_assignments (
+                id          bigserial PRIMARY KEY,
+                test_id     text,
+                taker_id    text,
+                taker_type  text,
+                assigned_at timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS training_materials (
                 material_id text PRIMARY KEY,
                 title       text,
@@ -351,6 +362,39 @@ def get_test(test_id: str) -> dict:
     if not row:
         raise HTTPException(status_code=404, detail="not found")
     return row
+
+
+@app.post("/v1/tests/{test_id}/assign")
+def assign_test(test_id: str, body: dict, authorization: str = Header(default="")) -> dict:
+    """Giao bài test cho danh sách agent/người (chỉ khi test đã active)."""
+
+    _require_admin(authorization)
+    _ensure_schema()
+    assignees = body.get("assignees") or []
+    with _db() as conn:
+        t = conn.execute("SELECT status FROM tests WHERE test_id=%s", (test_id,)).fetchone()
+        if not t:
+            raise HTTPException(status_code=404, detail="test not found")
+        if t["status"] != "active":
+            raise HTTPException(status_code=409, detail="test chưa active, chưa giao được")
+        for a in assignees:
+            conn.execute(
+                "INSERT INTO test_assignments (test_id, taker_id, taker_type) VALUES (%s,%s,%s)",
+                (test_id, a.get("taker_id"), a.get("taker_type", "agent")),
+            )
+        conn.commit()
+    return {"test_id": test_id, "assigned": len(assignees)}
+
+
+@app.get("/v1/tests/{test_id}/assignments")
+def list_assignments(test_id: str) -> list[dict]:
+    _ensure_schema()
+    with _db() as conn:
+        return conn.execute(
+            "SELECT taker_id, taker_type, assigned_at FROM test_assignments "
+            "WHERE test_id=%s ORDER BY assigned_at DESC",
+            (test_id,),
+        ).fetchall()
 
 
 @app.post("/v1/attempts")

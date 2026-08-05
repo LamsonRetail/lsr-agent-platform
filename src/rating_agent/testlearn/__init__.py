@@ -19,6 +19,12 @@ from .models import (
     TestStatus,
     TrainingMaterial,
 )
+from .generator import (
+    build_draft_test,
+    generate_questions,
+    heuristic_questions,
+    parse_llm_questions,
+)
 from .training import import_training_file, to_markdown
 
 __all__ = [
@@ -31,4 +37,6 @@ __all__ = [
     "recommend_training",
     # training
     "to_markdown", "import_training_file",
+    # generator (b)
+    "build_draft_test", "generate_questions", "heuristic_questions", "parse_llm_questions",
 ]
