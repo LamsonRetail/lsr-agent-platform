@@ -23,3 +23,14 @@ def test_render_html_is_self_contained():
 def test_render_html_reflects_deactivate_case():
     # Agent fail 2 lần liên tiếp phải xuất hiện khuyến nghị Deactivate trên dashboard.
     assert "Deactivate" in render_html()
+
+
+def test_platform_prototype_has_three_parts():
+    from rating_agent.reporting.platform_proto import render_html as platform_html
+
+    html = platform_html()
+    assert "view-platform" in html                  # dashboard platform
+    assert "view-agent-AG-ORDER-BOT" in html         # backend riêng từng agent
+    for tab in ("-config", "-dash", "-sched"):        # 3 tab backend
+        assert f"AG-ORDER-BOT{tab}" in html
+    assert "Vercel" in html and "Mở backend" in html
