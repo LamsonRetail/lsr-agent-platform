@@ -8,7 +8,12 @@ kết nối vào để tự tạo agent của mình**, tự yêu cầu thêm ski
 > Đây là bản mở rộng từ "Rating Agent". Phần chấm điểm/governance/dashboard cũ giờ
 > là **một subsystem** của platform. Chi tiết liên quan:
 > [MASTER_DATA.md](MASTER_DATA.md) · [AGENT_INTEGRATION.md](AGENT_INTEGRATION.md).
-> **PLAN này đang chờ confirm (xem §12) trước khi code tiếp.**
+
+> ⚠️ **Auth model (đã chốt): agent xác thực bằng Claude Agent SDK đăng nhập
+> subscription riêng (OAuth — `claude login` / `setup-token`), KHÔNG dùng
+> `ANTHROPIC_API_KEY`.** Hệ quả: bỏ mô hình "LLM gateway virtual-key" làm control
+> point. Thay bằng **Claude Code plugin + Telemetry SDK** (nắm request/token) và
+> **kill switch qua Lark + dừng process + thu hồi đăng ký**. Xem §2, §5.
 
 ---
 
@@ -16,9 +21,10 @@ kết nối vào để tự tạo agent của mình**, tự yêu cầu thêm ski
 
 1. **Self-service, nhưng governed-by-default.** Ai cũng tạo được agent, nhưng mọi
    agent phải đăng ký, định danh, và đi qua control plane.
-2. **Nắm hết bằng đường đi, không bằng niềm tin.** Mọi lời gọi LLM và skill đi qua
-   hạ tầng của platform (gateway + skill hub) → platform thấy hết, đo được, và
-   **cắt được** (kill switch) mà không cần sửa code của agent.
+2. **Nắm hết bằng công cụ bắt buộc + kênh làm việc.** Vì agent dùng subscription
+   riêng (không có API key để proxy), việc "nắm hết" dựa vào **Claude Code plugin +
+   Telemetry SDK bắt buộc** (ghi mọi request/tool/token về collector) và **mọi
+   việc đi qua Lark**. Kill switch = **cắt Lark + dừng process + thu hồi đăng ký**.
 3. **Hai nhánh đánh giá giữ nguyên:** Squad (hiệu quả mục tiêu) và Agent
    (skill/usage/kết quả + test). **Mỗi squad ≥ 1 agent; kết quả squad đo qua agent
    của squad.**
@@ -45,8 +51,9 @@ kết nối vào để tự tạo agent của mình**, tự yêu cầu thêm ski
            ▼                  ▼                 ▼                  ▼
 ┌──────────────────────── DATA PLANE (agent của user) ──────────────────────┐
 │  Agent (build bằng Claude Code / Agent SDK), chạy trên VPS/hạ tầng của team │
-│  Cấu hình: ANTHROPIC_BASE_URL = gateway · skills = MCP tự khai báo           │
-│  → mọi model call & skill call đều xuyên qua control plane                   │
+│  Auth: đăng nhập SUBSCRIPTION riêng (OAuth) · KHÔNG API key                  │
+│  Bắt buộc: plugin+hooks telemetry · skills = MCP tự khai báo                 │
+│  → mọi request/tool/token được plugin ghi về collector; việc đi qua Lark    │
 └────────────────────────────────────────────────────────────────────────────┘
                  │ trả lời qua Lark (bot)          ▲
                  ▼                                 │ events (usage, kết quả)
@@ -64,8 +71,10 @@ về **LLM Gateway** của platform. Mọi request đi qua gateway → log token
 
 | Thành phần | Vai trò | Trạng thái |
 |-----------|---------|-----------|
-| **Onboarding & Registry** | Đăng ký user/phòng ban/squad/agent; cấp virtual key + skill token + telemetry key | registry `agents` đã có; cần mở rộng |
-| **LLM Gateway** | Proxy trước Anthropic API: log mọi request, đếm token, áp budget/rate-limit, kill switch | **mới** (đề xuất LiteLLM tự host) |
+| **Onboarding & Registry** | Đăng ký user/phòng ban/squad/agent; cấp **telemetry key** + cài plugin (không cấp API/virtual key vì dùng subscription) | registry `agents` đã có; cần mở rộng |
+| **Claude Code plugin + hooks** | Bắt buộc nhúng khi tạo agent; ghi mọi request/tool/token → collector | **mới** (control point chính) |
+| **Collector** | Nhận trace từ plugin/SDK, lưu kho trace | ✅ đã deploy (`/opt/lsr-platform`) |
+| **LLM Gateway (LiteLLM)** | *Tuỳ chọn* — chỉ cho agent nào dùng API key; không bắt buộc khi dùng subscription | đã deploy nhưng **hạ xuống optional** |
 | **Skill Registry** | Đăng ký + log danh sách MCP mỗi agent (MCP tự do); đo mức dùng qua telemetry | **mới** |
 | **Governance & Evaluation** | Ingest log → trace → chấm điểm 2 nhánh, đo 6 chỉ số, auto-deactivate | `evaluation`, `telemetry`, `agent_testing` đã có |
 | **Reporting** | 6 dashboard/báo cáo | `reporting` đã có (prototype) |
@@ -80,8 +89,8 @@ về **LLM Gateway** của platform. Mọi request đi qua gateway → log token
 
 1. **Khởi tạo:** user mở Claude Code, dùng plugin `lsr-agent init` → scaffold agent.
 2. **Đăng ký + cấp khoá:** `lsr-agent register` → tạo record `agents` + platform cấp
-   **virtual key** (ANTHROPIC_API_KEY) + `TELEMETRY_API_KEY`. `ANTHROPIC_BASE_URL`
-   trỏ về gateway.
+   `TELEMETRY_API_KEY` và **cài Claude Code plugin telemetry**. Agent tự **đăng nhập
+   subscription** (`claude login` / `setup-token`) — không cấp API/virtual key.
 3. **Kết nối Lark:** `lsr-agent lark connect` → chọn **bot** hoặc **user account** →
    authorize (add bot + event subscription, hoặc OAuth user). Xem CREATE_AGENT §3.5.
 4. **Khai báo skill:** `lsr-agent skill add <mcp>` → log danh sách MCP (tự do, không duyệt).
@@ -94,14 +103,27 @@ về **LLM Gateway** của platform. Mọi request đi qua gateway → log token
 
 ## 5. Cơ chế "nắm hết request" + deactivate
 
+Vì dùng subscription (không API key), control point là **plugin bắt buộc + Lark**:
+
 | Loại request | Đi qua | Platform thu được | Cắt bằng |
 |--------------|--------|-------------------|----------|
-| Lời gọi LLM | LLM Gateway | prompt/response (tuỳ chính sách), token, model, latency | revoke virtual key |
-| Lời gọi skill/tool | Telemetry SDK (không proxy) | tên skill, tham số, kết quả, lỗi | deactivate agent (revoke gateway key) |
-| Nhận việc / trả kết quả | Lark bot | invocation, kết quả cuối, phản hồi 👍/👎 | gỡ bot khỏi nhóm |
+| Lời gọi LLM | Claude Code plugin / Telemetry SDK | token (usage), model, prompt/response (tuỳ chính sách), latency | dừng process + thu hồi đăng ký |
+| Lời gọi skill/tool | Hooks + Telemetry SDK | tên skill, tham số, kết quả, lỗi | dừng process + thu hồi đăng ký |
+| Nhận việc / trả kết quả | Lark bot | invocation, kết quả cuối, phản hồi 👍/👎 | **gỡ bot khỏi nhóm / thu hồi Lark auth** |
 
 Ba nguồn này ghép thành `AgentRunTrace` (đã có trong `telemetry/`) → tính token,
 6 chỉ số hành vi tool, và feed scorer.
+
+**Kill switch (deactivate) — vì không có virtual key để revoke:**
+1. **Cắt Lark** (mạnh nhất): gỡ bot khỏi nhóm / thu hồi Lark auth → agent không
+   nhận & không trả việc được, bất kể LLM auth của nó.
+2. **Dừng process** agent (nếu platform quản lý host / systemd unit).
+3. **Thu hồi đăng ký + telemetry key**: collector từ chối trace → agent coi như
+   ngoài governance → cảnh báo + chặn golive lại.
+
+> Token là **soft-enforce** (đo qua telemetry + `TokenBudget` trong SDK dừng agent
+> khi vượt), KHÔNG phải hard-cap theo billing như virtual key (subscription không
+> cho cắt token ở tầng Anthropic).
 
 ---
 
@@ -180,9 +202,10 @@ reverse proxy + TLS. SSH & bố trí service: [infra/DEPLOY.md](infra/DEPLOY.md)
 - [ ] Confirm kiến trúc platform (§12).
 
 ### Giai đoạn 1 — Control plane tối thiểu
-- Platform API + Registry mở rộng; cấp virtual key.
-- LLM Gateway (log + budget + kill switch) — dùng được với 1 agent thật.
-- Ingest log → trace → token + dashboard.
+- [x] Collector nhận trace (đã deploy) + LiteLLM gateway optional (đã deploy).
+- Platform API + Registry mở rộng; cấp `TELEMETRY_API_KEY`.
+- Claude Code plugin + hooks telemetry (control point chính).
+- Ingest trace → token + 6 chỉ số → dashboard.
 
 ### Giai đoạn 2 — Self-service
 - Template Claude Code (`lsr-agent init`) + luồng đăng ký/ xin skill.
@@ -199,26 +222,27 @@ reverse proxy + TLS. SSH & bố trí service: [infra/DEPLOY.md](infra/DEPLOY.md)
 
 ## 12. Quyết định đã chốt & còn mở
 
-**Đã chốt (2026-07):**
-1. **Control point = Gateway bắt buộc.** Mọi agent trỏ `ANTHROPIC_BASE_URL` về LLM
-   Gateway của platform; virtual key + budget + kill switch. Đây là cách nắm hết
-   token/request và deactivate chắc chắn.
-2. **Định danh = platform cấp virtual key** cho mỗi người/agent (không ai cầm khoá
-   Anthropic thô).
+**Đã chốt:**
+1. **Auth = Claude Agent SDK subscription riêng (OAuth), KHÔNG API key.**
+   → *thay thế* quyết định "Gateway bắt buộc/virtual key" trước đây.
+2. **Control point = Claude Code plugin + Telemetry SDK bắt buộc** (nắm request/
+   tool/token) + **Lark là kênh việc**. Kill switch = cắt Lark + dừng process +
+   thu hồi đăng ký (không revoke virtual key nữa).
 3. **Squad ↔ agent = chỉ là kênh dữ liệu.** Squad agent là đầu mối đo/báo cáo KR;
-   điểm squad = hiệu quả mục tiêu như hiện tại, **không** cộng điểm agent. (Vẫn giữ
-   ràng buộc squad phải có ≥1 agent để có kênh đo.)
-4. **Skill = MCP tự do.** User tự gắn MCP bất kỳ cho agent; platform **đăng ký +
-   log danh sách** chứ không bắt duyệt. → bỏ luồng `skill_requests`/duyệt.
-5. **Gateway = LiteLLM tự host** trên VPS.
+   điểm squad = hiệu quả mục tiêu, **không** cộng điểm agent. (Vẫn ràng buộc ≥1 agent.)
+4. **Skill = MCP tự do.** User tự gắn MCP bất kỳ; platform **đăng ký + log** chứ
+   không bắt duyệt.
+5. **LiteLLM Gateway = optional**, đã deploy — chỉ dùng cho agent nào chọn API key;
+   không bắt buộc khi dùng subscription.
 
-**Hệ quả quan trọng của (4) + (1):**
-> Platform proxy **model call** (qua gateway) nhưng **không proxy tool/skill call**
-> (MCP chạy trực tiếp giữa agent và server). Vì vậy **token** lấy từ gateway, còn
-> **dữ liệu tool để tính 6 chỉ số** (TSR/CTUR/RIR/OFR/UTR) **phải lấy từ telemetry
-> SDK bắt buộc nhúng trong agent**. Template `lsr-agent init` phải gắn sẵn SDK này;
-> agent không gửi trace → coi như vi phạm, không cho golive.
+**Hệ quả quan trọng:**
+> Không proxy được model call (subscription OAuth). Vì vậy **cả token lẫn dữ liệu
+> tool cho 6 chỉ số đều lấy từ Telemetry SDK / plugin bắt buộc**. Template
+> `lsr-agent init` phải gắn sẵn plugin+SDK; agent không gửi trace → không cho golive.
+> Token là **soft-enforce** (đo + `TokenBudget` dừng agent), không hard-cap billing.
 
 **Còn mở:**
-6. **Provider LLM** chính (mặc định Anthropic/Claude) để chuẩn hoá gateway + đọc token.
-7. Kết nối Lark: **bot** (khuyến nghị) hay có ca bắt buộc user account (AGENT_INTEGRATION §2).
+6. Cơ chế headless auth subscription cho agent chạy trên VPS: `claude setup-token`
+   của từng người (mỗi người 1 subscription) — cần confirm cách quản lý/luân chuyển.
+7. Số phận LiteLLM gateway đã deploy: **giữ chạy (optional)** hay tắt để tiết kiệm?
+8. Kết nối Lark: **bot** (khuyến nghị) hay có ca bắt buộc user account.

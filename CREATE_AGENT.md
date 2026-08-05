@@ -10,10 +10,11 @@ platform cấp · MCP skill tự do · LiteLLM tự host · squad agent là kên
 
 ## 0. Ý tưởng một dòng
 
-> Người dùng viết agent bằng **Claude Agent SDK của riêng mình**, nhưng agent được
-> **cấu hình sẵn để trỏ mọi lời gọi model qua Gateway của platform** (bằng
-> *virtual key* platform cấp) và **nhúng sẵn Telemetry SDK**. Nhờ vậy "login riêng"
-> nhưng "platform nắm hết" — và **revoke key = tắt agent**.
+> Người dùng viết agent bằng **Claude Agent SDK của riêng mình**, **đăng nhập bằng
+> subscription Claude riêng** (OAuth — không dùng API key). Agent được scaffold sẵn
+> **plugin + Telemetry SDK bắt buộc** để ghi mọi request/tool/token về collector.
+> Nhờ vậy "login riêng" nhưng "platform nắm hết" — và **deactivate = cắt Lark +
+> dừng process + thu hồi đăng ký** (không có virtual key để revoke).
 
 ---
 
@@ -22,11 +23,12 @@ platform cấp · MCP skill tự do · LiteLLM tự host · squad agent là kên
 | Cần có | Ai cấp |
 |--------|--------|
 | Tài khoản platform (định danh cá nhân, thuộc phòng ban/squad) | Admin/IT |
+| **Subscription Claude riêng** (để đăng nhập Agent SDK) | Cá nhân / công ty cấp |
 | Claude Code đã cài + plugin `lsr-agent` | Cá nhân tự cài |
 | Thuộc ít nhất 1 squad | Quản lý squad |
 
-> Người dùng **không** cần và **không** được cầm khoá Anthropic thô — platform cấp
-> virtual key thay thế.
+> Agent xác thực bằng **subscription** (`claude login` / `setup-token`), **không
+> dùng API key**. Platform không cấp khoá LLM; chỉ cấp `TELEMETRY_API_KEY` + cài plugin.
 
 ---
 
@@ -40,9 +42,10 @@ platform cấp · MCP skill tự do · LiteLLM tự host · squad agent là kên
     │ lsr-agent init      │  hỏi tên/squad/skill...       │                        │
     │                     │  scaffold project cục bộ      │                        │
     │ lsr-agent register  │──── tạo record agents ───────►│  (status=registered)   │
-    │                     │◄── virtual key + telemetry key│  + cấp budget mặc định │
+    │                     │◄── telemetry key + cài plugin │                        │
+    │ claude login/setup-token│─ đăng nhập subscription riêng                       │
     │ lsr-agent lark connect│─ chọn bot/user + authorize ──►│  map agent↔chat / OAuth│──► Lark
-    │  ... code agent ...  │  (model call qua gateway)     │                        │
+    │  ... code agent ...  │  (plugin ghi telemetry)       │                        │
     │ lsr-agent skill add  │──── khai báo MCP (log) ──────►│                        │
     │ lsr-agent test       │── chạy bộ test → traces ─────►│  chấm pass/fail + 6 CS │
     │ lsr-agent golive     │──── yêu cầu golive ──────────►│  active + mở full key  │──► gắn bot Lark
@@ -66,20 +69,29 @@ lsr-agent init
 ```
 Hỏi tương tác: tên agent, **squad**, mô tả/mục đích, `connect_mode` (bot/user),
 model mặc định, skill (MCP) muốn dùng. Sinh ra project cục bộ (xem §4) đã **pre-wire**
-gateway + telemetry.
+plugin + telemetry.
 
-### Bước 3 — Đăng ký + nhận khoá
+### Bước 3 — Đăng ký + nhận telemetry key
 ```bash
 lsr-agent register
 ```
 Gọi Platform API → tạo record trong `agents` (`status=registered`), gắn
 `owner_user`, `squad`. Platform trả (hiện **một lần**, lưu vào `.env` đã gitignore):
-- `ANTHROPIC_API_KEY` = **virtual key** `lsr_vk_...` (KHÔNG phải khoá Anthropic thô)
-- `LSR_TELEMETRY_API_KEY` = `lsr_tel_...`
+- `LSR_TELEMETRY_API_KEY` = `lsr_tel_...` (để gửi trace về collector)
 - `LSR_AGENT_ID`
+
+> **Không cấp khoá LLM.** Agent tự đăng nhập subscription ở Bước 3b.
 
 > Nếu squad chưa có agent nào → agent này được đề nghị làm **squad agent chính**
 > (`is_squad_agent=true`). Squad phải có ≥1 agent mới đủ điều kiện đánh giá.
+
+### Bước 3b — Đăng nhập subscription (Agent SDK, không API key)
+```bash
+claude login            # hoặc: claude setup-token  (cho agent chạy headless trên VPS)
+```
+Mỗi người đăng nhập bằng **subscription Claude riêng**. Token lưu ở `~/.claude`
+(máy/VPS chạy agent), platform **không** cầm khoá này. `claude setup-token` tạo
+token dài hạn để agent chạy nền không cần đăng nhập lại.
 
 ### Bước 3.5 — Kết nối Lark (chọn kênh + authorize)
 Vì mọi giao tiếp đi qua Lark, agent phải gắn một kênh Lark trước khi golive.
@@ -108,9 +120,9 @@ Chọn `connect_mode`:
 > hiện trên giao diện Lark** — platform không nhập hộ mật khẩu/khoá.
 
 ### Bước 4 — Phát triển bằng Claude Code
-Người dùng viết logic agent bằng **Claude Agent SDK** như bình thường. Vì
-`ANTHROPIC_BASE_URL` đã trỏ về gateway và key là virtual key, **mọi lời gọi model
-tự động đi qua platform** (log token, áp budget) — không phải làm gì thêm.
+Người dùng viết logic agent bằng **Claude Agent SDK** như bình thường (xác thực
+bằng subscription đã đăng nhập). **Plugin + Telemetry SDK** đã nhúng sẵn tự ghi
+mọi request/tool/token về collector — không phải làm gì thêm.
 
 ### Bước 5 — Thêm skill (MCP tự do)
 ```bash
@@ -118,8 +130,7 @@ lsr-agent skill add bigquery      # hoặc bất kỳ MCP server nào
 ```
 Cập nhật manifest + **đăng ký/log** skill vào danh sách của agent trên platform.
 Không cần duyệt (theo quyết định "MCP tự do"), nhưng danh sách được ghi lại để
-đánh giá & kiểm toán. Lời gọi tool được đo qua **Telemetry SDK** (vì gateway không
-proxy tool).
+đánh giá & kiểm toán. Lời gọi tool được đo qua **Telemetry SDK / hooks**.
 
 ### Bước 6 — Test trước golive
 ```bash
@@ -132,13 +143,13 @@ Chạy **bộ test có nhãn** (`needs_tool`, `expected_tool`) → Telemetry SDK
 ```bash
 lsr-agent golive
 ```
-Platform kiểm: đủ thông tin đăng ký + test pass → `status=active`, mở virtual key
-ở full budget, gắn bot vào nhóm Lark. Agent bắt đầu nhận việc.
+Platform kiểm: đủ thông tin đăng ký + test pass + telemetry hoạt động → `status=active`,
+gắn bot vào nhóm Lark. Agent bắt đầu nhận việc.
 
 ### Bước 8 — Vận hành & governance (tự động)
-Platform liên tục ingest: **gateway log** (token) + **telemetry trace** (hành vi
-tool) + **Lark events** (usage, kết quả, 👍/👎). Test định kỳ; fail theo chính sách
-→ **auto-deactivate** = revoke virtual key + `status=deactivated` + báo owner.
+Platform liên tục ingest: **telemetry trace** (token + hành vi tool) + **Lark events**
+(usage, kết quả, 👍/👎). Test định kỳ; fail theo chính sách → **auto-deactivate** =
+**cắt Lark + dừng process + thu hồi đăng ký** + `status=deactivated` + báo owner.
 
 ---
 
@@ -175,8 +186,8 @@ lark:                       # kết nối Lark (Bước 3.5)
     oauth_scopes: [im:message, im:chat]
 runtime:
   sdk: claude-agent-sdk
+  auth: subscription        # đăng nhập subscription (claude login/setup-token), KHÔNG api key
   model: claude-sonnet-5
-  gateway_base_url: https://gateway.lsr.internal   # -> ANTHROPIC_BASE_URL
 skills:                     # MCP tự do — chỉ khai báo + log
   - {name: bigquery,  type: mcp}
   - {name: lark-task, type: mcp}
@@ -187,27 +198,30 @@ tests:
   suite: tests/agent_tests.yaml
 ```
 
-**`.env` (platform cấp khi register):**
+**`.env` (platform cấp khi register — KHÔNG có khoá LLM):**
 ```
-ANTHROPIC_BASE_URL=https://gateway.lsr.internal
-ANTHROPIC_API_KEY=lsr_vk_xxxxxxxx        # virtual key
 LSR_TELEMETRY_API_KEY=lsr_tel_xxxxxxxx
 LSR_AGENT_ID=AG-ORDER-BOT
+LSR_COLLECTOR=https://collector.lsr.internal
+# Auth LLM = subscription, lưu ở ~/.claude (do claude login/setup-token), không ở đây
 ```
 
 **`src/agent.py` (điểm pre-wire tối thiểu):**
 ```python
-# base_url + key lấy từ .env -> mọi model call đi qua gateway
-# TraceRecorder (telemetry SDK) bọc quanh 1 lượt chạy để ghi token/tool/output
+# Xác thực LLM = subscription (Agent SDK tự dùng ~/.claude) — không đọc API key.
+# TraceRecorder (telemetry SDK) bọc quanh 1 lượt chạy để ghi token/tool/output.
 from rating_agent.telemetry import TraceRecorder, TelemetryClient
 
 rec = TraceRecorder(agent_id=os.environ["LSR_AGENT_ID"], task_id=task_id)
-# ... gọi Claude Agent SDK (ANTHROPIC_BASE_URL đã trỏ gateway) ...
-rec.record_llm(model, usage.input_tokens, usage.output_tokens)
+# ... gọi Claude Agent SDK (đăng nhập subscription) ...
+rec.record_llm(model, usage.input_tokens, usage.output_tokens)   # token từ SDK usage
 rec.record_tool("bigquery", args, ok=True, has_result=True)
 rec.set_output(answer)
-TelemetryClient(collector, os.environ["LSR_TELEMETRY_API_KEY"]).report(rec.build())
+TelemetryClient(os.environ["LSR_COLLECTOR"], os.environ["LSR_TELEMETRY_API_KEY"]).report(rec.build())
 ```
+
+> Trên Claude Code, phần `record_llm/record_tool` có thể do **plugin + hooks** tự
+> làm (PostToolUse/Stop) thay vì viết tay — người tạo agent không phải chèn thủ công.
 
 ---
 
@@ -217,7 +231,7 @@ TelemetryClient(collector, os.environ["LSR_TELEMETRY_API_KEY"]).report(rec.build
 |---------|------|
 | **Người tạo agent** | init/register/code/test/golive; viết bộ test có nhãn |
 | **Quản lý squad** | đảm bảo squad có ≥1 agent; chỉ định squad agent |
-| **Platform (tự động)** | cấp/revoke key, log gateway, ingest trace, chấm điểm, auto-deactivate, dashboard |
+| **Platform (tự động)** | cấp telemetry key, cài plugin, ingest trace, chấm điểm, auto-deactivate (cắt Lark/process), dashboard |
 | **Admin** | tạo tài khoản, quota budget, chính sách log/PII |
 
 ---

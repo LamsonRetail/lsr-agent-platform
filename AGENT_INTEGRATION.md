@@ -99,14 +99,17 @@ Hai mức, nên làm cả hai:
 1. **Đo (observability):** SDK ghi token mỗi `LLMCall`; `compute_token_stats()`
    tổng hợp theo agent/kỳ → hiển thị trên Agent Detail, cảnh báo khi vượt xu hướng.
 2. **Chặn (enforcement):**
-   - **Tại gateway (hard — ĐÃ CHỐT, bắt buộc):** mọi lời gọi model đi qua
-     **LiteLLM gateway tự host** với **virtual key theo agent** + budget ngày/tháng.
-     Đây là nguồn token đáng tin nhất và là **kill switch** (revoke key = deactivate).
-   - **Tại chỗ (soft, bổ trợ):** `TokenBudget(limit_tokens=...)` trong SDK — đã code sẵn.
+   - **Tại chỗ (soft — vì dùng subscription, không API key):** `TokenBudget(
+     limit_tokens=...)` trong SDK/plugin → vượt hạn mức thì dừng lượt chạy. Đã code sẵn.
+   - **Gateway (hard, OPTIONAL):** chỉ áp dụng cho agent nào chọn dùng **API key**
+     qua LiteLLM gateway (virtual key + budget). Với **subscription OAuth thì không
+     áp được** — Anthropic không cho cắt token theo key ở tầng đó.
 
-> **Lưu ý (do chọn "MCP skill tự do"):** gateway chỉ proxy **model call**, KHÔNG
-> proxy **tool/skill call**. Nên token lấy từ gateway; còn dữ liệu tool cho 6 chỉ
-> số bên dưới **bắt buộc lấy từ telemetry SDK** nhúng trong agent (§5).
+> **Cập nhật auth model:** agent dùng **Claude Agent SDK đăng nhập subscription
+> riêng, KHÔNG API key** → không proxy được model call. Vì vậy **cả token lẫn dữ
+> liệu tool** đều lấy từ **Telemetry SDK / Claude Code plugin bắt buộc**; kill switch
+> là **cắt Lark + dừng process + thu hồi đăng ký** (xem PLAN §5). LiteLLM gateway
+> hạ xuống *optional*.
 
 ---
 
