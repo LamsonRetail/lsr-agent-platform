@@ -11,6 +11,7 @@ from .minh_anh import (
     draft_minutes,
     share_dictionary_to,
 )
+from .lark_bot import MinhAnhBot
 from .transcribe import DEFAULT_BASE_URL, TranscribeClient, TranscribeError
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "TranscribeClient",
     "TranscribeError",
     "DEFAULT_BASE_URL",
+    "MinhAnhBot",
 ]

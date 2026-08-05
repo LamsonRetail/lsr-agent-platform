@@ -44,4 +44,12 @@ Client: `rating_agent.meeting.TranscribeClient` (submit `/transcribe` → poll
 - [x] Resource index (collector) đã deploy — biên bản lưu & tra cứu được.
 - [x] **Platform API**: register agent → **tự động Minh Anh share từ điển** (live, đã verify).
 - [x] Client transcript (Whisper) — đã code + test; server sống.
-- [ ] Lark bot runtime: nhận sự kiện add-vào-họp, gửi xin confirm, tạo task (Lark MCP).
+- [x] **Lark bot runtime** (`MinhAnhBot`): send_text, create_task, ask_confirm,
+  on_confirm (gate: không tạo task trước confirm), handle_event — đã code + test.
+  Creds bot "Minh Anh - Meeting Agent" (LarkSuite) đã verify auth + lưu server.
+- [ ] **Nhận sự kiện Lark**: cần một trong hai —
+  (a) webhook công khai (Caddy + HTTPS + domain) trỏ event về handler, hoặc
+  (b) long-connection SDK (`lark-oapi`) kết nối outbound (không cần public URL).
+- [ ] Add bot vào nhóm/cuộc họp (hiện đang ở 0 nhóm).
+
+> Bảo mật: app_id/secret của Minh Anh **chỉ nằm trong `.env` trên VM**, không commit.
