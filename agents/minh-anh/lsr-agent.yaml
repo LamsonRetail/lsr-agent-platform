@@ -1,0 +1,45 @@
+apiVersion: lsr/v1
+agent:
+  id: AG-MINH-ANH
+  name: Minh Anh
+  version: 0.1.0
+  owner: platform@lamsonretail.vn
+  squad: PLATFORM              # agent nền tảng, phục vụ mọi squad
+  is_squad_agent: false
+  connect_mode: bot
+  description: >
+    Meeting agent — phụ trách viết biên bản họp (transcript, nội dung chính, xin
+    owner confirm, tạo task) và share "từ điển" thư mục meeting-notes cho agent mới.
+
+lark:
+  connect_mode: bot
+  bot:
+    app: platform-shared
+    chat_ids: []              # thêm khi được add vào cuộc họp/nhóm
+    event_webhook: https://collector.lsr.internal/lark/events
+
+runtime:
+  sdk: claude-agent-sdk
+  auth: subscription          # đăng nhập subscription (không API key)
+  model: claude-sonnet-5
+
+skills:                       # MCP tự do
+  - {name: lark-minutes, type: mcp}   # lấy transcript/minutes cuộc họp
+  - {name: lark-docx,    type: mcp}   # soạn/ghi biên bản
+  - {name: lark-task,    type: mcp}   # tạo task sau họp
+  - {name: lark-im,      type: mcp}   # gửi tin nhắn xin confirm
+  - {name: resource-index, type: builtin}  # index + share meeting-notes
+
+telemetry:
+  enabled: true               # bắt buộc (control point)
+  collector: https://collector.lsr.internal
+
+resources:
+  managed_folder: meeting-notes   # thư mục Minh Anh quản lý & share cho agent mới
+
+hooks:
+  on_agent_registered: share_meeting_notes_dictionary   # share từ điển cho agent mới
+
+tests:
+  suite: tests/agent_tests.yaml
+schedule: []

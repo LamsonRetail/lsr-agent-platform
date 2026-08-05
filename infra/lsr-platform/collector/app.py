@@ -59,6 +59,34 @@ def _ensure_schema() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_traces_agent ON agent_traces(agent_id)"
         )
+        # Resource index: file/link được share cho agent (lưu ngoài memory).
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS resource_index (
+                id          bigserial PRIMARY KEY,
+                resource_id text,
+                agent_id    text,
+                kind        text,
+                title       text,
+                uri         text,
+                mime        text,
+                folder      text,
+                tags        text[],
+                summary     text,
+                shared_by   text,
+                shared_at   timestamptz,
+                search_blob text,
+                raw         jsonb,
+                received_at timestamptz DEFAULT now(),
+                tsv tsvector GENERATED ALWAYS AS (
+                    to_tsvector('simple'::regconfig, coalesce(search_blob,''))
+                ) STORED
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_res_tsv ON resource_index USING gin(tsv)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_res_agent ON resource_index(agent_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_res_folder ON resource_index(folder)")
         conn.commit()
     _SCHEMA_READY = True
 
@@ -145,3 +173,83 @@ def stats() -> list[dict]:
             ORDER BY total_tokens DESC NULLS LAST
             """
         ).fetchall()
+
+
+# ----------------------- Resource Index -----------------------
+
+@app.post("/v1/resources")
+def index_resource(resource: dict, authorization: str = Header(default="")) -> dict:
+    _check_auth(authorization)
+    _ensure_schema()
+    tags = resource.get("tags") or []
+    if not isinstance(tags, list):
+        tags = [str(tags)]
+    search_blob = " ".join(
+        [
+            resource.get("title") or "",
+            resource.get("summary") or "",
+            " ".join(str(t) for t in tags),
+            resource.get("uri") or "",
+        ]
+    )
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO resource_index
+              (resource_id, agent_id, kind, title, uri, mime, folder, tags,
+               summary, shared_by, shared_at, search_blob, raw)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """,
+            (
+                resource.get("resource_id"),
+                resource.get("agent_id"),
+                resource.get("kind", "link"),
+                resource.get("title"),
+                resource.get("uri"),
+                resource.get("mime"),
+                resource.get("folder"),
+                tags,
+                resource.get("summary"),
+                resource.get("shared_by"),
+                resource.get("shared_at") or None,
+                search_blob,
+                json.dumps(resource),
+            ),
+        )
+        conn.commit()
+    return {"ok": True, "resource_id": resource.get("resource_id")}
+
+
+@app.get("/v1/resources/search")
+def search_resources(
+    q: str = "",
+    agent_id: str | None = None,
+    folder: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
+    _ensure_schema()
+    cols = ("resource_id, agent_id, kind, title, uri, mime, folder, tags, "
+            "summary, shared_by, shared_at")
+    where: list[str] = []
+    args: list = []
+    if q.strip():
+        where.append("tsv @@ websearch_to_tsquery('simple', %s)")
+        args.append(q)
+    if agent_id:
+        where.append("agent_id = %s")
+        args.append(agent_id)
+    if folder:
+        where.append("folder = %s")
+        args.append(folder)
+    sql = f"SELECT {cols} FROM resource_index"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    if q.strip():
+        sql += " ORDER BY ts_rank(tsv, websearch_to_tsquery('simple', %s)) DESC"
+        args.append(q)
+    else:
+        sql += " ORDER BY id DESC"
+    sql += " LIMIT %s"
+    args.append(limit)
+    with _db() as conn:
+        return conn.execute(sql, args).fetchall()

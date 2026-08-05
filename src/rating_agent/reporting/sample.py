@@ -85,6 +85,18 @@ AGENT_REGISTRY: dict[str, dict] = {
         "last_test_status": "-",
         "last_test_at": "",
     },
+    "AG-MINH-ANH": {  # Meeting agent nền tảng
+        "version": "0.1.0",
+        "owner": "Platform",
+        "served_squads": ["Toàn bộ"],
+        "skills": ["Biên bản họp", "Transcript", "Tạo task"],
+        "data_sources": ["lark_minutes", "lark_task", "resource_index"],
+        "status": "active",
+        "registered_at": "2026-08-05",
+        "golive_at": "2026-08-05",
+        "last_test_status": "pass",
+        "last_test_at": "2026-08-05",
+    },
 }
 
 # --- Xu hướng usage theo tuần (Agent Detail) ---

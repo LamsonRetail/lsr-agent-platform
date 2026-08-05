@@ -1,0 +1,23 @@
+"""Meeting Agent "Minh Anh" — share từ điển meeting-notes + soạn biên bản họp."""
+
+from .minh_anh import (
+    MEETING_NOTES_FOLDER,
+    MEETING_WORKFLOW_STEPS,
+    MINH_ANH_ID,
+    MeetingMinutes,
+    MeetingTask,
+    MinutesStatus,
+    build_dictionary_resource,
+    share_dictionary_to,
+)
+
+__all__ = [
+    "MEETING_NOTES_FOLDER",
+    "MEETING_WORKFLOW_STEPS",
+    "MINH_ANH_ID",
+    "MeetingMinutes",
+    "MeetingTask",
+    "MinutesStatus",
+    "build_dictionary_resource",
+    "share_dictionary_to",
+]

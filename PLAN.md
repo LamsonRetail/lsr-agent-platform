@@ -28,6 +28,13 @@ kết nối vào để tự tạo agent của mình**, tự yêu cầu thêm ski
 3. **Hai nhánh đánh giá giữ nguyên:** Squad (hiệu quả mục tiêu) và Agent
    (skill/usage/kết quả + test). **Mỗi squad ≥ 1 agent; kết quả squad đo qua agent
    của squad.**
+4. **Resource Index (chung mọi agent):** file/link được share cho agent phải được
+   **lưu metadata + index ra ngoài** (collector/Postgres), truy xuất lại bằng
+   **search** — KHÔNG nhồi vào memory/context (tránh long-memory). Đã có:
+   `src/rating_agent/resources/` + endpoint collector `/v1/resources`.
+5. **Meeting agent "Minh Anh"** (nền tảng): share từ điển thư mục `meeting-notes`
+   cho agent mới; khi vào họp thì viết biên bản (transcript → nội dung chính →
+   owner confirm → tạo task). Xem [agents/minh-anh/](agents/minh-anh/WORKFLOW.md).
 
 ---
 
