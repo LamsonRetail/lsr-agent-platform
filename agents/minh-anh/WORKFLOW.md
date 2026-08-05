@@ -47,9 +47,9 @@ Client: `rating_agent.meeting.TranscribeClient` (submit `/transcribe` → poll
 - [x] **Lark bot runtime** (`MinhAnhBot`): send_text, create_task, ask_confirm,
   on_confirm (gate: không tạo task trước confirm), handle_event — đã code + test.
   Creds bot "Minh Anh - Meeting Agent" (LarkSuite) đã verify auth + lưu server.
-- [ ] **Nhận sự kiện Lark**: cần một trong hai —
-  (a) webhook công khai (Caddy + HTTPS + domain) trỏ event về handler, hoặc
-  (b) long-connection SDK (`lark-oapi`) kết nối outbound (không cần public URL).
-- [ ] Add bot vào nhóm/cuộc họp (hiện đang ở 0 nhóm).
+- [x] **Nhận sự kiện Lark**: service `minh_anh_bot` (lark-oapi long-connection,
+  WebSocket outbound) đã deploy + **kết nối thành công** (DRY_RUN=true: chỉ log).
+- [ ] Add bot vào nhóm/cuộc họp (hiện 0 nhóm) → mới có event để xử lý.
+- [ ] Bật `DRY_RUN=false` + nối dispatch workflow (gửi confirm/tạo task) — **chờ duyệt**.
 
 > Bảo mật: app_id/secret của Minh Anh **chỉ nằm trong `.env` trên VM**, không commit.

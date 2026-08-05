@@ -48,6 +48,17 @@ services:
       - "127.0.0.1:8081:8081"
     restart: unless-stopped
 
+  minh_anh_bot:
+    build: ./minh_anh_bot
+    environment:
+      MINH_ANH_LARK_APP_ID: ${MINH_ANH_LARK_APP_ID}
+      MINH_ANH_LARK_APP_SECRET: ${MINH_ANH_LARK_APP_SECRET}
+      LARK_DOMAIN_CONST: LARK        # LARK (LarkSuite) | FEISHU
+      DRY_RUN: "true"                # true = chỉ log, không gửi tin/tạo task
+      LSR_COLLECTOR: http://collector:8081
+      LSR_TRANSCRIBE_URL: ${LSR_TRANSCRIBE_URL:-https://slashingly-unexistent-hue.ngrok-free.dev}
+    restart: unless-stopped
+
   platform_api:
     build: ./platform_api
     depends_on:
