@@ -33,9 +33,9 @@ kết nối vào để tự tạo agent của mình**, tự yêu cầu thêm ski
                  ▼
 ┌──────────────────────── CONTROL PLANE (platform) ─────────────────────────┐
 │  ┌───────────────┐  ┌──────────────┐  ┌───────────────┐  ┌──────────────┐ │
-│  │ Onboarding &   │  │  LLM Gateway  │  │  Skill Hub    │  │ Governance & │ │
-│  │ Registry       │  │ (proxy model, │  │ (MCP skills,  │  │ Evaluation   │ │
-│  │ (agents,users, │  │ virtual key,  │  │ request→cấp,  │  │ (scorer,test,│ │
+│  │ Onboarding &   │  │  LLM Gateway  │  │Skill Registry │  │ Governance & │ │
+│  │ Registry       │  │ (proxy model, │  │ (MCP tự do,   │  │ Evaluation   │ │
+│  │ (agents,users, │  │ virtual key,  │  │ khai báo+log, │  │ (scorer,test,│ │
 │  │ squads, keys)  │  │ token+budget, │  │ meter usage)  │  │ 6 chỉ số,    │ │
 │  │                │  │ KILL SWITCH)  │  │               │  │ dashboards)  │ │
 │  └───────┬───────┘  └──────┬───────┘  └──────┬────────┘  └──────┬───────┘ │
@@ -45,7 +45,7 @@ kết nối vào để tự tạo agent của mình**, tự yêu cầu thêm ski
            ▼                  ▼                 ▼                  ▼
 ┌──────────────────────── DATA PLANE (agent của user) ──────────────────────┐
 │  Agent (build bằng Claude Code / Agent SDK), chạy trên VPS/hạ tầng của team │
-│  Cấu hình: ANTHROPIC_BASE_URL = gateway · skills = MCP của Skill Hub        │
+│  Cấu hình: ANTHROPIC_BASE_URL = gateway · skills = MCP tự khai báo           │
 │  → mọi model call & skill call đều xuyên qua control plane                   │
 └────────────────────────────────────────────────────────────────────────────┘
                  │ trả lời qua Lark (bot)          ▲
@@ -66,7 +66,7 @@ về **LLM Gateway** của platform. Mọi request đi qua gateway → log token
 |-----------|---------|-----------|
 | **Onboarding & Registry** | Đăng ký user/phòng ban/squad/agent; cấp virtual key + skill token + telemetry key | registry `agents` đã có; cần mở rộng |
 | **LLM Gateway** | Proxy trước Anthropic API: log mọi request, đếm token, áp budget/rate-limit, kill switch | **mới** (đề xuất LiteLLM tự host) |
-| **Skill Hub** | Catalog skill (MCP server/tool); luồng request→duyệt→cấp; đo mức dùng | **mới** |
+| **Skill Registry** | Đăng ký + log danh sách MCP mỗi agent (MCP tự do); đo mức dùng qua telemetry | **mới** |
 | **Governance & Evaluation** | Ingest log → trace → chấm điểm 2 nhánh, đo 6 chỉ số, auto-deactivate | `evaluation`, `telemetry`, `agent_testing` đã có |
 | **Reporting** | 6 dashboard/báo cáo | `reporting` đã có (prototype) |
 | **Lark integration** | Bot nhận việc/trả kết quả; Base = master data | khung `lark/` đã có |
@@ -75,15 +75,18 @@ về **LLM Gateway** của platform. Mọi request đi qua gateway → log token
 
 ## 4. Vòng đời onboarding (qua Claude Code)
 
-1. **Khởi tạo:** user mở Claude Code, dùng template/plugin của platform
-   (`lsr-agent init`) → scaffold agent + tạo record `agents` qua Platform API.
-2. **Xin skill:** khai báo skill cần → tạo `skill_requests` → Skill Hub duyệt.
-3. **Cấp khoá:** platform cấp `GATEWAY_VIRTUAL_KEY` (+ budget), `SKILL_TOKEN`,
-   `TELEMETRY_API_KEY`. Agent cấu hình `ANTHROPIC_BASE_URL` = gateway.
-4. **Pre-golive test:** chạy bộ test (có nhãn) → phải pass.
-5. **Golive:** `status = active`. Từ đây mọi request đi qua control plane.
-6. **Vận hành:** platform đo liên tục; fail test/vượt chính sách → **auto-deactivate**
-   (revoke virtual key + set `agents.status=deactivated`).
+> **Chi tiết trải nghiệm tạo agent (lệnh, artifact, platform cấp gì):**
+> [CREATE_AGENT.md](CREATE_AGENT.md).
+
+1. **Khởi tạo:** user mở Claude Code, dùng plugin `lsr-agent init` → scaffold agent.
+2. **Đăng ký + cấp khoá:** `lsr-agent register` → tạo record `agents` + platform cấp
+   **virtual key** (ANTHROPIC_API_KEY) + `TELEMETRY_API_KEY`. `ANTHROPIC_BASE_URL`
+   trỏ về gateway.
+3. **Khai báo skill:** `lsr-agent skill add <mcp>` → log danh sách MCP (tự do, không duyệt).
+4. **Pre-golive test:** `lsr-agent test` (bộ test có nhãn) → phải pass.
+5. **Golive:** `lsr-agent golive` → `status = active`, mở budget, gắn bot Lark.
+6. **Vận hành:** platform đo liên tục; fail/vượt chính sách → **auto-deactivate**
+   (revoke virtual key + `agents.status=deactivated`).
 
 ---
 
@@ -92,7 +95,7 @@ về **LLM Gateway** của platform. Mọi request đi qua gateway → log token
 | Loại request | Đi qua | Platform thu được | Cắt bằng |
 |--------------|--------|-------------------|----------|
 | Lời gọi LLM | LLM Gateway | prompt/response (tuỳ chính sách), token, model, latency | revoke virtual key |
-| Lời gọi skill/tool | Skill Hub (MCP) | tên skill, tham số, kết quả, lỗi | revoke skill token |
+| Lời gọi skill/tool | Telemetry SDK (không proxy) | tên skill, tham số, kết quả, lỗi | deactivate agent (revoke gateway key) |
 | Nhận việc / trả kết quả | Lark bot | invocation, kết quả cuối, phản hồi 👍/👎 | gỡ bot khỏi nhóm |
 
 Ba nguồn này ghép thành `AgentRunTrace` (đã có trong `telemetry/`) → tính token,
@@ -100,15 +103,17 @@ Ba nguồn này ghép thành `AgentRunTrace` (đã có trong `telemetry/`) → t
 
 ---
 
-## 6. Skill: catalog → request → duyệt → cấp → đo
+## 6. Skill: MCP tự do (khai báo → log → đo)
 
-- **Catalog** (`agent_skills` mở rộng thành skill của platform): mỗi skill là một
-  MCP server/tool platform host, có mô tả, phạm vi dữ liệu, mức rủi ro.
-- **Request** (`skill_requests`): user xin skill cho agent → owner/admin duyệt.
-- **Cấp**: Skill Hub phát token; agent kết nối MCP skill bằng token đó.
-- **Đo**: mọi lời gọi skill được log → vào `skill_score` và các chỉ số tool.
+Theo quyết định đã chốt (§12), skill = **MCP tự do**:
+- **Khai báo**: user tự gắn MCP bất kỳ cho agent (`lsr-agent skill add`).
+- **Log/đăng ký**: platform ghi danh sách MCP của mỗi agent (`agent_mcp_skills`) —
+  **không bắt duyệt**.
+- **Đo**: vì gateway KHÔNG proxy tool, lời gọi skill được đo qua **Telemetry SDK**
+  (bắt buộc nhúng) → vào `skill_score` và 6 chỉ số hành vi tool.
 
-Nhờ skill là MCP do platform host, "tự yêu cầu thêm skill" vẫn nằm trong tầm kiểm soát.
+> Đánh đổi: linh hoạt cao, nhưng governance ở tầng tool dựa vào SDK. Agent không
+> gửi trace = không cho golive (đây là ràng buộc thay cho "duyệt skill").
 
 ---
 
@@ -129,7 +134,7 @@ Nhờ skill là MCP do platform host, "tự yêu cầu thêm skill" vẫn nằm 
 
 - **Squad scorer / Agent scorer**: giữ như hiện tại.
 - **Bổ sung Agent Detail**: token/kỳ, 6 chỉ số hành vi tool, mức dùng skill.
-- **Bổ sung màn hình platform**: Skill Hub (catalog + request), Gateway/Token
+- **Bổ sung màn hình platform**: Skill Registry (danh sách MCP mỗi agent), Gateway/Token
   usage, Onboarding queue. (Nâng từ 6 → ~8 màn hình.)
 
 ---
@@ -152,8 +157,7 @@ Thêm/mở rộng trên Lark Base (hoặc DB của platform):
 | `users` / `departments` | người tạo agent, phòng ban, quyền |
 | `agents` (mở rộng) | + `owner_user`, `connect_mode` (bot/user), `gateway_key_id`, `is_squad_agent` |
 | `squads` (mở rộng) | + `primary_agent_id` (ràng buộc ≥1 agent) |
-| `agent_skills` (→ catalog) | skill của platform = MCP server/tool |
-| `skill_requests` | luồng xin skill → duyệt |
+| `agent_mcp_skills` | danh sách MCP mỗi agent khai báo (tự do, chỉ log) |
 | `gateway_keys` | virtual key, budget, trạng thái (active/revoked) |
 | `agent_traces` / `agent_task_labels` / `agent_behavior_metrics` | như AGENT_INTEGRATION §6 |
 
@@ -171,7 +175,7 @@ Thêm/mở rộng trên Lark Base (hoặc DB của platform):
 
 ### Giai đoạn 2 — Self-service
 - Template Claude Code (`lsr-agent init`) + luồng đăng ký/ xin skill.
-- Skill Hub (MCP) + duyệt + cấp token.
+- Skill Registry (khai báo + log MCP mỗi agent).
 - Pre-golive test + auto-deactivate end-to-end.
 
 ### Giai đoạn 3 — Đánh giá đầy đủ
