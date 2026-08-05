@@ -41,6 +41,7 @@ platform cấp · MCP skill tự do · LiteLLM tự host · squad agent là kên
     │                     │  scaffold project cục bộ      │                        │
     │ lsr-agent register  │──── tạo record agents ───────►│  (status=registered)   │
     │                     │◄── virtual key + telemetry key│  + cấp budget mặc định │
+    │ lsr-agent lark connect│─ chọn bot/user + authorize ──►│  map agent↔chat / OAuth│──► Lark
     │  ... code agent ...  │  (model call qua gateway)     │                        │
     │ lsr-agent skill add  │──── khai báo MCP (log) ──────►│                        │
     │ lsr-agent test       │── chạy bộ test → traces ─────►│  chấm pass/fail + 6 CS │
@@ -79,6 +80,32 @@ Gọi Platform API → tạo record trong `agents` (`status=registered`), gắn
 
 > Nếu squad chưa có agent nào → agent này được đề nghị làm **squad agent chính**
 > (`is_squad_agent=true`). Squad phải có ≥1 agent mới đủ điều kiện đánh giá.
+
+### Bước 3.5 — Kết nối Lark (chọn kênh + authorize)
+Vì mọi giao tiếp đi qua Lark, agent phải gắn một kênh Lark trước khi golive.
+```bash
+lsr-agent lark connect
+```
+Chọn `connect_mode`:
+
+**A. Bot (Custom App)** — khuyến nghị:
+1. Chọn dùng **bot dùng chung của platform** (nhanh, đã cài sẵn) hay **app riêng**
+   của agent (cách ly hơn, tự tạo trên Lark Developer Console).
+2. **Authorize:** admin cài app vào tenant + cấp scopes (`im:message`, `im:chat`,
+   `im:message.receive_v1`...) — làm **một lần** cho platform bot.
+3. Bật **Event Subscription** trỏ về webhook collector (platform điền sẵn).
+4. **Add bot vào (các) nhóm chat** mục tiêu → platform map agent ↔ `chat_id`.
+→ Agent nhận việc qua event, trả kết quả trong nhóm; platform đếm invocation + đọc kết quả.
+
+**B. User account** — chỉ khi bắt buộc:
+1. `lsr-agent lark connect --mode user` mở **URL OAuth** của Lark.
+2. Người dùng **đăng nhập & đồng ý scopes** ngay trên giao diện Lark.
+3. Callback về platform → đổi `authorization code` lấy `user_access_token` +
+   `refresh_token`, **lưu mã hoá ở platform** (không nằm trong repo). Token tự refresh.
+→ Agent hành động dưới danh nghĩa user đó. Cần review ToS/chính sách nội bộ trước.
+
+> Việc authorize (cài app, cấp scope, đồng ý OAuth) do **người dùng/admin thực
+> hiện trên giao diện Lark** — platform không nhập hộ mật khẩu/khoá.
 
 ### Bước 4 — Phát triển bằng Claude Code
 Người dùng viết logic agent bằng **Claude Agent SDK** như bình thường. Vì
@@ -138,6 +165,14 @@ agent:
   is_squad_agent: false
   connect_mode: bot         # bot | user
   description: Tra cứu đơn hàng cho sales
+lark:                       # kết nối Lark (Bước 3.5)
+  connect_mode: bot         # bot | user
+  bot:                      # khi connect_mode=bot
+    app: platform-shared    # platform-shared | custom
+    chat_ids: []            # nhóm agent phục vụ (điền khi add bot)
+    event_webhook: https://collector.lsr.internal/lark/events
+  user:                     # khi connect_mode=user (token lưu ở platform, không ở repo)
+    oauth_scopes: [im:message, im:chat]
 runtime:
   sdk: claude-agent-sdk
   model: claude-sonnet-5

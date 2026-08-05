@@ -82,10 +82,12 @@ về **LLM Gateway** của platform. Mọi request đi qua gateway → log token
 2. **Đăng ký + cấp khoá:** `lsr-agent register` → tạo record `agents` + platform cấp
    **virtual key** (ANTHROPIC_API_KEY) + `TELEMETRY_API_KEY`. `ANTHROPIC_BASE_URL`
    trỏ về gateway.
-3. **Khai báo skill:** `lsr-agent skill add <mcp>` → log danh sách MCP (tự do, không duyệt).
-4. **Pre-golive test:** `lsr-agent test` (bộ test có nhãn) → phải pass.
-5. **Golive:** `lsr-agent golive` → `status = active`, mở budget, gắn bot Lark.
-6. **Vận hành:** platform đo liên tục; fail/vượt chính sách → **auto-deactivate**
+3. **Kết nối Lark:** `lsr-agent lark connect` → chọn **bot** hoặc **user account** →
+   authorize (add bot + event subscription, hoặc OAuth user). Xem CREATE_AGENT §3.5.
+4. **Khai báo skill:** `lsr-agent skill add <mcp>` → log danh sách MCP (tự do, không duyệt).
+5. **Pre-golive test:** `lsr-agent test` (bộ test có nhãn) → phải pass.
+6. **Golive:** `lsr-agent golive` → `status = active`, mở budget, gắn bot Lark.
+7. **Vận hành:** platform đo liên tục; fail/vượt chính sách → **auto-deactivate**
    (revoke virtual key + `agents.status=deactivated`).
 
 ---
@@ -160,6 +162,15 @@ Thêm/mở rộng trên Lark Base (hoặc DB của platform):
 | `agent_mcp_skills` | danh sách MCP mỗi agent khai báo (tự do, chỉ log) |
 | `gateway_keys` | virtual key, budget, trạng thái (active/revoked) |
 | `agent_traces` / `agent_task_labels` / `agent_behavior_metrics` | như AGENT_INTEGRATION §6 |
+
+---
+
+## 10b. Hạ tầng (GCP)
+
+Backend platform triển khai trên **GCP Compute Engine**: project `ganesha-381907`,
+zone `asia-southeast1-b`, instance `digital-transformation-hosting`. Các service
+(LiteLLM Gateway, Collector, Platform API, Scorer/Dashboard) chạy trên VM này sau
+reverse proxy + TLS. SSH & bố trí service: [infra/DEPLOY.md](infra/DEPLOY.md).
 
 ---
 
