@@ -8,8 +8,10 @@ from .minh_anh import (
     MeetingTask,
     MinutesStatus,
     build_dictionary_resource,
+    draft_minutes,
     share_dictionary_to,
 )
+from .transcribe import DEFAULT_BASE_URL, TranscribeClient, TranscribeError
 
 __all__ = [
     "MEETING_NOTES_FOLDER",
@@ -19,5 +21,9 @@ __all__ = [
     "MeetingTask",
     "MinutesStatus",
     "build_dictionary_resource",
+    "draft_minutes",
     "share_dictionary_to",
+    "TranscribeClient",
+    "TranscribeError",
+    "DEFAULT_BASE_URL",
 ]

@@ -117,6 +117,17 @@ class MeetingMinutes:
         )
 
 
+def draft_minutes(
+    meeting_id: str, transcript: str, *, title: str = "", owner: str = ""
+) -> MeetingMinutes:
+    """Tạo biên bản nháp từ transcript (trích key_points/decisions do LLM làm runtime)."""
+
+    return MeetingMinutes(
+        meeting_id=meeting_id, title=title, owner=owner,
+        transcript=transcript, status=MinutesStatus.DRAFT,
+    )
+
+
 # Các bước workflow (dùng cho tài liệu + orchestration runtime qua Lark MCP).
 MEETING_WORKFLOW_STEPS = (
     "1. Lấy transcript cuộc họp (Lark minutes).",

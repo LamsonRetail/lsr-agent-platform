@@ -96,10 +96,16 @@ Rồi chỉ cần: `ssh lsr-gcp`.
 | Service | Vai trò | Port (nội bộ) | Trạng thái |
 |---------|---------|---------------|-----------|
 | Postgres | lưu key/spend (LiteLLM) + trace (collector) | 5432 (nội bộ) | ✅ chạy |
-| Collector API | nhận trace từ Telemetry SDK/plugin | 127.0.0.1:8081 | ✅ chạy (control point chính) |
-| LiteLLM Gateway | *optional* — chỉ cho agent dùng API key | 127.0.0.1:4000 | ✅ chạy (không bắt buộc) |
-| Platform API | đăng ký agent, cấp telemetry key, Lark connect | 8090 | ⏳ chưa làm |
+| Collector API | nhận trace + resource index | 127.0.0.1:8081 | ✅ chạy (control point) |
+| Platform API | register agent, cấp telemetry key, hook Minh Anh, active/deactivate | 127.0.0.1:8090 | ✅ chạy |
+| LiteLLM Gateway | *optional* — chỉ cho agent dùng API key | 127.0.0.1:4000 | ⏸ tắt |
 | Scorer/Dashboard | chấm điểm + phục vụ dashboard | 8082 | ⏳ chưa làm |
+
+**Whisper Transcription Server** (ngoài, của Minh Anh): `https://slashingly-unexistent-hue.ngrok-free.dev`
+— submit `/transcribe`, poll `/result/{job_id}`; `/health` = large-v3 trên CUDA. Client:
+`rating_agent.meeting.TranscribeClient` (env `LSR_TRANSCRIBE_URL`).
+
+Secret thêm: `PLATFORM_ADMIN_TOKEN` (bảo vệ register/status) — sinh ngẫu nhiên trong `.env`.
 
 > **Auth model đã đổi:** agent dùng **subscription (Agent SDK), không API key** →
 > **không cần** dán `ANTHROPIC_API_KEY`; LiteLLM gateway **hạ xuống optional** (giữ

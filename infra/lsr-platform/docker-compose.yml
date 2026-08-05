@@ -48,5 +48,19 @@ services:
       - "127.0.0.1:8081:8081"
     restart: unless-stopped
 
+  platform_api:
+    build: ./platform_api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://lsr:${POSTGRES_PASSWORD}@postgres:5432/lsr
+      COLLECTOR_URL: http://collector:8081
+      COLLECTOR_INGEST_TOKEN: ${COLLECTOR_INGEST_TOKEN}
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+    ports:
+      - "127.0.0.1:8090:8090"
+    restart: unless-stopped
+
 volumes:
   pgdata:

@@ -215,8 +215,10 @@ reverse proxy + TLS. SSH & bố trí service: [infra/DEPLOY.md](infra/DEPLOY.md)
 - Ingest trace → token + 6 chỉ số → dashboard.
 
 ### Giai đoạn 2 — Self-service
-- Template Claude Code (`lsr-agent init`) + luồng đăng ký/ xin skill.
-- Skill Registry (khai báo + log MCP mỗi agent).
+- [x] **Platform API** (register agent, cấp telemetry key, active/deactivate) — đã deploy.
+- [x] Hook `on_agent_registered` → **Minh Anh share từ điển meeting-notes** (live).
+- [x] Resource Index + Meeting agent Minh Anh + client transcript Whisper.
+- Template Claude Code (`lsr-agent init`) gọi Platform API.
 - Pre-golive test + auto-deactivate end-to-end.
 
 ### Giai đoạn 3 — Đánh giá đầy đủ

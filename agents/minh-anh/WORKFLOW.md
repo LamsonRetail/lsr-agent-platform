@@ -18,7 +18,7 @@ Nguyên tắc: chỉ chia sẻ **chỉ mục**, không đổ nội dung vào mem
 ## B. Khi được add vào cuộc họp → viết biên bản
 
 ```
-1. Lấy transcript            (Lark minutes MCP)
+1. Lấy transcript            (Whisper server: POST /transcribe -> poll /result)
 2. Trích key_points + decisions
 3. Soạn biên bản (draft) + đề xuất task
 4. Gửi meeting owner XIN CONFIRM   (Lark IM)      ── status: awaiting_confirm
@@ -34,7 +34,14 @@ Không tạo task khi **chưa** có confirm của owner.
 `lark-minutes` (transcript) · `lark-docx` (soạn biên bản) · `lark-task` (tạo task)
 · `lark-im` (xin confirm) · `resource-index` (lưu/tra biên bản).
 
+## Transcript — Whisper server
+Client: `rating_agent.meeting.TranscribeClient` (submit `/transcribe` → poll
+`/result/{job_id}`). Base URL: env `LSR_TRANSCRIBE_URL` (mặc định server ngrok).
+Đã ping `/health` từ VM: model `large-v3`, CUDA (GTX 1660 SUPER), sẵn sàng.
+
 ## Trạng thái hiện tại
 - [x] Logic share dictionary + model biên bản + vòng đời (đã code + test).
 - [x] Resource index (collector) đã deploy — biên bản lưu & tra cứu được.
-- [ ] Nối runtime Lark (transcript thật, tạo task) — khi Platform API + Lark bot sẵn sàng.
+- [x] **Platform API**: register agent → **tự động Minh Anh share từ điển** (live, đã verify).
+- [x] Client transcript (Whisper) — đã code + test; server sống.
+- [ ] Lark bot runtime: nhận sự kiện add-vào-họp, gửi xin confirm, tạo task (Lark MCP).
