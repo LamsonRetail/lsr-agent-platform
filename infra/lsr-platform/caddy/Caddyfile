@@ -39,3 +39,11 @@ platform.34-126-154-135.sslip.io {
 collector.34-126-154-135.sslip.io {
 	import guard collector:8081 zcollector
 }
+
+# UI backend (Next.js) — mở bằng trình duyệt, chặn bằng basic-auth.
+app.34-126-154-135.sslip.io {
+	basic_auth {
+		lamson $2a$14$mCnOcSgMWnhjsG1AKdZwqOG./Itm3V1e41xA1AeuZUYCk5TsXDody
+	}
+	reverse_proxy web:3000
+}

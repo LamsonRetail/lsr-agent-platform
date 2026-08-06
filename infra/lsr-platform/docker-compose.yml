@@ -21,6 +21,7 @@ services:
 
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
+    profiles: ["optional"]   # tắt mặc định; bật khi cần: docker compose --profile optional up -d litellm
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,9 +74,18 @@ services:
       - "127.0.0.1:8090:8090"
     restart: unless-stopped
 
+  web:
+    build: ./web            # nguồn app Next.js (đồng bộ từ apps/platform-web)
+    depends_on: [platform_api, collector]
+    environment:
+      LSR_PLATFORM_URL: http://platform_api:8090   # gọi nội bộ (bỏ qua Caddy/token)
+      LSR_COLLECTOR: http://collector:8081
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+    restart: unless-stopped
+
   caddy:
     build: ./caddy
-    depends_on: [platform_api, collector]
+    depends_on: [platform_api, collector, web]
     environment:
       LSR_GATEWAY_TOKEN: ${LSR_GATEWAY_TOKEN}
     volumes:

@@ -105,8 +105,14 @@ Chạy tay: tab **Actions → Deploy backend to VM → Run workflow**.
 | Collector API | nhận trace + resource index | 127.0.0.1:8081 | ✅ chạy (control point) |
 | Platform API | register agent + hook Minh Anh + active/deactivate + **Test & Learn** | 127.0.0.1:8090 | ✅ chạy |
 | Minh Anh bot | listener Lark long-connection (WebSocket outbound) | — (không cần port) | ✅ chạy (DRY_RUN) |
-| Caddy | HTTPS công khai + gateway token cho Platform API/Collector (để Vercel gọi) | 80/443 | ✅ chạy |
-| LiteLLM Gateway | *optional* — chỉ cho agent dùng API key | 127.0.0.1:4000 | ⏸ tắt |
+| Caddy | HTTPS công khai + gateway token + basic-auth cho UI | 80/443 | ✅ chạy |
+| web (Next.js UI) | backend UI tự host (thay/song song Vercel) | nội bộ :3000 | ✅ chạy |
+| LiteLLM Gateway | *optional* — tắt hẳn bằng compose profile `optional` | 127.0.0.1:4000 | ⏸ tắt (profile) |
+
+**Backend UI (mở bằng trình duyệt):** `https://app.34-126-154-135.sslip.io` — có
+**basic-auth** (user `lamson`). App gọi Platform API/Collector nội bộ (bỏ qua Caddy),
+admin token ở server-side. LiteLLM tắt hẳn: `profiles: ["optional"]` (bật lại:
+`docker compose --profile optional up -d litellm`).
 
 **Public URL (qua Caddy, sslip.io theo IP VM):**
 `https://platform.34-126-154-135.sslip.io` (→ platform_api) ·
