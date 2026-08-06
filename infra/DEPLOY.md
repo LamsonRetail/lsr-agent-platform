@@ -91,6 +91,12 @@ Host lsr-gcp
 ```
 Rồi chỉ cần: `ssh lsr-gcp`.
 
+## CI/CD (auto-deploy khi push main)
+GitHub Actions `.github/workflows/deploy.yml`: push `main` chạm `infra/lsr-platform/**`
+→ rsync lên VM (giữ `.env` + volume) → `docker compose up -d --build`. Secrets repo:
+`LSR_DEPLOY_KEY` (deploy key riêng, revocable), `LSR_DEPLOY_HOST`, `LSR_DEPLOY_USER`.
+Chạy tay: tab **Actions → Deploy backend to VM → Run workflow**.
+
 ## Bố trí service trên VM (port đã né 3000/8080 đang bận)
 
 | Service | Vai trò | Port (nội bộ) | Trạng thái |

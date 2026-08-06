@@ -74,7 +74,7 @@ services:
     restart: unless-stopped
 
   caddy:
-    image: caddy:2
+    build: ./caddy
     depends_on: [platform_api, collector]
     environment:
       LSR_GATEWAY_TOKEN: ${LSR_GATEWAY_TOKEN}

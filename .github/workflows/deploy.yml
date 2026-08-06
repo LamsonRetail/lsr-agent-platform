@@ -1,0 +1,42 @@
+name: Deploy backend to VM
+
+# Tự deploy stack backend (docker compose) lên VM GCP khi push main.
+# Chỉ đụng thư mục /opt/lsr-platform; KHÔNG ghi đè .env (secret) trên VM.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/lsr-platform/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vm
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.LSR_DEPLOY_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.LSR_DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Rsync infra → VM (giữ nguyên .env, volume)
+        run: |
+          rsync -az \
+            --exclude='.env' --exclude='caddy_data' --exclude='caddy_config' \
+            -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new" \
+            infra/lsr-platform/ \
+            "${{ secrets.LSR_DEPLOY_USER }}@${{ secrets.LSR_DEPLOY_HOST }}:/opt/lsr-platform/"
+
+      - name: docker compose up (build)
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.LSR_DEPLOY_USER }}@${{ secrets.LSR_DEPLOY_HOST }}" \
+            'cd /opt/lsr-platform && sudo docker compose up -d --build && sudo docker compose ps --format "table {{.Service}}\t{{.Status}}"'
