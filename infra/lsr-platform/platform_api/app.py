@@ -364,6 +364,51 @@ def get_test(test_id: str) -> dict:
     return row
 
 
+@app.post("/v1/tests/generate")
+def generate_test(body: dict, authorization: str = Header(default="")) -> dict:
+    """Sinh bài test tự động (heuristic) từ tài liệu → DRAFT (auto), chờ review."""
+
+    _require_admin(authorization)
+    _ensure_schema()
+    md = body.get("material_md") or ""
+    if not md and body.get("material_id"):
+        with _db() as conn:
+            row = conn.execute(
+                "SELECT md_content FROM training_materials WHERE material_id=%s",
+                (body["material_id"],),
+            ).fetchone()
+            md = (row or {}).get("md_content") or ""
+    skill = body.get("skill", "")
+    n = int(body.get("n", 3))
+    lines = [l.strip() for l in md.splitlines() if l.strip() and not l.strip().startswith("#")]
+
+    def _sal(s: str) -> str:
+        toks = re.findall(r"[0-9A-Za-zÀ-ỹ_]+", s)
+        return max(toks, key=len) if toks else ""
+
+    qs = []
+    for i, l in enumerate(lines[:n]):
+        key = _sal(l)
+        if key:
+            qs.append({"question_id": f"q{i + 1}", "prompt": "Nội dung: " + l,
+                       "expected": key, "assertion_type": "contains",
+                       "skill_id": skill, "tags": [skill] if skill else []})
+    test_id = body.get("test_id") or ("TL-AUTO-" + secrets.token_hex(3))
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO tests (test_id, title, description, questions, status, source,
+                               created_by, pass_threshold)
+            VALUES (%s,%s,%s,%s,'draft','auto','llm-generator',%s)
+            ON CONFLICT (test_id) DO NOTHING
+            """,
+            (test_id, body.get("title") or "Bài test tự động", "", Json(qs),
+             float(body.get("pass_threshold", 0.8))),
+        )
+        conn.commit()
+    return {"test_id": test_id, "status": "draft", "source": "auto", "num_questions": len(qs)}
+
+
 @app.post("/v1/tests/{test_id}/assign")
 def assign_test(test_id: str, body: dict, authorization: str = Header(default="")) -> dict:
     """Giao bài test cho danh sách agent/người (chỉ khi test đã active)."""
