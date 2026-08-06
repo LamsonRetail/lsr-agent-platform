@@ -73,5 +73,21 @@ services:
       - "127.0.0.1:8090:8090"
     restart: unless-stopped
 
+  caddy:
+    image: caddy:2
+    depends_on: [platform_api, collector]
+    environment:
+      LSR_GATEWAY_TOKEN: ${LSR_GATEWAY_TOKEN}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:

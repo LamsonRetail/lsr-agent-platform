@@ -20,11 +20,22 @@ npm install && npm run dev   # http://localhost:3000
 ```
 
 ## Deploy Vercel
-1. `vercel` (link project) → set env `LSR_PLATFORM_URL`, `LSR_COLLECTOR`,
-   `PLATFORM_ADMIN_TOKEN` trong Project Settings.
-2. **Vercel cloud KHÔNG tới được 127.0.0.1 của VM** → Platform API phải có
-   **URL công khai** (Caddy+HTTPS+domain, hoặc tunnel như ngrok). Đặt
-   `LSR_PLATFORM_URL`/`LSR_COLLECTOR` là URL công khai đó.
+
+> ⚠️ **Lỗi "No python entrypoint found":** repo là monorepo có Python ở gốc; app
+> Next.js nằm trong `apps/platform-web`. Trong Vercel **Project Settings → General
+> → Root Directory** đặt **`apps/platform-web`**. Vercel sẽ nhận đúng Next.js,
+> bỏ qua phần Python. (Hoặc khi import: chọn Root Directory = apps/platform-web.)
+
+**Env (Project Settings → Environment Variables):**
+| Biến | Giá trị |
+|------|---------|
+| `LSR_PLATFORM_URL` | `https://platform.34-126-154-135.sslip.io` (public qua Caddy) |
+| `LSR_COLLECTOR` | `https://collector.34-126-154-135.sslip.io` |
+| `PLATFORM_ADMIN_TOKEN` | (lấy từ `.env` trên VM) |
+| `LSR_GATEWAY_TOKEN` | (lấy từ `.env` trên VM — Caddy yêu cầu header này) |
+
+**Vercel cloud KHÔNG tới được 127.0.0.1 của VM** → dùng URL public qua Caddy ở trên
+(đã dựng: HTTPS tự động + gateway token). Xem [../infra/DEPLOY.md](../../infra/DEPLOY.md).
 
 ## Trang
 - `/` — Platform dashboard (agents, token/runs, Activate/Deactivate).

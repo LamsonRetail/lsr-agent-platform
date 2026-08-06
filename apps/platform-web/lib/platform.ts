@@ -4,9 +4,15 @@ import "server-only";
 const P = process.env.LSR_PLATFORM_URL || "http://localhost:8090";
 const C = process.env.LSR_COLLECTOR || "http://localhost:8081";
 const ADMIN = process.env.PLATFORM_ADMIN_TOKEN || "";
+const GATEWAY = process.env.LSR_GATEWAY_TOKEN || "";
+
+// Header gateway (Caddy) — bắt buộc khi gọi qua public HTTPS; rỗng khi dev qua tunnel.
+function gwHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return GATEWAY ? { "X-Gateway-Token": GATEWAY, ...extra } : extra;
+}
 
 async function jget(url: string) {
-  const r = await fetch(url, { cache: "no-store" });
+  const r = await fetch(url, { cache: "no-store", headers: gwHeaders() });
   if (!r.ok) throw new Error(`${url} -> ${r.status}`);
   return r.json();
 }
@@ -25,7 +31,7 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 export async function adminPost(path: string, body: any) {
   const r = await fetch(`${P}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${ADMIN}` },
+    headers: gwHeaders({ "Content-Type": "application/json", Authorization: `Bearer ${ADMIN}` }),
     body: JSON.stringify(body ?? {}),
   });
   const text = await r.text();

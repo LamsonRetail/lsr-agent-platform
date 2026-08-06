@@ -99,7 +99,14 @@ Rồi chỉ cần: `ssh lsr-gcp`.
 | Collector API | nhận trace + resource index | 127.0.0.1:8081 | ✅ chạy (control point) |
 | Platform API | register agent + hook Minh Anh + active/deactivate + **Test & Learn** | 127.0.0.1:8090 | ✅ chạy |
 | Minh Anh bot | listener Lark long-connection (WebSocket outbound) | — (không cần port) | ✅ chạy (DRY_RUN) |
+| Caddy | HTTPS công khai + gateway token cho Platform API/Collector (để Vercel gọi) | 80/443 | ✅ chạy |
 | LiteLLM Gateway | *optional* — chỉ cho agent dùng API key | 127.0.0.1:4000 | ⏸ tắt |
+
+**Public URL (qua Caddy, sslip.io theo IP VM):**
+`https://platform.34-126-154-135.sslip.io` (→ platform_api) ·
+`https://collector.34-126-154-135.sslip.io` (→ collector). TLS tự động (Let's Encrypt).
+Mọi request phải kèm header `X-Gateway-Token: <LSR_GATEWAY_TOKEN>` (trong `.env` VM),
+thiếu → 403. Firewall GCP: đã gắn tag `http-server`/`https-server` mở 80/443.
 | Scorer/Dashboard | chấm điểm + phục vụ dashboard | 8082 | ⏳ chưa làm |
 
 **Whisper Transcription Server** (ngoài, của Minh Anh): `https://slashingly-unexistent-hue.ngrok-free.dev`

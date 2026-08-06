@@ -1,0 +1,23 @@
+# Caddy — HTTPS công khai cho Platform API + Collector (để Vercel cloud gọi được).
+# Domain dùng sslip.io theo IP VM (34.126.154.135). TLS tự động (Let's Encrypt).
+# Bảo vệ: mọi request phải có header X-Gateway-Token đúng, nếu không -> 403.
+
+{
+	email admin@lamsonretail.vn
+}
+
+platform.34-126-154-135.sslip.io {
+	route {
+		@bad not header X-Gateway-Token {$LSR_GATEWAY_TOKEN}
+		respond @bad "forbidden" 403
+		reverse_proxy platform_api:8090
+	}
+}
+
+collector.34-126-154-135.sslip.io {
+	route {
+		@bad not header X-Gateway-Token {$LSR_GATEWAY_TOKEN}
+		respond @bad "forbidden" 403
+		reverse_proxy collector:8081
+	}
+}
