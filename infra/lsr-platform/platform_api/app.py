@@ -648,27 +648,47 @@ def _lark_open_id_by_enterprise_email(email: str, token: str) -> str:
     key = (email or "").lower()
     if key in _ENT_EMAIL_CACHE:
         return _ENT_EMAIL_CACHE[key]
+    h = {"Authorization": f"Bearer {token}"}
+
+    def _scan_dept(dept_id: str) -> str:
+        page = ""
+        for _ in range(20):
+            url = (f"{LARK_DOMAIN}/open-apis/contact/v3/users?department_id={dept_id}"
+                   f"&page_size=50" + (f"&page_token={page}" if page else ""))
+            try:
+                d = (requests.get(url, headers=h, timeout=15).json().get("data") or {})
+            except Exception:
+                return ""
+            for u in d.get("items") or []:
+                for f in ("enterprise_email", "email"):
+                    em = (u.get(f) or "").lower()
+                    if em:
+                        _ENT_EMAIL_CACHE[em] = u.get("open_id", "")
+            if key in _ENT_EMAIL_CACHE:
+                return _ENT_EMAIL_CACHE[key]
+            if not d.get("has_more"):
+                break
+            page = d.get("page_token") or ""
+        return ""
+
+    # Duyệt toàn bộ cây phòng ban (fetch_child) — user có thể ở dept con.
+    dept_ids = ["0"]
     page = ""
-    for _ in range(20):  # tối đa 20 trang (1000 user)
-        url = (f"{LARK_DOMAIN}/open-apis/contact/v3/users?department_id=0&page_size=50"
-               + (f"&page_token={page}" if page else ""))
+    for _ in range(30):
+        url = (f"{LARK_DOMAIN}/open-apis/contact/v3/departments?parent_department_id=0"
+               f"&fetch_child=true&page_size=50" + (f"&page_token={page}" if page else ""))
         try:
-            d = requests.get(url, headers={"Authorization": f"Bearer {token}"},
-                             timeout=15).json()
+            d = (requests.get(url, headers=h, timeout=15).json().get("data") or {})
         except Exception:
-            return ""
-        if d.get("code") != 0:
-            return ""
-        data = d.get("data") or {}
-        for u in data.get("items") or []:
-            ent = (u.get("enterprise_email") or "").lower()
-            if ent:
-                _ENT_EMAIL_CACHE[ent] = u.get("open_id", "")
-        if key in _ENT_EMAIL_CACHE:
-            return _ENT_EMAIL_CACHE[key]
-        if not data.get("has_more"):
             break
-        page = data.get("page_token") or ""
+        dept_ids += [x.get("department_id") for x in (d.get("items") or []) if x.get("department_id")]
+        if not d.get("has_more"):
+            break
+        page = d.get("page_token") or ""
+
+    for did in dict.fromkeys(dept_ids):  # loại trùng, giữ thứ tự
+        if _scan_dept(did):
+            return _ENT_EMAIL_CACHE[key]
     return ""
 
 
