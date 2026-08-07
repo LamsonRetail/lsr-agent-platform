@@ -47,7 +47,7 @@ Ký hiệu: ✅ xong & verify live · 🟡 code xong, chờ điều kiện bên 
 | C5 | Conflict → agent owner xác nhận (ở backend agent) | ✅ | |
 | C6 | Auto-route chuyên môn theo keywords | ✅ | notify đúng người |
 | C7 | **Link Lark đối chứng** (`source_url`) xuyên suốt | ✅ | UI cảnh báo "thiếu nguồn" |
-| C8 | Notify qua Lark cho reviewer | 🟡 | code xong (batch → enterprise_email → quét đệ quy cây phòng ban); **chặn**: available range của app admin chỉ có 50 user whitelist (0 phòng ban) → không tra được người ngoài danh sách (vd BOD `thint@hapas.vn`) |
+| C8 | Notify qua Lark cho reviewer | ✅ | available range đã mở (78 user/2 phòng ban); tra open_id OK cho reviewer trong range (vd `huyennn@hapas.vn`). Tài khoản ngoài range (vd BOD `thint@hapas.vn`) rơi về fallback nhóm admin |
 
 ## D. Minh Anh (meeting agent)
 
@@ -62,7 +62,7 @@ Ký hiệu: ✅ xong & verify live · 🟡 code xong, chờ điều kiện bên 
 
 | # | Hạng mục | TT | Ghi chú |
 |---|----------|----|---------|
-| E1 | De/activate agent ⇄ bot Lark (không xoá dữ liệu) + audit | 🟡 | code + audit chạy; **cần scope `im:chat` hoặc `im:chat.members:write_only`** |
+| E1 | De/activate agent ⇄ bot Lark (không xoá dữ liệu) + audit | ✅ | code + audit chạy; scope `im:chat` đã cấp. Kích hoạt thật khi agent có `lark_chat_ids` bị de/activate |
 
 ## F. Backlog tính năng (4 nhóm bạn đã chọn)
 
@@ -79,7 +79,9 @@ Ký hiệu: ✅ xong & verify live · 🟡 code xong, chờ điều kiện bên 
 
 | Chặn | Việc | Mở khoá |
 |------|------|---------|
-| C8 | **Mở rộng available range** của app admin (Lark Admin → Developer Console → app → Permissions/Data scope → thêm phòng ban gốc hoặc toàn công ty) | Tra được open_id mọi reviewer/BOD; notify tới người thật |
-| D4 | Add Minh Anh vào 1 nhóm họp | Chạy thật biên bản họp |
-| E1 | Cấp scope `im:chat` (hoặc `im:chat.members:write_only`) cho app admin | Gỡ/thêm bot khi de/activate |
-| F | Danh sách squad/KPI/thành viên thật | Nạp second brain, chấm điểm thật |
+| D4 | Add Minh Anh vào 1 nhóm họp + tắt `DRY_RUN` | Chạy thật biên bản họp |
+| A10 | Domain thật (dùng khi golive mass) | Thay `sslip.io` |
+| F-data | Danh sách squad/KPI/thành viên thật (cung cấp sau khi chạy thật) | Nạp second brain, chấm điểm thật |
+
+> ✅ C8 (available range đã mở), E1 (scope `im:chat` đã cấp) — đã xong.
+> Registry đã có 2 agent thật: **AG-MINH-ANH**, **AG-LSR-BRAIN**.
