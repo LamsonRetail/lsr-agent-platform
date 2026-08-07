@@ -47,7 +47,7 @@ Ký hiệu: ✅ xong & verify live · 🟡 code xong, chờ điều kiện bên 
 | C5 | Conflict → agent owner xác nhận (ở backend agent) | ✅ | |
 | C6 | Auto-route chuyên môn theo keywords | ✅ | notify đúng người |
 | C7 | **Link Lark đối chứng** (`source_url`) xuyên suốt | ✅ | UI cảnh báo "thiếu nguồn" |
-| C8 | Notify qua Lark cho reviewer | 🟡 | bot admin `Agent Platform Admin` đã gắn; **còn cần scope `contact:user.id:readonly`** |
+| C8 | Notify qua Lark cho reviewer | ✅ | scope contact OK; dùng email Lark trong tenant |
 
 ## D. Minh Anh (meeting agent)
 
@@ -62,7 +62,7 @@ Ký hiệu: ✅ xong & verify live · 🟡 code xong, chờ điều kiện bên 
 
 | # | Hạng mục | TT | Ghi chú |
 |---|----------|----|---------|
-| E1 | De/activate agent ⇄ bot/account Lark (không xoá dữ liệu) | ⬜ | **cần**: app admin + scope quản trị |
+| E1 | De/activate agent ⇄ bot Lark (không xoá dữ liệu) + audit | 🟡 | code + audit chạy; **cần scope `im:chat` hoặc `im:chat.members:write_only`** |
 
 ## F. Backlog tính năng (4 nhóm bạn đã chọn)
 
@@ -79,7 +79,7 @@ Ký hiệu: ✅ xong & verify live · 🟡 code xong, chờ điều kiện bên 
 
 | Chặn | Việc | Mở khoá |
 |------|------|---------|
-| C8 | Cấp scope `contact:user.id:readonly` cho app admin `cli_aaff13891ff85ee6` | Notify Lark cho reviewer |
+| C8 | Gửi email Lark **trong tenant** để test notify | Xác nhận notify tới người thật |
 | D4 | Add Minh Anh vào 1 nhóm họp | Chạy thật biên bản họp |
-| E1 | Cấp scope quản trị (im:chat, contact) cho app admin đã có | Đồng bộ de/activate bot |
+| E1 | Cấp scope `im:chat` (hoặc `im:chat.members:write_only`) cho app admin | Gỡ/thêm bot khi de/activate |
 | F | Danh sách squad/KPI/thành viên thật | Nạp second brain, chấm điểm thật |
