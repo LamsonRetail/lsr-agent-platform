@@ -36,7 +36,7 @@ jobs:
       - name: Rsync infra → VM (giữ nguyên .env, volume)
         run: |
           rsync -az \
-            --exclude='.env' --exclude='caddy_data' --exclude='caddy_config' --exclude='web' \
+            --exclude='.env' --exclude='secrets' --exclude='caddy_data' --exclude='caddy_config' --exclude='web' \
             -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new" \
             infra/lsr-platform/ \
             "${{ secrets.LSR_DEPLOY_USER }}@${{ secrets.LSR_DEPLOY_HOST }}:/opt/lsr-platform/"

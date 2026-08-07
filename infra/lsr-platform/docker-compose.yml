@@ -91,10 +91,9 @@ services:
       BQ_PROJECT: ganesha-381907
       BQ_DATASET: AI_DB
       SINK_INTERVAL_SECONDS: "900"
-      # Nếu dùng service account key thay vì metadata scope:
-      # GOOGLE_APPLICATION_CREDENTIALS: /secrets/bq-sa.json
-    # volumes:
-    #   - ./secrets/bq-sa.json:/secrets/bq-sa.json:ro
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/bq-sa.json
+    volumes:
+      - ./secrets/bq-sa.json:/secrets/bq-sa.json:ro
     restart: unless-stopped
 
   lsr_brain:

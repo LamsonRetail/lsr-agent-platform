@@ -33,3 +33,5 @@ htmlcov/
 output/
 *.log
 infra/lsr-platform/lsr_brain/src/
+secrets/
+infra/lsr-platform/secrets/
