@@ -4,6 +4,26 @@ Hướng dẫn cho **thành viên team** pull repo về và tạo thêm agent tr
 Mọi agent mới **phải theo chuẩn** (CI kiểm tự động) và **dùng auth của owner**, không
 dùng auth chung của platform.
 
+## ⚠️ Phạm vi được phép sửa (bắt buộc)
+Khi pull repo về, bạn **CHỈ được thêm/sửa agent của mình**:
+- `agents/<AGENT_ID>/**` — manifest, system prompt, test của agent
+- `apps/agents/<AGENT_ID>/**` — backend riêng của agent
+
+**KHÔNG được đụng CORE** (để không ảnh hưởng platform / shared brain / rules chung):
+`infra/`, `src/`, `scripts/`, `plugins/`, `installers/`, `apps/platform-web/`, `.github/`,
+`tests/`, `docs/`, agent nền tảng (`agents/AG-LSR-BRAIN`, `agents/minh-anh`), và các file
+rules ở gốc (PLAN.md, MASTER_DATA.md, GOLIVE_CHECKLIST.md, CONTRIBUTING.md, STATUS.md).
+
+Cơ chế chặn (3 lớp):
+1. **CI scope-guard** (`.github/workflows/scope-guard.yml`) — PR chạm core của người không
+   phải maintainer sẽ **fail, không merge được**.
+2. **CODEOWNERS** — thay đổi core bắt buộc review của maintainer.
+3. **pre-commit hook local** (tùy chọn, chặn sớm): `bash scripts/install-git-hooks.sh`
+   → commit chạm core bị chặn ngay. Kiểm thủ công: `bash scripts/check-scope.sh`.
+
+Cần sửa core? Mở issue hoặc nhờ maintainer (xem `.github/CODEOWNERS`). Maintainer khai báo
+trong `.github/maintainers.txt`.
+
 ## 1. Lấy repo về
 ```bash
 git clone https://github.com/LamsonRetail/lsr-agent-platform.git

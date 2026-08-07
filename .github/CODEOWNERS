@@ -1,0 +1,17 @@
+# CODEOWNERS — "last match wins". CORE cần review maintainer; agent của user thì không.
+# Có hiệu lực khi bật Branch protection → "Require review from Code Owners".
+# Thay @LamsonRetail/platform-maintainers bằng team/username thật.
+
+# 1) Mặc định: mọi thứ = core team
+*                               @LamsonRetail/platform-maintainers
+
+# 2) Agent + backend của USER: KHÔNG chủ sở hữu (tác giả tự quản, không đòi review core)
+/agents/
+/apps/agents/
+
+# 3) Agent NỀN TẢNG = core (đặt SAU để override mục 2)
+/agents/AG-LSR-BRAIN/           @LamsonRetail/platform-maintainers
+/agents/minh-anh/               @LamsonRetail/platform-maintainers
+
+# (Core khác đã thuộc mục 1: infra/ src/ scripts/ plugins/ installers/
+#  apps/platform-web/ .github/ tests/ docs/ + rules chung ở gốc.)

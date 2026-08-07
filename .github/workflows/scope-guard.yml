@@ -1,0 +1,72 @@
+name: Scope guard (agent-only)
+
+# Chặn PR của người KHÔNG phải maintainer nếu chạm vào CORE.
+# Người tạo agent chỉ được thêm/sửa:
+#   - agents/<id>/**          (manifest, prompt, test của agent — TRỪ agent nền tảng)
+#   - apps/agents/<id>/**     (backend riêng của agent)
+# Mọi thứ khác = CORE (platform, shared brain, rules chung, CI, plugin, scripts...) → chặn.
+# Maintainer (trong .github/maintainers.txt) được bỏ qua.
+#
+# ĐỂ CHẶN CỨNG: bật Branch protection cho `main` → Require status check "scope-guard"
+# + Require pull request + Require review from Code Owners.
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  scope-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Kiểm tra phạm vi thay đổi
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          actor="${{ github.actor }}"
+
+          files=$(git diff --name-only "$base" "$head")
+          echo "Người tạo PR: $actor"
+          echo "File thay đổi:"; echo "$files" | sed 's/^/  /'
+
+          violations=""
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            case "$f" in
+              # Agent nền tảng = CORE (không cho sửa qua PR agent thường)
+              agents/AG-LSR-BRAIN/*|agents/minh-anh/*) violations="$violations $f" ;;
+              # Được phép: agent của người dùng + backend agent
+              agents/*/*|apps/agents/*/*) : ;;
+              # Còn lại = CORE
+              *) violations="$violations $f" ;;
+            esac
+          done <<< "$files"
+
+          if [ -z "$violations" ]; then
+            echo "✅ PR chỉ chạm phạm vi agent — hợp lệ."
+            exit 0
+          fi
+
+          # Có chạm core → chỉ maintainer mới được
+          if [ -f .github/maintainers.txt ] && grep -qxF "$actor" .github/maintainers.txt; then
+            echo "✅ '$actor' là maintainer — cho phép sửa core."
+            exit 0
+          fi
+
+          echo "::error::PR chạm CORE nhưng '$actor' không phải maintainer. Các file vi phạm:"
+          for v in $violations; do echo "::error::  $v"; done
+          cat <<'MSG'
+
+          ────────────────────────────────────────────────────────────
+          ❌ Bị chặn: bạn chỉ được thêm/sửa AGENT của mình:
+             • agents/<AGENT_ID>/**        (manifest, prompt, test)
+             • apps/agents/<AGENT_ID>/**   (backend riêng)
+          KHÔNG được sửa core: infra/, src/, scripts/, plugins/, apps/platform-web/,
+          .github/, tests/, docs/, agent nền tảng (AG-LSR-BRAIN, minh-anh), rules chung.
+          Cần đổi core → mở issue/nhờ maintainer (xem .github/CODEOWNERS).
+          ────────────────────────────────────────────────────────────
+          MSG
+          exit 1
