@@ -33,11 +33,41 @@
 }
 
 platform.34-126-154-135.sslip.io {
-	import guard platform_api:8090 zplatform
+	# Self-service enroll: xác thực bằng LSR_ENROLL_TOKEN ở app (không cần gateway token)
+	# để thành viên tự đăng ký agent. Vẫn rate-limit theo IP.
+	@enroll path /v1/agents/enroll
+	handle @enroll {
+		rate_limit {
+			zone zenroll {
+				key {remote_host}
+				events 30
+				window 1m
+			}
+		}
+		reverse_proxy platform_api:8090
+	}
+	handle {
+		import guard platform_api:8090 zplatform
+	}
 }
 
 collector.34-126-154-135.sslip.io {
-	import guard collector:8081 zcollector
+	# Data-plane cho agent bên ngoài: xác thực bằng telemetry key (Bearer) ở collector,
+	# không cần gateway token. Còn lại (resources/stats...) vẫn cần gateway token.
+	@agent path /v1/traces /v1/policy/check
+	handle @agent {
+		rate_limit {
+			zone zagent {
+				key {remote_host}
+				events 240
+				window 1m
+			}
+		}
+		reverse_proxy collector:8081
+	}
+	handle {
+		import guard collector:8081 zcollector
+	}
 }
 
 # UI backend (Next.js) — mở bằng trình duyệt, chặn bằng basic-auth.

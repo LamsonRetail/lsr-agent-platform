@@ -1,0 +1,14 @@
+{
+  "name": "lsr",
+  "owner": { "name": "LamsonRetail" },
+  "metadata": {
+    "description": "Marketplace nội bộ LamsonRetail — plugin bắt buộc cho agent trên LSR Agent Platform."
+  },
+  "plugins": [
+    {
+      "name": "lsr-telemetry",
+      "source": "./plugins/lsr-telemetry",
+      "description": "Bắt buộc: ghi telemetry (tool call, token, output) + điểm chặn runtime (PreToolUse/UserPromptSubmit gọi Policy API) về LSR platform. Control point khi agent dùng subscription của owner."
+    }
+  ]
+}

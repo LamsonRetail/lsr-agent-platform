@@ -11,6 +11,7 @@ Xác thực ingest: header Authorization: Bearer <COLLECTOR_INGEST_TOKEN>.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -160,8 +161,26 @@ def _startup() -> None:
 
 
 def _check_auth(authorization: str) -> None:
-    if INGEST_TOKEN and authorization != f"Bearer {INGEST_TOKEN}":
-        raise HTTPException(status_code=401, detail="unauthorized")
+    """Chấp nhận: (a) INGEST_TOKEN chung (nội bộ/platform), HOẶC (b) telemetry key
+    per-agent do platform cấp (hash khớp agents.telemetry_key_hash). Nhờ vậy agent của
+    thành viên bên ngoài dùng CHÍNH key của mình, không cần token chung."""
+
+    if not INGEST_TOKEN:
+        return
+    if authorization == f"Bearer {INGEST_TOKEN}":
+        return
+    tok = authorization[7:] if authorization.startswith("Bearer ") else ""
+    if tok:
+        h = hashlib.sha256(tok.encode()).hexdigest()
+        try:
+            with _db() as conn:
+                row = conn.execute(
+                    "SELECT 1 FROM agents WHERE telemetry_key_hash=%s", (h,)).fetchone()
+            if row:
+                return
+        except Exception:
+            pass  # bảng agents chưa có → chỉ chấp nhận token chung
+    raise HTTPException(status_code=401, detail="unauthorized")
 
 
 @app.get("/health")

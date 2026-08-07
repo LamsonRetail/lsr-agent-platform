@@ -33,6 +33,12 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 COLLECTOR_URL = os.environ.get("COLLECTOR_URL", "http://collector:8081").rstrip("/")
 COLLECTOR_INGEST_TOKEN = os.environ.get("COLLECTOR_INGEST_TOKEN", "")
 ADMIN_TOKEN = os.environ.get("PLATFORM_ADMIN_TOKEN", "")
+# Self-service: token cấp cho thành viên để TỰ đăng ký agent (tạo agent inactive +
+# cấp telemetry key). Yếu quyền hơn admin (không active được agent). Rỗng = tắt enroll.
+ENROLL_TOKEN = os.environ.get("LSR_ENROLL_TOKEN", "")
+# URL collector CÔNG KHAI (để hướng dẫn cấu hình plugin cho agent bên ngoài).
+COLLECTOR_PUBLIC_URL = os.environ.get(
+    "LSR_COLLECTOR_PUBLIC", "https://collector.34-126-154-135.sslip.io")
 # Lark notify: bot của platform (fallback creds Minh Anh nếu chưa cấu hình riêng)
 LARK_APP_ID = os.environ.get("LARK_NOTIFY_APP_ID") or os.environ.get("MINH_ANH_LARK_APP_ID", "")
 LARK_APP_SECRET = os.environ.get("LARK_NOTIFY_APP_SECRET") or os.environ.get("MINH_ANH_LARK_APP_SECRET", "")
@@ -580,6 +586,72 @@ def register(agent: dict, authorization: str = Header(default=""),
         "dictionary_shared": dictionary_shared,
         "db_schema": schema,
         "deployment": agent.get("deployment", "managed"),
+    }
+
+
+_EMAIL_RE = re.compile(r"^[^@]+@[^@]+\.[^@]+$")
+
+
+@app.post("/v1/agents/enroll")
+def enroll(agent: dict, authorization: str = Header(default="")) -> dict:
+    """SELF-SERVICE: thành viên tự đăng ký agent MỚI + nhận telemetry key.
+
+    Khác register (admin): gated bằng LSR_ENROLL_TOKEN; chỉ tạo agent MỚI ở trạng thái
+    'registered' (KHÔNG active được — golive vẫn cần admin + đủ checklist). Chống chiếm
+    key của agent đã có (409 nếu trùng id).
+    """
+
+    if not ENROLL_TOKEN or authorization != f"Bearer {ENROLL_TOKEN}":
+        raise HTTPException(status_code=401, detail="enroll token required (LSR_ENROLL_TOKEN)")
+    _ensure_schema()
+    agent_id = (agent.get("agent_id") or "").strip()
+    owner = str(agent.get("owner", "")).strip()
+    if not agent_id:
+        raise HTTPException(status_code=422, detail="agent_id required")
+    if not _EMAIL_RE.match(owner):
+        raise HTTPException(status_code=422, detail="owner phải là email thật của người sở hữu")
+    skills = agent.get("skills") or []
+    if not isinstance(skills, list):
+        skills = [str(skills)]
+    telemetry_key = "lsr_tel_" + secrets.token_hex(20)
+    key_hash = hashlib.sha256(telemetry_key.encode()).hexdigest()
+    with _db() as conn:
+        if conn.execute("SELECT 1 FROM agents WHERE agent_id=%s", (agent_id,)).fetchone():
+            raise HTTPException(status_code=409,
+                detail="agent_id đã tồn tại — nhờ admin cấp lại key (không enroll đè)")
+        conn.execute(
+            """
+            INSERT INTO agents (agent_id, name, owner, squad, connect_mode, is_squad_agent,
+                                skills, status, telemetry_key_hash, deployment, repo_url,
+                                host_note, backup_owner, prompt_version, prompt_ref)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,'registered',%s,%s,%s,%s,%s,%s,%s)
+            """,
+            (agent_id, agent.get("name"), owner, agent.get("squad"),
+             agent.get("connect_mode", "bot"), bool(agent.get("is_squad_agent", False)),
+             skills, key_hash, agent.get("deployment", "managed"), agent.get("repo_url"),
+             agent.get("host_note"), agent.get("backup_owner"),
+             agent.get("prompt_version"), agent.get("prompt_ref")),
+        )
+        schema = agent_schema(agent_id)
+        conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
+        _audit(conn, owner, "enroll", "agent", agent_id,
+               {"name": agent.get("name"), "deployment": agent.get("deployment", "managed"),
+                "self_service": True})
+        conn.commit()
+    _minh_anh_share(agent_id)
+    return {
+        "agent_id": agent_id,
+        "status": "registered",
+        "telemetry_key": telemetry_key,     # hiện MỘT LẦN — lưu vào env agent
+        "db_schema": schema,
+        "collector": COLLECTOR_PUBLIC_URL,
+        "next_steps": [
+            "Cài plugin: claude plugin marketplace add LamsonRetail/lsr-agent-platform "
+            "&& claude plugin install lsr-telemetry@lsr",
+            f"Đặt env: LSR_COLLECTOR={COLLECTOR_PUBLIC_URL} "
+            f"LSR_AGENT_ID={agent_id} LSR_TELEMETRY_API_KEY=<telemetry_key ở trên>",
+            "Hoàn tất golive checklist rồi nhờ admin chuyển sang 'active'.",
+        ],
     }
 
 

@@ -70,6 +70,9 @@ services:
       COLLECTOR_URL: http://collector:8081
       COLLECTOR_INGEST_TOKEN: ${COLLECTOR_INGEST_TOKEN}
       PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      # Self-service enroll (thành viên tự đăng ký agent) — rỗng = tắt
+      LSR_ENROLL_TOKEN: ${LSR_ENROLL_TOKEN:-}
+      LSR_COLLECTOR_PUBLIC: ${LSR_COLLECTOR_PUBLIC:-https://collector.34-126-154-135.sslip.io}
       # Lark notify cho reviewer/agent owner (fallback creds Minh Anh nếu chưa có bot riêng)
       LARK_NOTIFY_APP_ID: ${LARK_NOTIFY_APP_ID:-}
       LARK_NOTIFY_APP_SECRET: ${LARK_NOTIFY_APP_SECRET:-}
