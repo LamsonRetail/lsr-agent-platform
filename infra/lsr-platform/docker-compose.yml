@@ -65,6 +65,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      docker_proxy:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql://lsr:${POSTGRES_PASSWORD}@postgres:5432/lsr
       COLLECTOR_URL: http://collector:8081
@@ -89,8 +91,6 @@ services:
     ports:
       - "127.0.0.1:8090:8090"
     restart: unless-stopped
-    depends_on:
-      - docker_proxy
 
   # Proxy socket Docker: platform_api chỉ được thao tác CONTAINER (tạo/stop/start),
   # KHÔNG toàn quyền root socket. Chỉ socket được mount vào ĐÂY (không vào API).
