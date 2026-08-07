@@ -7,6 +7,7 @@ Hệ thống nội bộ đánh giá **hai đối tượng tách biệt**:
 
 Dữ liệu lấy từ **Lark** (Base, chat, doc, task) và **BigQuery** data warehouse.
 
+> - **Thành viên muốn tự tạo agent** (plugin hoặc git): [ONBOARDING.md](ONBOARDING.md).
 > - Kiến trúc, nguồn dữ liệu, tiêu chí, màn hình, lộ trình: [PLAN.md](PLAN.md).
 > - Cấu trúc master data trên Lark Base (đang chờ confirm): [MASTER_DATA.md](MASTER_DATA.md).
 > - Tích hợp/giám sát agent VPS↔Lark, token, log, đo 6 chỉ số tool: [AGENT_INTEGRATION.md](AGENT_INTEGRATION.md).

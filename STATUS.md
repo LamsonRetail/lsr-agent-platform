@@ -26,7 +26,8 @@ Ký hiệu: ✅ xong & verify live · 🟡 code xong, chờ điều kiện bên 
 |---|----------|----|---------|
 | B1 | Registry agent (managed/external) + telemetry key + schema-per-agent | ✅ | Postgres VM, mỗi agent 1 schema |
 | B2 | Collector: trace + resource index + **chặn agent deactivated (403)** | ✅ | kill switch cho agent external |
-| B3 | Plugin telemetry Claude Code (hooks PostToolUse/Stop) | ✅ | control point khi dùng subscription |
+| B3 | Plugin telemetry Claude Code (hooks Pre/PostToolUse, UserPromptSubmit, Stop) | ✅ | control point + điểm chặn runtime (Policy API); cài qua marketplace |
+| B3b | **Self-service**: enroll (`/v1/agents/enroll`) + marketplace plugin + data-plane mở cho agent ngoài | ✅ | thành viên tự tạo agent (plugin/git), key per-agent, [ONBOARDING.md](ONBOARDING.md) |
 | B4 | Chuẩn agent + validator CI + **auth per-owner** | ✅ | cấm api key/auth chung |
 | B5 | Đăng ký agent có sẵn (`lsr_adopt.py`) | ✅ | giữ nguyên cấu hình, không sửa code |
 | B6 | Backend riêng từng agent (`apps/agents/<id>`) + scaffolder | ✅ | conflicts của agent nằm ở đây |
