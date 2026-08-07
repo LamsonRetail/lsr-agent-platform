@@ -17,7 +17,7 @@ Ký hiệu: ✅ xong & verify live · 🟡 code xong, chờ điều kiện bên 
 | A6 | CI/CD auto-deploy VM (rsync + compose + **health gate**) | ✅ | fail nếu API không lên |
 | A7 | Vercel app + git auto-deploy | ✅ | `hapas/lsr-platform-web`, Root Dir = `apps/platform-web` |
 | A8 | LiteLLM gateway | ✅ | **tắt hẳn** (profile `optional`) do dùng subscription |
-| A9 | BigQuery sink → `AI_DB` | 🟡 | **cần**: scope BigQuery cho VM *hoặc* SA key |
+| A9 | BigQuery sink → `AI_DB` | ✅ | SA `lsr-bq-sink@surya-495408` ghi cross-project vào `ganesha:AI_DB`; verify có dữ liệu |
 | A10 | Domain công ty thay `sslip.io` | ⬜ | cần domain + DNS |
 
 ## B. Lõi platform
@@ -47,7 +47,7 @@ Ký hiệu: ✅ xong & verify live · 🟡 code xong, chờ điều kiện bên 
 | C5 | Conflict → agent owner xác nhận (ở backend agent) | ✅ | |
 | C6 | Auto-route chuyên môn theo keywords | ✅ | notify đúng người |
 | C7 | **Link Lark đối chứng** (`source_url`) xuyên suốt | ✅ | UI cảnh báo "thiếu nguồn" |
-| C8 | Notify qua Lark cho reviewer | 🟡 | **cần scope `contact:user.id:readonly`** (hoặc `LARK_NOTIFY_CHAT_ID`) |
+| C8 | Notify qua Lark cho reviewer | 🟡 | bot admin `Agent Platform Admin` đã gắn; **còn cần scope `contact:user.id:readonly`** |
 
 ## D. Minh Anh (meeting agent)
 
@@ -79,8 +79,7 @@ Ký hiệu: ✅ xong & verify live · 🟡 code xong, chờ điều kiện bên 
 
 | Chặn | Việc | Mở khoá |
 |------|------|---------|
-| C8 | Cấp scope `contact:user.id:readonly` cho app `cli_aaf9aad57219deef` | Notify Lark cho reviewer |
-| A9 | Thêm scope BigQuery cho VM (restart ngắn) **hoặc** SA key | Đẩy dữ liệu sang `AI_DB` |
+| C8 | Cấp scope `contact:user.id:readonly` cho app admin `cli_aaff13891ff85ee6` | Notify Lark cho reviewer |
 | D4 | Add Minh Anh vào 1 nhóm họp | Chạy thật biên bản họp |
-| E1 | Tạo Lark app admin + scope quản trị | Đồng bộ de/activate bot |
+| E1 | Cấp scope quản trị (im:chat, contact) cho app admin đã có | Đồng bộ de/activate bot |
 | F | Danh sách squad/KPI/thành viên thật | Nạp second brain, chấm điểm thật |
