@@ -34,6 +34,20 @@ export default async function AgentPage({ params }: { params: { id: string } }) 
         status: <b>{agent.status}</b> · health: <b>{h.health}</b>
       </p>
 
+      {agent.backend_url ? (
+        <div className="card" style={{ borderColor: "#4a7edb" }}>
+          <b>Backend riêng của agent</b> (config, trang chi tiết, dashboard riêng):{" "}
+          <a href={agent.backend_url} target="_blank" rel="noreferrer">{agent.backend_url} ↗</a>
+          {agent.dashboard_url && <> · <a href={agent.dashboard_url} target="_blank" rel="noreferrer">Dashboard ↗</a></>}
+          <div className="muted" style={{ fontSize: 12 }}>Trang dưới đây là bản overview do platform host.</div>
+        </div>
+      ) : (
+        <div className="card">
+          <span className="muted">Agent chưa đăng ký <b>backend_url</b> riêng — đang dùng trang overview của platform.
+          Đăng ký backend qua <code>enroll</code>/<code>register</code> với trường <code>backend_url</code>.</span>
+        </div>
+      )}
+
       {/* ---------------- Dashboard ---------------- */}
       <h3>Dashboard (tháng {cost.period})</h3>
       <div className="kpis">

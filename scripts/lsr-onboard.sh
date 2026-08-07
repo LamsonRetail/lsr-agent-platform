@@ -12,6 +12,7 @@ AGENT_ID="AG-YOURNAME"          # mã agent, IN HOA, vd AG-SALESBOT
 NAME="Ten agent cua ban"        # tên hiển thị
 OWNER="ban@hapas.vn"            # email owner (auth dùng subscription của người này)
 SQUAD="RETAIL"                  # squad: RETAIL | HAPAS-TL | PLATFORM | ...
+BACKEND_URL=""                  # URL backend riêng của agent (nếu đã deploy); rỗng = dùng trang platform
 
 # ---- 2) Hằng số platform (đã điền sẵn — không cần đổi) ----
 PLATFORM="https://platform.34-126-154-135.sslip.io"
@@ -28,7 +29,8 @@ curl -fsSL "$PLATFORM/bootstrap/lsr_trace.py" -o lsr_trace.py
 python3 lsr_adopt.py \
   --id "$AGENT_ID" --name "$NAME" --owner "$OWNER" --squad "$SQUAD" \
   --platform "$PLATFORM" --collector "$COLLECTOR" \
-  --enroll-token "$ENROLL_TOKEN" --trace-script ./lsr_trace.py
+  --enroll-token "$ENROLL_TOKEN" --trace-script ./lsr_trace.py \
+  ${BACKEND_URL:+--backend-url "$BACKEND_URL"}
 
 # ---- 5) Xong ----
 cat <<EOF

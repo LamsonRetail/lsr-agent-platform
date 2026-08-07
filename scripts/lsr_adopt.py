@@ -177,6 +177,8 @@ def main() -> int:
     ap.add_argument("--connect-mode", default="bot", choices=["bot", "user"])
     ap.add_argument("--model", default="claude-sonnet-5")
     ap.add_argument("--host-note", default="team tự host")
+    ap.add_argument("--backend-url", default="", help="URL backend riêng của agent (config/chi tiết/dashboard)")
+    ap.add_argument("--dashboard-url", default="", help="URL dashboard riêng (nếu tách khỏi backend)")
     ap.add_argument("--platform", default=os.environ.get("LSR_PLATFORM_URL", ""))
     ap.add_argument("--collector", default=os.environ.get("LSR_COLLECTOR", ""))
     ap.add_argument("--admin-token", default=os.environ.get("PLATFORM_ADMIN_TOKEN", ""))
@@ -216,6 +218,8 @@ def main() -> int:
         "squad": args.squad, "connect_mode": args.connect_mode,
         "skills": skills, "deployment": "external",
         "repo_url": repo_url, "host_note": args.host_note,
+        "backend_url": args.backend_url or None,
+        "dashboard_url": args.dashboard_url or None,
     }
     # Ưu tiên admin-token (đầy đủ); nếu không có thì dùng enroll-token (self-service).
     do_admin = bool(args.platform and args.admin_token)

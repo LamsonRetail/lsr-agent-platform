@@ -46,11 +46,15 @@ APP_PUBLIC_URL = os.environ.get(
     "LSR_APP_PUBLIC", "https://app.34-126-154-135.sslip.io").rstrip("/")
 
 
-def _agent_links(agent_id: str) -> dict:
-    """Link dashboard (theo dõi) + backend (điều khiển) riêng của một agent."""
+def _agent_links(agent_id: str, backend_url: str = "", dashboard_url: str = "") -> dict:
+    """Link dashboard + backend riêng của agent.
+
+    Ưu tiên URL agent tự khai báo khi đăng ký (backend riêng của họ); nếu chưa khai
+    báo thì trỏ về trang per-agent do platform host (fallback).
+    """
     return {
-        "dashboard_url": f"{APP_PUBLIC_URL}/agent/{agent_id}",
-        "backend_url": f"{APP_PUBLIC_URL}/agent/{agent_id}#backend",
+        "dashboard_url": dashboard_url or f"{APP_PUBLIC_URL}/agent/{agent_id}",
+        "backend_url": backend_url or f"{APP_PUBLIC_URL}/agent/{agent_id}#backend",
     }
 # Lark notify: bot của platform (fallback creds Minh Anh nếu chưa cấu hình riêng)
 LARK_APP_ID = os.environ.get("LARK_NOTIFY_APP_ID") or os.environ.get("MINH_ANH_LARK_APP_ID", "")
@@ -456,6 +460,9 @@ def _ensure_schema() -> None:
         # Item 4: con trỏ version prompt (rollback sau = đổi con trỏ; prompt vẫn git-backed).
         conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS prompt_version text")
         conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS prompt_ref text")
+        # Backend riêng của agent (config/chi tiết/dashboard) — đăng ký kèm URL.
+        conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS backend_url text")
+        conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS dashboard_url text")
         # Item 3: bảng policies (admin ghi; collector đọc để chặn runtime).
         conn.execute(
             """
@@ -586,15 +593,16 @@ def register(agent: dict, authorization: str = Header(default=""),
             INSERT INTO agents (agent_id, name, owner, squad, connect_mode,
                                 is_squad_agent, skills, status, telemetry_key_hash,
                                 deployment, repo_url, host_note, backup_owner,
-                                prompt_version, prompt_ref)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,'registered',%s,%s,%s,%s,%s,%s,%s)
+                                prompt_version, prompt_ref, backend_url, dashboard_url)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,'registered',%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (agent_id) DO UPDATE SET
                 name=EXCLUDED.name, owner=EXCLUDED.owner, squad=EXCLUDED.squad,
                 connect_mode=EXCLUDED.connect_mode, is_squad_agent=EXCLUDED.is_squad_agent,
                 skills=EXCLUDED.skills, telemetry_key_hash=EXCLUDED.telemetry_key_hash,
                 deployment=EXCLUDED.deployment, repo_url=EXCLUDED.repo_url,
                 host_note=EXCLUDED.host_note, backup_owner=EXCLUDED.backup_owner,
-                prompt_version=EXCLUDED.prompt_version, prompt_ref=EXCLUDED.prompt_ref
+                prompt_version=EXCLUDED.prompt_version, prompt_ref=EXCLUDED.prompt_ref,
+                backend_url=EXCLUDED.backend_url, dashboard_url=EXCLUDED.dashboard_url
             """,
             (
                 agent_id, agent.get("name"), agent.get("owner"), agent.get("squad"),
@@ -603,6 +611,7 @@ def register(agent: dict, authorization: str = Header(default=""),
                 agent.get("deployment", "managed"), agent.get("repo_url"),
                 agent.get("host_note"), agent.get("backup_owner"),
                 agent.get("prompt_version"), agent.get("prompt_ref"),
+                agent.get("backend_url"), agent.get("dashboard_url"),
             ),
         )
         # Dataset riêng cho agent trên Supabase chung: mỗi agent 1 schema Postgres.
@@ -620,7 +629,7 @@ def register(agent: dict, authorization: str = Header(default=""),
         "dictionary_shared": dictionary_shared,
         "db_schema": schema,
         "deployment": agent.get("deployment", "managed"),
-        **_agent_links(agent_id),
+        **_agent_links(agent_id, agent.get("backend_url"), agent.get("dashboard_url")),
     }
 
 
@@ -658,14 +667,16 @@ def enroll(agent: dict, authorization: str = Header(default="")) -> dict:
             """
             INSERT INTO agents (agent_id, name, owner, squad, connect_mode, is_squad_agent,
                                 skills, status, telemetry_key_hash, deployment, repo_url,
-                                host_note, backup_owner, prompt_version, prompt_ref)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,'registered',%s,%s,%s,%s,%s,%s,%s)
+                                host_note, backup_owner, prompt_version, prompt_ref,
+                                backend_url, dashboard_url)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,'registered',%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """,
             (agent_id, agent.get("name"), owner, agent.get("squad"),
              agent.get("connect_mode", "bot"), bool(agent.get("is_squad_agent", False)),
              skills, key_hash, agent.get("deployment", "managed"), agent.get("repo_url"),
              agent.get("host_note"), agent.get("backup_owner"),
-             agent.get("prompt_version"), agent.get("prompt_ref")),
+             agent.get("prompt_version"), agent.get("prompt_ref"),
+             agent.get("backend_url"), agent.get("dashboard_url")),
         )
         schema = agent_schema(agent_id)
         conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
@@ -680,7 +691,7 @@ def enroll(agent: dict, authorization: str = Header(default="")) -> dict:
         "telemetry_key": telemetry_key,     # hiện MỘT LẦN — lưu vào env agent
         "db_schema": schema,
         "collector": COLLECTOR_PUBLIC_URL,
-        **_agent_links(agent_id),
+        **_agent_links(agent_id, agent.get("backend_url"), agent.get("dashboard_url")),
         "next_steps": [
             "Cài plugin: claude plugin marketplace add LamsonRetail/lsr-agent-platform "
             "&& claude plugin install lsr-telemetry@lsr",
@@ -698,7 +709,7 @@ def list_agents() -> list[dict]:
         return conn.execute(
             "SELECT agent_id, name, owner, squad, connect_mode, is_squad_agent, "
             "skills, status, deployment, repo_url, host_note, prompt_version, prompt_ref, "
-            "registered_at, golive_at "
+            "backend_url, dashboard_url, registered_at, golive_at "
             "FROM agents ORDER BY registered_at DESC"
         ).fetchall()
 
@@ -710,7 +721,7 @@ def get_agent(agent_id: str) -> dict:
         row = conn.execute(
             "SELECT agent_id, name, owner, squad, connect_mode, is_squad_agent, "
             "skills, status, deployment, repo_url, host_note, prompt_version, prompt_ref, "
-            "registered_at, golive_at "
+            "backend_url, dashboard_url, registered_at, golive_at "
             "FROM agents WHERE agent_id=%s",
             (agent_id,),
         ).fetchone()
