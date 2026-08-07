@@ -30,6 +30,11 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 COLLECTOR_URL = os.environ.get("COLLECTOR_URL", "http://collector:8081").rstrip("/")
 COLLECTOR_INGEST_TOKEN = os.environ.get("COLLECTOR_INGEST_TOKEN", "")
 ADMIN_TOKEN = os.environ.get("PLATFORM_ADMIN_TOKEN", "")
+# Lark notify: bot của platform (fallback creds Minh Anh nếu chưa cấu hình riêng)
+LARK_APP_ID = os.environ.get("LARK_NOTIFY_APP_ID") or os.environ.get("MINH_ANH_LARK_APP_ID", "")
+LARK_APP_SECRET = os.environ.get("LARK_NOTIFY_APP_SECRET") or os.environ.get("MINH_ANH_LARK_APP_SECRET", "")
+LARK_DOMAIN = os.environ.get("LARK_DOMAIN", "https://open.larksuite.com").rstrip("/")
+LARK_NOTIFY = os.environ.get("LARK_NOTIFY_ENABLED", "true").lower() != "false"
 
 app = FastAPI(title="LSR Platform API", version="0.1.0")
 _READY = False
@@ -239,10 +244,12 @@ def _ensure_schema() -> None:
                 ref_id     text,
                 message    text,
                 read       boolean DEFAULT false,
+                delivered_lark boolean DEFAULT false,
                 created_at timestamptz DEFAULT now()
             )
             """
         )
+        conn.execute("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS delivered_lark boolean DEFAULT false")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS agent_golive_checklist (
@@ -565,13 +572,98 @@ def team_brain(team_id: str) -> dict:
 
 # ======================= LSR Brain: shared brain + consolidate =======================
 
+_LARK_TOKEN: dict = {"value": "", "exp": 0.0}
+
+
+def _lark_token() -> str:
+    """tenant_access_token (cache tới khi gần hết hạn)."""
+
+    import time as _t
+    if _LARK_TOKEN["value"] and _t.time() < _LARK_TOKEN["exp"]:
+        return _LARK_TOKEN["value"]
+    if not (LARK_APP_ID and LARK_APP_SECRET):
+        return ""
+    r = requests.post(
+        f"{LARK_DOMAIN}/open-apis/auth/v3/tenant_access_token/internal",
+        json={"app_id": LARK_APP_ID, "app_secret": LARK_APP_SECRET}, timeout=10)
+    d = r.json()
+    if d.get("code") != 0:
+        return ""
+    _LARK_TOKEN["value"] = d["tenant_access_token"]
+    _LARK_TOKEN["exp"] = _t.time() + int(d.get("expire", 7200)) - 120
+    return _LARK_TOKEN["value"]
+
+
+def _lark_open_id(email: str, token: str) -> str:
+    """Tra open_id từ email công ty (cần scope contact:user.id:readonly)."""
+
+    r = requests.post(
+        f"{LARK_DOMAIN}/open-apis/contact/v3/users/batch_get_id?user_id_type=open_id",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"emails": [email]}, timeout=10)
+    try:
+        for u in (r.json().get("data") or {}).get("user_list") or []:
+            if u.get("user_id"):
+                return u["user_id"]
+    except Exception:
+        pass
+    return ""
+
+
+def _send_lark(to_email: str, text: str) -> bool:
+    """Gửi tin nhắn Lark cho một email. Best-effort — lỗi không làm hỏng request."""
+
+    if not LARK_NOTIFY:
+        return False
+    try:
+        token = _lark_token()
+        if not token:
+            return False
+        open_id = _lark_open_id(to_email, token)
+        if not open_id:
+            return False
+        r = requests.post(
+            f"{LARK_DOMAIN}/open-apis/im/v1/messages?receive_id_type=open_id",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"receive_id": open_id, "msg_type": "text",
+                  "content": json.dumps({"text": text}, ensure_ascii=False)},
+            timeout=10)
+        return r.json().get("code") == 0
+    except Exception:
+        return False
+
+
 def _notify(conn, to_email: str, kind: str, ref_id: str, message: str) -> None:
+    """Ghi hàng đợi + GỬI LARK cho người nhận (reviewer/agent owner)."""
+
     if not to_email:
         return
+    delivered = _send_lark(to_email, message)
     conn.execute(
-        "INSERT INTO notifications (to_email, kind, ref_id, message) VALUES (%s,%s,%s,%s)",
-        (to_email, kind, ref_id, message),
+        "INSERT INTO notifications (to_email, kind, ref_id, message, delivered_lark) "
+        "VALUES (%s,%s,%s,%s,%s)",
+        (to_email, kind, ref_id, message, delivered),
     )
+
+
+def _route_domain(conn, title: str, content: str, given: str | None) -> str:
+    """Gán chuyên môn cho tri thức: ưu tiên domain đã có; nếu trống thì khớp keywords.
+
+    Nhờ vậy notify đến ĐÚNG người phụ trách kể cả khi LSR Brain chưa gán domain.
+    """
+
+    if given:
+        return given
+    blob = f"{title or ''} {content or ''}".lower()
+    if not blob.strip():
+        return ""
+    rows = conn.execute("SELECT domain, keywords FROM knowledge_domains").fetchall()
+    best, best_hits = "", 0
+    for r in rows:
+        hits = sum(1 for k in (r.get("keywords") or []) if k and k.lower() in blob)
+        if hits > best_hits:
+            best, best_hits = r["domain"], hits
+    return best
 
 
 def _reviewers_for(conn, domain: str) -> list[str]:
@@ -784,6 +876,8 @@ def submit_knowledge(body: dict, authorization: str = Header(default="")) -> dic
     with _db() as conn:
         for it in items:
             iid = it.get("item_id") or ("k_" + secrets.token_hex(6))
+            it["domain"] = _route_domain(conn, it.get("title"), it.get("md_content"),
+                                         it.get("domain"))
             conn.execute(
                 """
                 INSERT INTO knowledge_items (item_id, title, md_content, domain,
@@ -934,7 +1028,7 @@ def resolve_conflict(conflict_id: str, body: dict) -> dict:
 @app.get("/v1/notifications")
 def list_notifications(to_email: str, unread_only: bool = True) -> list[dict]:
     _ensure_schema()
-    sql = "SELECT id, kind, ref_id, message, read, created_at FROM notifications WHERE to_email=%s"
+    sql = "SELECT id, kind, ref_id, message, read, delivered_lark, created_at FROM notifications WHERE to_email=%s"
     args: list = [to_email]
     if unread_only:
         sql += " AND read=false"

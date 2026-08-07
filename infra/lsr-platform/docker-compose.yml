@@ -70,6 +70,12 @@ services:
       COLLECTOR_URL: http://collector:8081
       COLLECTOR_INGEST_TOKEN: ${COLLECTOR_INGEST_TOKEN}
       PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      # Lark notify cho reviewer/agent owner (fallback creds Minh Anh nếu chưa có bot riêng)
+      LARK_NOTIFY_APP_ID: ${LARK_NOTIFY_APP_ID:-}
+      LARK_NOTIFY_APP_SECRET: ${LARK_NOTIFY_APP_SECRET:-}
+      MINH_ANH_LARK_APP_ID: ${MINH_ANH_LARK_APP_ID:-}
+      MINH_ANH_LARK_APP_SECRET: ${MINH_ANH_LARK_APP_SECRET:-}
+      LARK_DOMAIN: ${LARK_DOMAIN:-https://open.larksuite.com}
     ports:
       - "127.0.0.1:8090:8090"
     restart: unless-stopped
