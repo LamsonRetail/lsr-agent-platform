@@ -5,6 +5,9 @@ const P = process.env.LSR_PLATFORM_URL || "http://localhost:8090";
 const C = process.env.LSR_COLLECTOR || "http://localhost:8081";
 const ADMIN = process.env.PLATFORM_ADMIN_TOKEN || "";
 const GATEWAY = process.env.LSR_GATEWAY_TOKEN || "";
+// Item 2: danh tính người thao tác, do LỚP WEB (server-side) đóng dấu — không tin body.
+// Tạm dùng env; khi có SSO/RBAC sẽ set từ session của user đăng nhập.
+const ACTOR = process.env.PLATFORM_ACTOR || "web-admin";
 
 // Header gateway (Caddy) — bắt buộc khi gọi qua public HTTPS; rỗng khi dev qua tunnel.
 function gwHeaders(extra: Record<string, string> = {}): Record<string, string> {
@@ -48,7 +51,7 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 export async function adminPost(path: string, body: any) {
   const r = await fetch(`${P}${path}`, {
     method: "POST",
-    headers: gwHeaders({ "Content-Type": "application/json", Authorization: `Bearer ${ADMIN}` }),
+    headers: gwHeaders({ "Content-Type": "application/json", Authorization: `Bearer ${ADMIN}`, "X-Actor": ACTOR }),
     body: JSON.stringify(body ?? {}),
   });
   const text = await r.text();
@@ -68,7 +71,7 @@ export const PLATFORM_URL = P;
 export async function adminForm(path: string, form: FormData) {
   const r = await fetch(`${P}${path}`, {
     method: "POST",
-    headers: gwHeaders({ Authorization: `Bearer ${ADMIN}` }),
+    headers: gwHeaders({ Authorization: `Bearer ${ADMIN}`, "X-Actor": ACTOR }),
     body: form,
   });
   const data = await r.json().catch(() => ({}));

@@ -23,6 +23,11 @@ runtime:
                             # setup-token). KHÔNG dùng api key, KHÔNG dùng auth chung platform.
   model: claude-sonnet-5
 
+prompt:                     # con trỏ version prompt — rollback = đổi con trỏ (git-backed)
+  path: system_prompt.md
+  version: 0.1.0
+  ref: main                 # git ref/tag/sha đang active
+
 skills:                     # MCP tự do — chỉ khai báo + log
   - {name: resource-index, type: builtin}
 

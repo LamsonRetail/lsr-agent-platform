@@ -42,6 +42,20 @@ def _redact(text: str) -> tuple[str, int]:
         n += k
     return text, n
 
+
+def _duration_ms(started: str | None, finished: str | None) -> int | None:
+    """Tính thời lượng (ms) từ 2 mốc ISO-8601; None nếu không parse được."""
+
+    if not started or not finished:
+        return None
+    from datetime import datetime
+    try:
+        s = datetime.fromisoformat(started.replace("Z", "+00:00"))
+        f = datetime.fromisoformat(finished.replace("Z", "+00:00"))
+        return max(0, int((f - s).total_seconds() * 1000))
+    except Exception:
+        return None
+
 app = FastAPI(title="LSR Collector", version="0.1.0")
 
 
@@ -82,6 +96,29 @@ def _ensure_schema() -> None:
         )
         # PII guard: đếm số lần che trong mỗi trace (0 = sạch).
         conn.execute("ALTER TABLE agent_traces ADD COLUMN IF NOT EXISTS pii_flags int DEFAULT 0")
+        # Item 1 (observability): tích luỹ sẵn cho UI metrics Sóng 4.
+        conn.execute("ALTER TABLE agent_traces ADD COLUMN IF NOT EXISTS duration_ms int")
+        conn.execute("ALTER TABLE agent_traces ADD COLUMN IF NOT EXISTS status text DEFAULT 'ok'")
+        conn.execute("ALTER TABLE agent_traces ADD COLUMN IF NOT EXISTS error text")
+        # Item 5 (retention/analytics): index theo thời gian nhận.
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_traces_received ON agent_traces(received_at)")
+        # Item 3 (enforcement surface): bảng policy do platform_api (admin) ghi,
+        # collector ĐỌC để chặn runtime tại /v1/policy/check. Rỗng → allow (no-op).
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS policies (
+                policy_id  text PRIMARY KEY,
+                agent_id   text,              -- NULL/'*' = áp mọi agent
+                phase      text,              -- pre_tool | pre_prompt | *
+                effect     text DEFAULT 'deny',   -- deny | allow
+                rule       jsonb,             -- {tools:[...], patterns:[...], ...}
+                reason     text,
+                active     boolean DEFAULT true,
+                created_at timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_policies_agent ON policies(agent_id)")
         # Resource index: file/link được share cho agent (lưu ngoài memory).
         conn.execute(
             """
@@ -167,13 +204,22 @@ def ingest(trace: dict, authorization: str = Header(default="")) -> dict:
     final_out, n1 = _redact(trace.get("final_output") or "")
     raw_json, n2 = _redact(json.dumps(trace, ensure_ascii=False))
     pii_flags = n1 + n2
+    # Item 1: suy ra status/duration ngay cả khi client chưa gửi (từ dữ liệu sẵn có).
+    tcs = trace.get("tool_calls", []) or []
+    status = trace.get("status") or ("error" if trace.get("error")
+             or any(c.get("ok") is False for c in tcs) else "ok")
+    error = (trace.get("error") or "")[:500]
+    duration_ms = trace.get("duration_ms")
+    if duration_ms is None:
+        duration_ms = _duration_ms(trace.get("started_at"), trace.get("finished_at"))
     with _db() as conn:
         conn.execute(
             """
             INSERT INTO agent_traces
               (run_id, agent_id, task_id, source, input_tokens, output_tokens,
-               total_tokens, tool_calls, final_output, raw, pii_flags)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+               total_tokens, tool_calls, final_output, raw, pii_flags,
+               duration_ms, status, error)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """,
             (
                 trace.get("run_id"),
@@ -183,14 +229,17 @@ def ingest(trace: dict, authorization: str = Header(default="")) -> dict:
                 it,
                 ot,
                 it + ot,
-                len(trace.get("tool_calls", []) or []),
+                len(tcs),
                 final_out,
                 raw_json,
                 pii_flags,
+                duration_ms,
+                status,
+                error,
             ),
         )
         conn.commit()
-    return {"ok": True, "total_tokens": it + ot, "pii_redacted": pii_flags}
+    return {"ok": True, "total_tokens": it + ot, "pii_redacted": pii_flags, "status": status}
 
 
 @app.get("/v1/traces")
@@ -226,6 +275,49 @@ def stats() -> list[dict]:
             ORDER BY total_tokens DESC NULLS LAST
             """
         ).fetchall()
+
+
+# ----------------------- Policy check (enforcement surface) -----------------------
+
+@app.post("/v1/policy/check")
+def policy_check(body: dict, authorization: str = Header(default="")) -> dict:
+    """Điểm CHẶN runtime DUY NHẤT cho agent (gọi bởi plugin ở PreToolUse/pre-prompt).
+
+    Trả {"decision":"allow"|"deny", "reason": ...}. Rỗng policy → allow (no-op).
+    Guardrails Sóng 1 chỉ cần THÊM rule vào bảng policies, KHÔNG sửa agent/plugin.
+    """
+
+    _check_auth(authorization)
+    _ensure_schema()
+    agent_id = body.get("agent_id") or ""
+    phase = body.get("phase") or ""
+    tool = body.get("tool") or ""
+    text = " ".join(str(body.get(k) or "") for k in ("prompt", "arguments"))
+    with _db() as conn:
+        if _agent_blocked(conn, agent_id):
+            return {"decision": "deny", "reason": "agent đang deactivated"}
+        rows = conn.execute(
+            "SELECT effect, rule, reason FROM policies "
+            "WHERE active=true AND (agent_id=%s OR agent_id IS NULL OR agent_id='*') "
+            "AND (phase=%s OR phase='*')",
+            (agent_id, phase),
+        ).fetchall()
+    for r in rows:
+        rule = r.get("rule") or {}
+        hit = False
+        tools = rule.get("tools") or []
+        if tool and tools and tool in tools:
+            hit = True
+        for pat in rule.get("patterns") or []:
+            try:
+                if re.search(pat, text, re.I):
+                    hit = True
+                    break
+            except re.error:
+                continue
+        if hit and (r.get("effect") or "deny") == "deny":
+            return {"decision": "deny", "reason": r.get("reason") or "vi phạm policy"}
+    return {"decision": "allow"}
 
 
 # ----------------------- Resource Index -----------------------

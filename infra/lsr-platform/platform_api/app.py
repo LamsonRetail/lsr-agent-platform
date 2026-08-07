@@ -434,6 +434,36 @@ def _ensure_schema() -> None:
             )
             """
         )
+        # Item 4: con trỏ version prompt (rollback sau = đổi con trỏ; prompt vẫn git-backed).
+        conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS prompt_version text")
+        conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS prompt_ref text")
+        # Item 3: bảng policies (admin ghi; collector đọc để chặn runtime).
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS policies (
+                policy_id  text PRIMARY KEY,
+                agent_id   text,
+                phase      text,
+                effect     text DEFAULT 'deny',
+                rule       jsonb,
+                reason     text,
+                active     boolean DEFAULT true,
+                created_at timestamptz DEFAULT now()
+            )
+            """
+        )
+        # Item 5: cấu hình retention (CHƯA bật purge — chỉ khai báo).
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS retention_config (
+                scope      text PRIMARY KEY,   -- traces | audit | notifications | ...
+                ttl_days   int,
+                action     text DEFAULT 'delete',  -- delete | anonymize
+                enabled    boolean DEFAULT false,
+                updated_at timestamptz DEFAULT now()
+            )
+            """
+        )
         conn.commit()
     _READY = True
 
@@ -498,7 +528,8 @@ def health() -> dict:
 
 
 @app.post("/v1/agents/register")
-def register(agent: dict, authorization: str = Header(default="")) -> dict:
+def register(agent: dict, authorization: str = Header(default=""),
+             x_actor: str = Header(default="", alias="X-Actor")) -> dict:
     _require_admin(authorization)
     _ensure_schema()
     agent_id = agent.get("agent_id")
@@ -514,14 +545,16 @@ def register(agent: dict, authorization: str = Header(default="")) -> dict:
             """
             INSERT INTO agents (agent_id, name, owner, squad, connect_mode,
                                 is_squad_agent, skills, status, telemetry_key_hash,
-                                deployment, repo_url, host_note, backup_owner)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,'registered',%s,%s,%s,%s,%s)
+                                deployment, repo_url, host_note, backup_owner,
+                                prompt_version, prompt_ref)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,'registered',%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (agent_id) DO UPDATE SET
                 name=EXCLUDED.name, owner=EXCLUDED.owner, squad=EXCLUDED.squad,
                 connect_mode=EXCLUDED.connect_mode, is_squad_agent=EXCLUDED.is_squad_agent,
                 skills=EXCLUDED.skills, telemetry_key_hash=EXCLUDED.telemetry_key_hash,
                 deployment=EXCLUDED.deployment, repo_url=EXCLUDED.repo_url,
-                host_note=EXCLUDED.host_note, backup_owner=EXCLUDED.backup_owner
+                host_note=EXCLUDED.host_note, backup_owner=EXCLUDED.backup_owner,
+                prompt_version=EXCLUDED.prompt_version, prompt_ref=EXCLUDED.prompt_ref
             """,
             (
                 agent_id, agent.get("name"), agent.get("owner"), agent.get("squad"),
@@ -529,12 +562,13 @@ def register(agent: dict, authorization: str = Header(default="")) -> dict:
                 skills, key_hash,
                 agent.get("deployment", "managed"), agent.get("repo_url"),
                 agent.get("host_note"), agent.get("backup_owner"),
+                agent.get("prompt_version"), agent.get("prompt_ref"),
             ),
         )
         # Dataset riêng cho agent trên Supabase chung: mỗi agent 1 schema Postgres.
         schema = agent_schema(agent_id)
         conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
-        _audit(conn, "admin", "register", "agent", agent_id,
+        _audit(conn, x_actor or "admin", "register", "agent", agent_id,
                {"name": agent.get("name"), "owner": agent.get("owner"),
                 "deployment": agent.get("deployment", "managed")})
         conn.commit()
@@ -555,7 +589,8 @@ def list_agents() -> list[dict]:
     with _db() as conn:
         return conn.execute(
             "SELECT agent_id, name, owner, squad, connect_mode, is_squad_agent, "
-            "skills, status, deployment, repo_url, host_note, registered_at, golive_at "
+            "skills, status, deployment, repo_url, host_note, prompt_version, prompt_ref, "
+            "registered_at, golive_at "
             "FROM agents ORDER BY registered_at DESC"
         ).fetchall()
 
@@ -566,7 +601,8 @@ def get_agent(agent_id: str) -> dict:
     with _db() as conn:
         row = conn.execute(
             "SELECT agent_id, name, owner, squad, connect_mode, is_squad_agent, "
-            "skills, status, deployment, repo_url, host_note, registered_at, golive_at "
+            "skills, status, deployment, repo_url, host_note, prompt_version, prompt_ref, "
+            "registered_at, golive_at "
             "FROM agents WHERE agent_id=%s",
             (agent_id,),
         ).fetchone()
@@ -576,7 +612,8 @@ def get_agent(agent_id: str) -> dict:
 
 
 @app.post("/v1/agents/{agent_id}/status")
-def set_status(agent_id: str, body: dict, authorization: str = Header(default="")) -> dict:
+def set_status(agent_id: str, body: dict, authorization: str = Header(default=""),
+               x_actor: str = Header(default="", alias="X-Actor")) -> dict:
     _require_admin(authorization)
     _ensure_schema()
     status = body.get("status")
@@ -608,7 +645,7 @@ def set_status(agent_id: str, body: dict, authorization: str = Header(default=""
         if status in ("active", "deactivated"):
             # Đồng bộ Lark: tắt agent -> gỡ bot khỏi chat; bật lại -> thêm vào lại.
             lark = _sync_lark_status(conn, agent_id, activate=(status == "active"))
-        _audit(conn, "admin", "set_status", "agent", agent_id,
+        _audit(conn, x_actor or "admin", "set_status", "agent", agent_id,
                {"status": status, "forced": bool(body.get("force")), "lark_sync": lark})
         conn.commit()
     return {"agent_id": agent_id, "status": status, "lark_sync": lark}
@@ -973,7 +1010,8 @@ def shared_brain(domain: str | None = None) -> dict:
 
 
 @app.post("/v1/shared-beliefs")
-def upsert_belief(b: dict, authorization: str = Header(default="")) -> dict:
+def upsert_belief(b: dict, authorization: str = Header(default=""),
+                  x_actor: str = Header(default="", alias="X-Actor")) -> dict:
     """CHỈ admin: tạo/sửa niềm tin chung của LSR (có version)."""
 
     _require_admin(authorization)
@@ -996,7 +1034,7 @@ def upsert_belief(b: dict, authorization: str = Header(default="")) -> dict:
             (bid, b.get("title"), b.get("statement"), b.get("domain"),
              b.get("source", "admin"), b.get("source_url"), b.get("updated_by", "admin")),
         )
-        _audit(conn, b.get("updated_by", "admin"), "upsert_belief", "belief", bid,
+        _audit(conn, x_actor or b.get("updated_by", "admin"), "upsert_belief", "belief", bid,
                {"title": b.get("title"), "domain": b.get("domain")})
         conn.commit()
     return {"belief_id": bid, "ok": True}
@@ -1052,7 +1090,8 @@ def suggest_beliefs(body: dict, authorization: str = Header(default="")) -> dict
 # --- Reviewer: admin cấp quyền theo chuyên môn ---
 
 @app.post("/v1/knowledge/reviewers")
-def add_reviewer(body: dict, authorization: str = Header(default="")) -> dict:
+def add_reviewer(body: dict, authorization: str = Header(default=""),
+                 x_actor: str = Header(default="", alias="X-Actor")) -> dict:
     """CHỈ admin: cấp quyền cho nhân sự được phê duyệt một nhóm nội dung (domain)."""
 
     _require_admin(authorization)
@@ -1066,7 +1105,7 @@ def add_reviewer(body: dict, authorization: str = Header(default="")) -> dict:
             "ON CONFLICT (email, domain) DO NOTHING",
             (email, domain, body.get("added_by", "admin")),
         )
-        _audit(conn, body.get("added_by", "admin"), "add_reviewer", "reviewer", email,
+        _audit(conn, x_actor or body.get("added_by", "admin"), "add_reviewer", "reviewer", email,
                {"domain": domain})
         conn.commit()
     return {"email": email, "domain": domain, "ok": True}
@@ -1891,7 +1930,8 @@ def list_quotas() -> list[dict]:
 
 
 @app.post("/v1/quotas")
-def set_quota(body: dict, authorization: str = Header(default="")) -> dict:
+def set_quota(body: dict, authorization: str = Header(default=""),
+              x_actor: str = Header(default="", alias="X-Actor")) -> dict:
     """Đặt/sửa hạn mức tháng cho agent (USD ước tính và/hoặc token)."""
 
     _require_admin(authorization)
@@ -1917,7 +1957,7 @@ def set_quota(body: dict, authorization: str = Header(default="")) -> dict:
             (aid, _num(body.get("monthly_usd_limit")), _num(body.get("monthly_token_limit")),
              int(body.get("alert_pct") or DEFAULT_ALERT_PCT)),
         )
-        _audit(conn, "admin", "set_quota", "agent", aid,
+        _audit(conn, x_actor or "admin", "set_quota", "agent", aid,
                {"usd": body.get("monthly_usd_limit"), "tokens": body.get("monthly_token_limit"),
                 "alert_pct": body.get("alert_pct")})
         conn.commit()
@@ -2128,7 +2168,8 @@ def _judge_llm(prompt: str, expected: str, rubric: str, response: str) -> tuple[
 
 
 @app.post("/v1/golden-cases")
-def add_golden_case(body: dict, authorization: str = Header(default="")) -> dict:
+def add_golden_case(body: dict, authorization: str = Header(default=""),
+                    x_actor: str = Header(default="", alias="X-Actor")) -> dict:
     """Thêm/sửa ca golden (bộ chuẩn để test hồi quy)."""
 
     _require_admin(authorization)
@@ -2149,7 +2190,7 @@ def add_golden_case(body: dict, authorization: str = Header(default="")) -> dict
              float(body.get("weight", 1) or 1), body.get("rubric"),
              bool(body.get("active", True)), body.get("created_by", "admin")),
         )
-        _audit(conn, body.get("created_by", "admin"), "golden_case", "golden", cid,
+        _audit(conn, x_actor or body.get("created_by", "admin"), "golden_case", "golden", cid,
                {"skill": body.get("skill"), "atype": body.get("atype")})
         conn.commit()
     return {"case_id": cid, "ok": True}
@@ -2168,7 +2209,8 @@ def list_golden_cases(skill: str | None = None) -> list[dict]:
 
 
 @app.post("/v1/regression/run")
-def run_regression(body: dict, authorization: str = Header(default="")) -> dict:
+def run_regression(body: dict, authorization: str = Header(default=""),
+                   x_actor: str = Header(default="", alias="X-Actor")) -> dict:
     """Chạy hồi quy trên golden set.
 
     body: { target_id, target_type, skill?, threshold?, answers: [{case_id, response}] }
@@ -2216,7 +2258,7 @@ def run_regression(body: dict, authorization: str = Header(default="")) -> dict:
              score, passed, len(cases), n_pass, threshold, Json(detail),
              body.get("run_by", "admin")),
         )
-        _audit(conn, body.get("run_by", "admin"), "regression_run", "regression", rid,
+        _audit(conn, x_actor or body.get("run_by", "admin"), "regression_run", "regression", rid,
                {"target_id": body.get("target_id"), "score": score, "passed": passed})
         conn.commit()
     return {"run_id": rid, "score": score, "passed": passed,
@@ -2268,7 +2310,8 @@ async def extract_document(file: UploadFile = File(...),
 
 @app.post("/v1/agents/{agent_id}/delete")
 def delete_agent(agent_id: str, body: dict | None = None,
-                 authorization: str = Header(default="")) -> dict:
+                 authorization: str = Header(default=""),
+                 x_actor: str = Header(default="", alias="X-Actor")) -> dict:
     """Gỡ agent khỏi REGISTRY (chỉ metadata). KHÔNG xoá trace/schema/dữ liệu.
 
     Dùng để dọn agent demo/test. Trace lịch sử vẫn còn để truy vết.
@@ -2283,8 +2326,99 @@ def delete_agent(agent_id: str, body: dict | None = None,
             raise HTTPException(status_code=404, detail="not found")
         conn.execute("DELETE FROM agents WHERE agent_id=%s", (agent_id,))
         conn.execute("DELETE FROM agent_quotas WHERE agent_id=%s", (agent_id,))
-        _audit(conn, "admin", "delete_agent", "agent", agent_id,
+        _audit(conn, x_actor or "admin", "delete_agent", "agent", agent_id,
                {"name": row.get("name"), "note": "registry only; traces kept"})
         conn.commit()
     return {"agent_id": agent_id, "deleted_from_registry": True,
             "data_kept": "traces + schema giữ nguyên"}
+
+
+# ============================ Item 3: Policies (control-plane write) ============================
+# Admin GHI rule; COLLECTOR đọc & enforce runtime tại /v1/policy/check. Rỗng → allow.
+
+@app.post("/v1/policies")
+def upsert_policy(body: dict, authorization: str = Header(default=""),
+                  x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    """Thêm/sửa policy chặn runtime. rule ví dụ: {\"tools\":[\"delete_file\"]} hoặc
+    {\"patterns\":[\"(?i)bỏ qua chỉ dẫn\"]}. phase: pre_tool|pre_prompt|*."""
+
+    _require_admin(authorization)
+    _ensure_schema()
+    pid = body.get("policy_id") or ("pol_" + secrets.token_hex(5))
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO policies (policy_id, agent_id, phase, effect, rule, reason, active)
+            VALUES (%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (policy_id) DO UPDATE SET agent_id=EXCLUDED.agent_id,
+              phase=EXCLUDED.phase, effect=EXCLUDED.effect, rule=EXCLUDED.rule,
+              reason=EXCLUDED.reason, active=EXCLUDED.active
+            """,
+            (pid, body.get("agent_id"), body.get("phase", "*"),
+             body.get("effect", "deny"), Json(body.get("rule") or {}),
+             body.get("reason"), bool(body.get("active", True))),
+        )
+        _audit(conn, x_actor or "admin", "upsert_policy", "policy", pid,
+               {"phase": body.get("phase"), "effect": body.get("effect")})
+        conn.commit()
+    return {"policy_id": pid, "ok": True}
+
+
+@app.get("/v1/policies")
+def list_policies() -> list[dict]:
+    _ensure_schema()
+    with _db() as conn:
+        return conn.execute(
+            "SELECT policy_id, agent_id, phase, effect, rule, reason, active, created_at "
+            "FROM policies ORDER BY created_at DESC").fetchall()
+
+
+@app.post("/v1/policies/{policy_id}/delete")
+def delete_policy(policy_id: str, authorization: str = Header(default=""),
+                  x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        conn.execute("DELETE FROM policies WHERE policy_id=%s", (policy_id,))
+        _audit(conn, x_actor or "admin", "delete_policy", "policy", policy_id, {})
+        conn.commit()
+    return {"policy_id": policy_id, "deleted": True}
+
+
+# ============================ Item 5: Retention config (chưa purge) ============================
+
+@app.get("/v1/retention")
+def list_retention() -> list[dict]:
+    _ensure_schema()
+    with _db() as conn:
+        return conn.execute(
+            "SELECT scope, ttl_days, action, enabled, updated_at FROM retention_config "
+            "ORDER BY scope").fetchall()
+
+
+@app.post("/v1/retention")
+def set_retention(body: dict, authorization: str = Header(default=""),
+                  x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    """Khai báo TTL cho một loại dữ liệu (traces|audit|notifications). CHƯA chạy purge —
+    job dọn sẽ đọc bảng này khi bật (enabled=true) ở bước sau."""
+
+    _require_admin(authorization)
+    _ensure_schema()
+    scope = body.get("scope")
+    if not scope:
+        raise HTTPException(status_code=422, detail="scope required")
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO retention_config (scope, ttl_days, action, enabled, updated_at)
+            VALUES (%s,%s,%s,%s, now())
+            ON CONFLICT (scope) DO UPDATE SET ttl_days=EXCLUDED.ttl_days,
+              action=EXCLUDED.action, enabled=EXCLUDED.enabled, updated_at=now()
+            """,
+            (scope, body.get("ttl_days"), body.get("action", "delete"),
+             bool(body.get("enabled", False))),
+        )
+        _audit(conn, x_actor or "admin", "set_retention", "retention", scope,
+               {"ttl_days": body.get("ttl_days"), "enabled": body.get("enabled")})
+        conn.commit()
+    return {"scope": scope, "ok": True}

@@ -53,6 +53,10 @@ class AgentRunTrace(BaseModel):
     answer_correct: bool | None = None  # đáp án đúng (dùng cho CTRL-Acc)
     started_at: str = ""
     finished_at: str = ""
+    # --- Observability (Sóng 4): tích luỹ sẵn, UI metrics dùng sau ---
+    duration_ms: int | None = None  # thời lượng chạy (ms); None nếu không đo được
+    status: str = "ok"              # ok | error
+    error: str = ""                 # thông điệp lỗi (nếu status=error)
 
     # -- Token --
     @property

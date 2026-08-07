@@ -33,6 +33,62 @@ def _buf_file(session_id: str) -> pathlib.Path:
     return _buf_dir() / f"{session_id or 'unknown'}.jsonl"
 
 
+# ----------------------- PreToolUse / UserPromptSubmit (policy) -----------------------
+
+def _policy_check(payload: dict) -> dict:
+    """Gọi điểm chặn runtime của platform. Lỗi/không cấu hình → allow (fail-open)."""
+
+    url = os.environ.get("LSR_COLLECTOR")
+    if not url:
+        return {"decision": "allow"}
+    token = os.environ.get("LSR_TELEMETRY_API_KEY", "")
+    req = urllib.request.Request(
+        url.rstrip("/") + "/v1/policy/check",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except Exception:
+        # fail-open mặc định để không làm hỏng phiên; đặt LSR_POLICY_FAIL_OPEN=false để fail-closed.
+        if os.environ.get("LSR_POLICY_FAIL_OPEN", "true").lower() == "false":
+            return {"decision": "deny", "reason": "policy service không phản hồi (fail-closed)"}
+        return {"decision": "allow"}
+
+
+def pre_tool(evt: dict) -> None:
+    """PreToolUse: hỏi policy trước khi chạy tool. Deny → chặn tool."""
+
+    res = _policy_check({
+        "agent_id": os.environ.get("LSR_AGENT_ID", "unknown"),
+        "phase": "pre_tool",
+        "tool": evt.get("tool_name", ""),
+        "arguments": json.dumps(evt.get("tool_input") or {}, ensure_ascii=False)[:4000],
+    })
+    if res.get("decision") == "deny":
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": res.get("reason") or "bị chặn bởi policy LSR",
+        }}))
+    # allow → không in gì (mặc định cho phép)
+
+
+def pre_prompt(evt: dict) -> None:
+    """UserPromptSubmit: quét prompt đầu vào. Deny → chặn prompt."""
+
+    res = _policy_check({
+        "agent_id": os.environ.get("LSR_AGENT_ID", "unknown"),
+        "phase": "pre_prompt",
+        "prompt": (evt.get("prompt") or "")[:8000],
+    })
+    if res.get("decision") == "deny":
+        print(json.dumps({"decision": "block",
+                          "reason": res.get("reason") or "prompt bị chặn bởi policy LSR"}))
+
+
 # ----------------------- PostToolUse -----------------------
 
 def tool_outcome(tool_response) -> tuple[bool, bool]:
@@ -176,7 +232,11 @@ def main() -> None:
         evt = {}
     mode = sys.argv[1] if len(sys.argv) > 1 else evt.get("hook_event_name", "")
     try:
-        if mode in ("post-tool", "PostToolUse"):
+        if mode in ("pre-tool", "PreToolUse"):
+            pre_tool(evt)
+        elif mode in ("pre-prompt", "UserPromptSubmit"):
+            pre_prompt(evt)
+        elif mode in ("post-tool", "PostToolUse"):
             record_tool(evt)
         elif mode in ("stop", "Stop"):
             stop(evt)

@@ -1,5 +1,26 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/lsr_trace.py\" pre-tool"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/lsr_trace.py\" pre-prompt"
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "*",

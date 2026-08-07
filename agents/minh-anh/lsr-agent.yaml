@@ -23,6 +23,11 @@ runtime:
   auth: subscription          # đăng nhập subscription (không API key)
   model: claude-sonnet-5
 
+prompt:                       # con trỏ version prompt — rollback = đổi con trỏ (git-backed)
+  path: system_prompt.md
+  version: 0.1.0
+  ref: main
+
 skills:                       # MCP tự do
   - {name: lark-minutes, type: mcp}   # lấy transcript/minutes cuộc họp
   - {name: lark-docx,    type: mcp}   # soạn/ghi biên bản
