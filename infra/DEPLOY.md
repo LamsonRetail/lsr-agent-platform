@@ -100,7 +100,7 @@ Rồi chỉ cần: `ssh lsr-gcp`.
   `0_lsr_*`): service `bq_sink` đẩy `agent_traces` + `attempts` sang BigQuery mỗi
   15 phút (watermark + insertId để dedup).
 
-**Quyền cho bq_sink** — chọn 1:
+**Quyền cho bq_sink** — hướng dẫn chi tiết: [BIGQUERY_ACCESS.md](BIGQUERY_ACCESS.md). Tóm tắt, chọn 1:
 1. **Thêm scope BigQuery cho VM** (cần stop/start VM):
    `gcloud compute instances stop … && gcloud compute instances set-service-account …
    --scopes=cloud-platform && gcloud compute instances start …`
