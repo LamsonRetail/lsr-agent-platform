@@ -1,0 +1,35 @@
+apiVersion: lsr/v1
+agent:
+  id: AG-LSR-BRAIN
+  name: LSR Brain
+  version: 0.1.0
+  owner: platform@lamsonretail.vn           # OWNER thật của agent — auth dùng subscription của người này
+  squad: PLATFORM
+  is_squad_agent: false
+  connect_mode: bot     # bot | user
+  description: >
+    (mô tả agent)
+
+lark:
+  connect_mode: bot
+  bot:
+    app: platform-shared
+    chat_ids: []
+    event_webhook: https://collector.lsr.internal/lark/events
+
+runtime:
+  sdk: claude-agent-sdk
+  auth: subscription        # BẮT BUỘC: đăng nhập subscription của OWNER (claude login /
+                            # setup-token). KHÔNG dùng api key, KHÔNG dùng auth chung platform.
+  model: claude-sonnet-5
+
+skills:                     # MCP tự do — chỉ khai báo + log
+  - {name: resource-index, type: builtin}
+
+telemetry:
+  enabled: true             # BẮT BUỘC (control point) — agent không gửi trace = không golive
+  collector: https://collector.lsr.internal
+
+tests:
+  suite: tests/agent_tests.yaml
+schedule: []

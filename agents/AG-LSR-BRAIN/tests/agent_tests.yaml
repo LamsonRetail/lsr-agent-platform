@@ -1,0 +1,7 @@
+# Bộ test có nhãn (needs_tool để đo TSR/CTUR/RIR/OFR/UTR/CTRL-Acc).
+tests:
+  - question_id: q1
+    prompt: "(câu hỏi kiểm tra)"
+    expected: "(đáp án mong đợi)"
+    assertion_type: contains
+    needs_tool: false

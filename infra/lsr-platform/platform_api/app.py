@@ -151,6 +151,80 @@ def _ensure_schema() -> None:
             )
             """
         )
+        # --- LSR Brain: shared brain + consolidate knowledge có governance ---
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS shared_beliefs (
+                belief_id  text PRIMARY KEY,
+                title      text,
+                statement  text,          -- niềm tin/nguyên tắc chung của LSR
+                domain     text,
+                source     text,          -- admin | extracted:<file>
+                version    int DEFAULT 1,
+                updated_by text,          -- CHỈ admin
+                updated_at timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_reviewers (
+                id       bigserial PRIMARY KEY,
+                email    text,
+                domain   text,            -- chuyên môn được phê duyệt
+                added_by text,
+                added_at timestamptz DEFAULT now(),
+                UNIQUE (email, domain)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_items (
+                item_id      text PRIMARY KEY,
+                title        text,
+                md_content   text,
+                domain       text,
+                source_team  text,        -- second brain của team nào
+                source_ref   text,
+                status       text DEFAULT 'pending',  -- pending|approved|rejected
+                reviewed_by  text,
+                review_note  text,
+                reviewed_at  timestamptz,
+                created_at   timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS knowledge_conflicts (
+                conflict_id  text PRIMARY KEY,
+                agent_id     text,
+                team_id      text,
+                belief_id    text,
+                agent_claim  text,        -- nội dung trong agent/team brain
+                shared_claim text,        -- nội dung trong shared brain
+                status       text DEFAULT 'open',   -- open|resolved_keep_shared|resolved_update_shared|dismissed
+                owner_email  text,        -- agent owner phải confirm
+                resolution   text,
+                created_at   timestamptz DEFAULT now(),
+                resolved_at  timestamptz
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS notifications (
+                id         bigserial PRIMARY KEY,
+                to_email   text,
+                kind       text,          -- new_knowledge | conflict | belief_suggestion
+                ref_id     text,
+                message    text,
+                read       boolean DEFAULT false,
+                created_at timestamptz DEFAULT now()
+            )
+            """
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS agent_golive_checklist (
@@ -461,6 +535,301 @@ def team_brain(team_id: str) -> dict:
             "SELECT title, md_content, tags, created_at FROM team_context "
             "WHERE team_id=%s ORDER BY created_at DESC LIMIT 50", (team_id,)).fetchall()
     return {"team": team, "members": members, "kpis": kpis, "context": ctx}
+
+
+# ======================= LSR Brain: shared brain + consolidate =======================
+
+def _notify(conn, to_email: str, kind: str, ref_id: str, message: str) -> None:
+    if not to_email:
+        return
+    conn.execute(
+        "INSERT INTO notifications (to_email, kind, ref_id, message) VALUES (%s,%s,%s,%s)",
+        (to_email, kind, ref_id, message),
+    )
+
+
+def _reviewers_for(conn, domain: str) -> list[str]:
+    rows = conn.execute(
+        "SELECT email FROM knowledge_reviewers WHERE domain=%s OR domain='*'", (domain or "",)
+    ).fetchall()
+    return [r["email"] for r in rows]
+
+
+# --- Shared beliefs: CHỈ admin được sửa ---
+
+@app.get("/v1/shared-brain")
+def shared_brain(domain: str | None = None) -> dict:
+    """MỌI agent đều truy xuất được (mặc định). Không cần admin token."""
+
+    _ensure_schema()
+    sql = "SELECT belief_id, title, statement, domain, version, updated_at FROM shared_beliefs"
+    args: list = []
+    if domain:
+        sql += " WHERE domain=%s"
+        args.append(domain)
+    sql += " ORDER BY domain, belief_id"
+    with _db() as conn:
+        beliefs = conn.execute(sql, args).fetchall()
+        knowledge = conn.execute(
+            "SELECT item_id, title, md_content, domain, source_team, reviewed_by, reviewed_at "
+            "FROM knowledge_items WHERE status='approved' ORDER BY reviewed_at DESC LIMIT 200"
+        ).fetchall()
+    return {"beliefs": beliefs, "knowledge": knowledge}
+
+
+@app.post("/v1/shared-beliefs")
+def upsert_belief(b: dict, authorization: str = Header(default="")) -> dict:
+    """CHỈ admin: tạo/sửa niềm tin chung của LSR (có version)."""
+
+    _require_admin(authorization)
+    _ensure_schema()
+    bid = b.get("belief_id")
+    if not bid or not b.get("statement"):
+        raise HTTPException(status_code=422, detail="belief_id và statement là bắt buộc")
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO shared_beliefs (belief_id, title, statement, domain, source, updated_by)
+            VALUES (%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (belief_id) DO UPDATE SET title=EXCLUDED.title,
+              statement=EXCLUDED.statement, domain=EXCLUDED.domain,
+              version=shared_beliefs.version+1, updated_by=EXCLUDED.updated_by,
+              updated_at=now()
+            """,
+            (bid, b.get("title"), b.get("statement"), b.get("domain"),
+             b.get("source", "admin"), b.get("updated_by", "admin")),
+        )
+        conn.commit()
+    return {"belief_id": bid, "ok": True}
+
+
+@app.post("/v1/shared-beliefs/suggest")
+def suggest_beliefs(body: dict, authorization: str = Header(default="")) -> dict:
+    """Admin upload nội dung file (pdf/word đã trích text) → gợi ý append shared beliefs.
+
+    Trả về danh sách đề xuất (KHÔNG tự ghi) — admin duyệt rồi mới POST /v1/shared-beliefs.
+    """
+
+    _require_admin(authorization)
+    _ensure_schema()
+    text = body.get("text") or ""
+    domain = body.get("domain", "")
+    filename = body.get("filename", "upload")
+    # Tách câu/đoạn có tính "nguyên tắc" (heuristic; LLM judge ở giai đoạn sau).
+    KEYS = ("luôn", "không được", "phải", "nguyên tắc", "cam kết", "ưu tiên",
+            "chúng tôi tin", "giá trị", "tuyệt đối")
+    seen, out = set(), []
+    for raw in re.split(r"[\n\.;]+", text):
+        s = raw.strip()
+        if len(s) < 15 or len(s) > 300:
+            continue
+        low = s.lower()
+        if any(k in low for k in KEYS) and low not in seen:
+            seen.add(low)
+            out.append({
+                "belief_id": f"b_{abs(hash(low)) % 10**8}",
+                "title": s[:60],
+                "statement": s,
+                "domain": domain,
+                "source": f"extracted:{filename}",
+            })
+        if len(out) >= 30:
+            break
+    return {"filename": filename, "suggestions": out, "count": len(out)}
+
+
+# --- Reviewer: admin cấp quyền theo chuyên môn ---
+
+@app.post("/v1/knowledge/reviewers")
+def add_reviewer(body: dict, authorization: str = Header(default="")) -> dict:
+    """CHỈ admin: cấp quyền cho nhân sự được phê duyệt một nhóm nội dung (domain)."""
+
+    _require_admin(authorization)
+    _ensure_schema()
+    email, domain = body.get("email"), body.get("domain")
+    if not email or not domain:
+        raise HTTPException(status_code=422, detail="email và domain là bắt buộc")
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO knowledge_reviewers (email, domain, added_by) VALUES (%s,%s,%s) "
+            "ON CONFLICT (email, domain) DO NOTHING",
+            (email, domain, body.get("added_by", "admin")),
+        )
+        conn.commit()
+    return {"email": email, "domain": domain, "ok": True}
+
+
+@app.get("/v1/knowledge/reviewers")
+def list_reviewers() -> list[dict]:
+    _ensure_schema()
+    with _db() as conn:
+        return conn.execute(
+            "SELECT email, domain, added_by, added_at FROM knowledge_reviewers ORDER BY domain, email"
+        ).fetchall()
+
+
+# --- Knowledge candidates: LSR Brain đẩy lên, reviewer duyệt ---
+
+@app.post("/v1/knowledge/items")
+def submit_knowledge(body: dict, authorization: str = Header(default="")) -> dict:
+    """LSR Brain nộp kiến thức tổng hợp từ second brain các team → chờ review + notify."""
+
+    _require_admin(authorization)
+    _ensure_schema()
+    items = body.get("items") or [body]
+    created, notified = [], 0
+    with _db() as conn:
+        for it in items:
+            iid = it.get("item_id") or ("k_" + secrets.token_hex(6))
+            conn.execute(
+                """
+                INSERT INTO knowledge_items (item_id, title, md_content, domain,
+                                             source_team, source_ref)
+                VALUES (%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (item_id) DO NOTHING
+                """,
+                (iid, it.get("title"), it.get("md_content"), it.get("domain"),
+                 it.get("source_team"), it.get("source_ref")),
+            )
+            created.append(iid)
+            for email in _reviewers_for(conn, it.get("domain")):
+                _notify(conn, email, "new_knowledge", iid,
+                        f"Kiến thức mới cần duyệt: {it.get('title')} (domain {it.get('domain')})")
+                notified += 1
+        conn.commit()
+    return {"created": created, "notified": notified}
+
+
+@app.get("/v1/knowledge/items")
+def list_knowledge(status: str = "pending", domain: str | None = None) -> list[dict]:
+    _ensure_schema()
+    sql = ("SELECT item_id, title, domain, source_team, status, reviewed_by, reviewed_at "
+           "FROM knowledge_items WHERE status=%s")
+    args: list = [status]
+    if domain:
+        sql += " AND domain=%s"
+        args.append(domain)
+    sql += " ORDER BY created_at DESC LIMIT 200"
+    with _db() as conn:
+        return conn.execute(sql, args).fetchall()
+
+
+@app.post("/v1/knowledge/items/{item_id}/review")
+def review_knowledge(item_id: str, body: dict) -> dict:
+    """Nhân sự phụ trách chuyên môn confirm/reject. Kiểm quyền theo domain.
+
+    Ghi lại AI confirm cái gì (reviewed_by + thời điểm) — bộ nhớ phê duyệt.
+    """
+
+    _ensure_schema()
+    reviewer = body.get("reviewer_email")
+    decision = body.get("decision")  # approved | rejected
+    if not reviewer or decision not in ("approved", "rejected"):
+        raise HTTPException(status_code=422, detail="cần reviewer_email và decision approved|rejected")
+    with _db() as conn:
+        item = conn.execute("SELECT domain, status FROM knowledge_items WHERE item_id=%s",
+                            (item_id,)).fetchone()
+        if not item:
+            raise HTTPException(status_code=404, detail="không tìm thấy item")
+        allowed = conn.execute(
+            "SELECT 1 FROM knowledge_reviewers WHERE email=%s AND (domain=%s OR domain='*')",
+            (reviewer, item["domain"] or ""),
+        ).fetchone()
+        if not allowed:
+            raise HTTPException(
+                status_code=403,
+                detail=f"{reviewer} không có quyền duyệt domain '{item['domain']}'")
+        conn.execute(
+            "UPDATE knowledge_items SET status=%s, reviewed_by=%s, review_note=%s, "
+            "reviewed_at=now() WHERE item_id=%s",
+            (decision, reviewer, body.get("note"), item_id),
+        )
+        conn.commit()
+    return {"item_id": item_id, "status": decision, "reviewed_by": reviewer}
+
+
+# --- Conflict: shared brain vs agent/team brain ---
+
+@app.post("/v1/knowledge/conflicts")
+def raise_conflict(body: dict, authorization: str = Header(default="")) -> dict:
+    """LSR Brain phát hiện sai lệch → tạo request cho AGENT OWNER confirm."""
+
+    _require_admin(authorization)
+    _ensure_schema()
+    cid = body.get("conflict_id") or ("c_" + secrets.token_hex(6))
+    owner = body.get("owner_email")
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO knowledge_conflicts (conflict_id, agent_id, team_id, belief_id,
+                                             agent_claim, shared_claim, owner_email)
+            VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (conflict_id) DO NOTHING
+            """,
+            (cid, body.get("agent_id"), body.get("team_id"), body.get("belief_id"),
+             body.get("agent_claim"), body.get("shared_claim"), owner),
+        )
+        _notify(conn, owner, "conflict", cid,
+                f"Sai lệch giữa shared brain và brain của {body.get('agent_id')} — cần xác nhận")
+        conn.commit()
+    return {"conflict_id": cid, "status": "open", "notified": bool(owner)}
+
+
+@app.get("/v1/knowledge/conflicts")
+def list_conflicts(status: str = "open") -> list[dict]:
+    _ensure_schema()
+    with _db() as conn:
+        return conn.execute(
+            "SELECT * FROM knowledge_conflicts WHERE status=%s ORDER BY created_at DESC LIMIT 100",
+            (status,)).fetchall()
+
+
+@app.post("/v1/knowledge/conflicts/{conflict_id}/resolve")
+def resolve_conflict(conflict_id: str, body: dict) -> dict:
+    """Agent owner xác nhận: giữ shared, cập nhật shared, hoặc bỏ qua."""
+
+    _ensure_schema()
+    decision = body.get("decision")
+    valid = ("resolved_keep_shared", "resolved_update_shared", "dismissed")
+    if decision not in valid:
+        raise HTTPException(status_code=422, detail=f"decision phải thuộc {valid}")
+    with _db() as conn:
+        c = conn.execute("SELECT * FROM knowledge_conflicts WHERE conflict_id=%s",
+                         (conflict_id,)).fetchone()
+        if not c:
+            raise HTTPException(status_code=404, detail="không tìm thấy conflict")
+        if body.get("owner_email") and c["owner_email"] and body["owner_email"] != c["owner_email"]:
+            raise HTTPException(status_code=403, detail="chỉ agent owner được xác nhận")
+        conn.execute(
+            "UPDATE knowledge_conflicts SET status=%s, resolution=%s, resolved_at=now() "
+            "WHERE conflict_id=%s",
+            (decision, body.get("resolution"), conflict_id),
+        )
+        # Nếu chọn cập nhật shared → tạo knowledge item chờ reviewer duyệt (không tự ghi belief).
+        if decision == "resolved_update_shared":
+            iid = "k_" + secrets.token_hex(6)
+            conn.execute(
+                "INSERT INTO knowledge_items (item_id, title, md_content, domain, "
+                "source_team, source_ref) VALUES (%s,%s,%s,%s,%s,%s)",
+                (iid, f"Cập nhật từ conflict {conflict_id}", c["agent_claim"],
+                 body.get("domain"), c["team_id"], conflict_id),
+            )
+            for email in _reviewers_for(conn, body.get("domain")):
+                _notify(conn, email, "new_knowledge", iid,
+                        f"Đề xuất cập nhật shared brain từ conflict {conflict_id}")
+        conn.commit()
+    return {"conflict_id": conflict_id, "status": decision}
+
+
+@app.get("/v1/notifications")
+def list_notifications(to_email: str, unread_only: bool = True) -> list[dict]:
+    _ensure_schema()
+    sql = "SELECT id, kind, ref_id, message, read, created_at FROM notifications WHERE to_email=%s"
+    args: list = [to_email]
+    if unread_only:
+        sql += " AND read=false"
+    sql += " ORDER BY created_at DESC LIMIT 100"
+    with _db() as conn:
+        return conn.execute(sql, args).fetchall()
 
 
 # ======================= Checklist golive =======================
