@@ -71,3 +71,27 @@ Deploy: Vercel project riêng, **Root Directory = `apps/agents/<id>`** (xem
 - `runtime.auth = subscription` (auth của owner) · **không** api key/auth chung.
 - `telemetry.enabled = true` (control point) · có bộ test.
 - Bộ nhớ/DB nằm trên **Postgres của platform (VM GCP)**, mỗi agent **schema riêng** (tự tạo khi register); dữ liệu phân tích đẩy sang **BigQuery AI_DB**.
+
+## 7. Agent CÓ SẴN ở dự án khác (adopt vào platform)
+
+Agent đang chạy ở repo/hạ tầng khác vẫn đăng ký được, **giữ nguyên cấu hình và nơi chạy**:
+
+```bash
+# chạy TRONG repo của agent đó
+python3 /đường/dẫn/lsr-agent-platform/scripts/lsr_adopt.py \
+  --id AG-YOURBOT --name "Your Bot" --owner you@lamsonretail.vn --squad SQ-SALES \
+  --platform https://platform.34-126-154-135.sslip.io \
+  --collector https://collector.34-126-154-135.sslip.io \
+  --admin-token "$PLATFORM_ADMIN_TOKEN" \
+  --trace-script /đường/dẫn/lsr-agent-platform/plugins/lsr-telemetry/scripts/lsr_trace.py
+```
+Script sẽ: dò `git remote` + MCP đang dùng → sinh `lsr-agent.yaml` (`deployment: external`)
+→ **thêm hook telemetry** vào `.claude/settings.json` (**không phá cấu hình cũ**) →
+đăng ký, ghi `.env.lsr` (đã gitignore). Thêm `--dry-run` để xem trước.
+
+Sau đó: owner chạy `claude setup-token` (subscription **của owner**) và nạp `.env.lsr`
+khi khởi động agent → trace chảy về, agent lên dashboard như agent managed.
+
+**Cắt agent external thế nào?** Platform không kill process của team, nhưng khi
+`status=deactivated` thì **collector trả 403** (không nhận trace) + cắt Lark →
+agent ra khỏi governance và dashboard thấy ngay.
