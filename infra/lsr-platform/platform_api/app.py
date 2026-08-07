@@ -35,6 +35,8 @@ LARK_APP_ID = os.environ.get("LARK_NOTIFY_APP_ID") or os.environ.get("MINH_ANH_L
 LARK_APP_SECRET = os.environ.get("LARK_NOTIFY_APP_SECRET") or os.environ.get("MINH_ANH_LARK_APP_SECRET", "")
 LARK_DOMAIN = os.environ.get("LARK_DOMAIN", "https://open.larksuite.com").rstrip("/")
 LARK_NOTIFY = os.environ.get("LARK_NOTIFY_ENABLED", "true").lower() != "false"
+# Nhóm nhận thông báo khi CHƯA có scope contact:user.id:readonly (không tra được email→open_id)
+LARK_NOTIFY_CHAT_ID = os.environ.get("LARK_NOTIFY_CHAT_ID", "")
 
 app = FastAPI(title="LSR Platform API", version="0.1.0")
 _READY = False
@@ -218,6 +220,13 @@ def _ensure_schema() -> None:
             )
             """
         )
+        for ddl in (
+            "ALTER TABLE knowledge_items ADD COLUMN IF NOT EXISTS source_url text",
+            "ALTER TABLE shared_beliefs ADD COLUMN IF NOT EXISTS source_url text",
+            "ALTER TABLE team_context ADD COLUMN IF NOT EXISTS source_url text",
+            "ALTER TABLE knowledge_conflicts ADD COLUMN IF NOT EXISTS source_url text",
+        ):
+            conn.execute(ddl)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS knowledge_conflicts (
@@ -540,10 +549,10 @@ def add_context(team_id: str, body: dict, authorization: str = Header(default=""
     _ensure_schema()
     with _db() as conn:
         conn.execute(
-            "INSERT INTO team_context (team_id, title, md_content, tags, created_by) "
-            "VALUES (%s,%s,%s,%s,%s)",
+            "INSERT INTO team_context (team_id, title, md_content, tags, created_by, source_url) "
+            "VALUES (%s,%s,%s,%s,%s,%s)",
             (team_id, body.get("title"), body.get("md_content"),
-             body.get("tags") or [], body.get("created_by")),
+             body.get("tags") or [], body.get("created_by"), body.get("source_url")),
         )
         conn.commit()
     return {"team_id": team_id, "ok": True}
@@ -565,7 +574,7 @@ def team_brain(team_id: str) -> dict:
             "SELECT kpi_name, unit, formula, data_source, target, period, weight "
             "FROM team_kpis WHERE team_id=%s ORDER BY kpi_name", (team_id,)).fetchall()
         ctx = conn.execute(
-            "SELECT title, md_content, tags, created_at FROM team_context "
+            "SELECT title, md_content, tags, source_url, created_at FROM team_context "
             "WHERE team_id=%s ORDER BY created_at DESC LIMIT 50", (team_id,)).fetchall()
     return {"team": team, "members": members, "kpis": kpis, "context": ctx}
 
@@ -620,13 +629,19 @@ def _send_lark(to_email: str, text: str) -> bool:
         if not token:
             return False
         open_id = _lark_open_id(to_email, token)
-        if not open_id:
+        if open_id:
+            receive_id, id_type, body = open_id, "open_id", text
+        elif LARK_NOTIFY_CHAT_ID:
+            # Chưa tra được email→open_id (thiếu scope contact:user.id:readonly)
+            # → gửi vào nhóm chung, ghi rõ người nhận để không mất thông báo.
+            receive_id, id_type, body = LARK_NOTIFY_CHAT_ID, "chat_id", f"@{to_email}: {text}"
+        else:
             return False
         r = requests.post(
-            f"{LARK_DOMAIN}/open-apis/im/v1/messages?receive_id_type=open_id",
+            f"{LARK_DOMAIN}/open-apis/im/v1/messages?receive_id_type={id_type}",
             headers={"Authorization": f"Bearer {token}"},
-            json={"receive_id": open_id, "msg_type": "text",
-                  "content": json.dumps({"text": text}, ensure_ascii=False)},
+            json={"receive_id": receive_id, "msg_type": "text",
+                  "content": json.dumps({"text": body}, ensure_ascii=False)},
             timeout=10)
         return r.json().get("code") == 0
     except Exception:
@@ -680,7 +695,8 @@ def shared_brain(domain: str | None = None) -> dict:
     """MỌI agent đều truy xuất được (mặc định). Không cần admin token."""
 
     _ensure_schema()
-    sql = "SELECT belief_id, title, statement, domain, version, updated_at FROM shared_beliefs"
+    sql = ("SELECT belief_id, title, statement, domain, source, source_url, version, "
+           "updated_at FROM shared_beliefs")
     args: list = []
     if domain:
         sql += " WHERE domain=%s"
@@ -689,8 +705,9 @@ def shared_brain(domain: str | None = None) -> dict:
     with _db() as conn:
         beliefs = conn.execute(sql, args).fetchall()
         knowledge = conn.execute(
-            "SELECT item_id, title, md_content, domain, source_team, reviewed_by, reviewed_at "
-            "FROM knowledge_items WHERE status='approved' ORDER BY reviewed_at DESC LIMIT 200"
+            "SELECT item_id, title, md_content, domain, source_team, source_ref, source_url, "
+            "reviewed_by, reviewed_at FROM knowledge_items WHERE status='approved' "
+            "ORDER BY reviewed_at DESC LIMIT 200"
         ).fetchall()
     return {"beliefs": beliefs, "knowledge": knowledge}
 
@@ -707,15 +724,17 @@ def upsert_belief(b: dict, authorization: str = Header(default="")) -> dict:
     with _db() as conn:
         conn.execute(
             """
-            INSERT INTO shared_beliefs (belief_id, title, statement, domain, source, updated_by)
-            VALUES (%s,%s,%s,%s,%s,%s)
+            INSERT INTO shared_beliefs (belief_id, title, statement, domain, source,
+                                        source_url, updated_by)
+            VALUES (%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (belief_id) DO UPDATE SET title=EXCLUDED.title,
               statement=EXCLUDED.statement, domain=EXCLUDED.domain,
+              source_url=EXCLUDED.source_url,
               version=shared_beliefs.version+1, updated_by=EXCLUDED.updated_by,
               updated_at=now()
             """,
             (bid, b.get("title"), b.get("statement"), b.get("domain"),
-             b.get("source", "admin"), b.get("updated_by", "admin")),
+             b.get("source", "admin"), b.get("source_url"), b.get("updated_by", "admin")),
         )
         conn.commit()
     return {"belief_id": bid, "ok": True}
@@ -733,6 +752,7 @@ def suggest_beliefs(body: dict, authorization: str = Header(default="")) -> dict
     text = body.get("text") or ""
     domain = body.get("domain", "")
     filename = body.get("filename", "upload")
+    source_url = body.get("source_url", "")  # link Lark file gốc để đối chứng
     # Tách câu/đoạn có tính "nguyên tắc" (heuristic; LLM judge ở giai đoạn sau).
     # So khớp KHÔNG phân biệt dấu để hoạt động với cả text có dấu lẫn không dấu.
     import unicodedata
@@ -760,6 +780,7 @@ def suggest_beliefs(body: dict, authorization: str = Header(default="")) -> dict
                 "statement": s,
                 "domain": domain,
                 "source": f"extracted:{filename}",
+                "source_url": source_url,
             })
         if len(out) >= 30:
             break
@@ -881,12 +902,12 @@ def submit_knowledge(body: dict, authorization: str = Header(default="")) -> dic
             conn.execute(
                 """
                 INSERT INTO knowledge_items (item_id, title, md_content, domain,
-                                             source_team, source_ref)
-                VALUES (%s,%s,%s,%s,%s,%s)
+                                             source_team, source_ref, source_url)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (item_id) DO NOTHING
                 """,
                 (iid, it.get("title"), it.get("md_content"), it.get("domain"),
-                 it.get("source_team"), it.get("source_ref")),
+                 it.get("source_team"), it.get("source_ref"), it.get("source_url")),
             )
             created.append(iid)
             for email in _reviewers_for(conn, it.get("domain")):
@@ -900,8 +921,8 @@ def submit_knowledge(body: dict, authorization: str = Header(default="")) -> dic
 @app.get("/v1/knowledge/items")
 def list_knowledge(status: str = "pending", domain: str | None = None) -> list[dict]:
     _ensure_schema()
-    sql = ("SELECT item_id, title, domain, source_team, status, reviewed_by, reviewed_at "
-           "FROM knowledge_items WHERE status=%s")
+    sql = ("SELECT item_id, title, domain, source_team, source_ref, source_url, "
+           "status, reviewed_by, reviewed_at FROM knowledge_items WHERE status=%s")
     args: list = [status]
     if domain:
         sql += " AND domain=%s"

@@ -18,7 +18,9 @@ phê duyệt của con người.
 ## Nguyên tắc bắt buộc
 - **Không tự ý ghi vào shared brain.** Mọi kiến thức phải qua **reviewer** phê duyệt;
   **shared beliefs chỉ admin** được sửa.
-- **Không bịa**: mỗi ứng viên phải ghi rõ `source_team` + `source_ref` để truy vết.
+- **Minh bạch & truy vết được**: mỗi ứng viên PHẢI kèm `source_url` — **link Lark
+  file/doc gốc** để đối chứng — cùng `source_team` + `source_ref`. Không có nguồn
+  đối chứng thì đừng nộp (reviewer sẽ thấy cảnh báo "thiếu nguồn").
 - **Không đưa dữ liệu cá nhân/nhạy cảm** (lương, đánh giá cá nhân, PII) vào shared brain.
 - Tri thức mâu thuẫn → tạo conflict, nêu **cả hai phía** (agent_claim vs shared_claim),
   không kết luận thay con người.

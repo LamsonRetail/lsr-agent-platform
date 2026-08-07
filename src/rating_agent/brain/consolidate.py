@@ -29,11 +29,13 @@ class Candidate:
     domain: str = ""
     source_team: str = ""
     source_ref: str = ""
+    source_url: str = ""      # link Lark file/doc gốc — để đối chứng, minh bạch
 
     def as_payload(self) -> dict:
         return {
             "title": self.title, "md_content": self.md_content, "domain": self.domain,
             "source_team": self.source_team, "source_ref": self.source_ref,
+            "source_url": self.source_url,
         }
 
 
@@ -122,6 +124,7 @@ def consolidate_team(
                 domain=(entry.get("tags") or [""])[0] if entry.get("tags") else "",
                 source_team=team_id,
                 source_ref=entry.get("source_ref") or f"team_context:{team_id}",
+                source_url=entry.get("source_url") or "",
             ))
         for b in beliefs or []:
             if detect_conflict(body, b.get("statement", "")):

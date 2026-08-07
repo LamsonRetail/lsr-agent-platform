@@ -41,14 +41,18 @@ export function PendingTab({ items }: { items: any[] }) {
       </div>
       {msg && <p className={msg.startsWith("✗") ? "err" : "muted"}>{msg}</p>}
       <table>
-        <thead><tr><th>Tiêu đề</th><th>Chuyên môn</th><th>Từ team</th><th>Hành động</th></tr></thead>
+        <thead><tr><th>Tiêu đề</th><th>Chuyên môn</th><th>Từ team</th><th>Đối chứng</th><th>Hành động</th></tr></thead>
         <tbody>
-          {items.length === 0 && <tr><td colSpan={4} className="muted">Không có mục nào chờ duyệt.</td></tr>}
+          {items.length === 0 && <tr><td colSpan={5} className="muted">Không có mục nào chờ duyệt.</td></tr>}
           {items.map((it) => (
             <tr key={it.item_id}>
               <td><b>{it.title}</b><div className="muted">{it.item_id}</div></td>
               <td><span className="b b-series">{it.domain || "—"}</span></td>
               <td>{it.source_team || "—"}</td>
+              <td>{it.source_url
+                ? <a href={it.source_url} target="_blank" rel="noopener">Mở file Lark ↗</a>
+                : <span className="err">thiếu nguồn</span>}
+                {it.source_ref && <div className="muted">{it.source_ref}</div>}</td>
               <td className="row">
                 <button className="btn btn-p" disabled={!email || busy === it.item_id}
                   onClick={() => call(`/api/knowledge/${it.item_id}/review`,
@@ -70,6 +74,7 @@ export function BeliefsTab({ beliefs, domains }: { beliefs: any[]; domains: any[
   const { admin, busy, msg, setMsg } = useApi();
   const [text, setText] = useState("");
   const [filename, setFilename] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
   const [domain, setDomain] = useState("");
   const [drafts, setDrafts] = useState<any[]>([]);
 
@@ -81,7 +86,7 @@ export function BeliefsTab({ beliefs, domains }: { beliefs: any[]; domains: any[
 
   async function suggest() {
     const j = await admin("/v1/shared-beliefs/suggest",
-      { text, domain, filename: filename || "paste" }, "suggest");
+      { text, domain, filename: filename || "paste", source_url: sourceUrl }, "suggest");
     if (j?.suggestions) {
       setDrafts(j.suggestions);
       setMsg(j.suggestions.length ? `✓ Trích ${j.suggestions.length} đề xuất — sửa rồi lưu.`
@@ -103,6 +108,10 @@ export function BeliefsTab({ beliefs, domains }: { beliefs: any[]; domains: any[
             <option value="">— chuyên môn —</option>
             {domains.map((d: any) => <option key={d.domain} value={d.domain}>{d.label || d.domain}</option>)}
           </select>
+        </div>
+        <div className="row" style={{ marginBottom: 8 }}>
+          <input placeholder="Link Lark file gốc (để đối chứng)" value={sourceUrl}
+            onChange={(e) => setSourceUrl(e.target.value)} style={{ width: "100%" }} />
         </div>
         <textarea rows={4} style={{ width: "100%", marginBottom: 8 }}
           placeholder="Nội dung tài liệu (hoặc dán từ PDF/Word)"
@@ -133,9 +142,9 @@ export function BeliefsTab({ beliefs, domains }: { beliefs: any[]; domains: any[
 
       <h3>Shared beliefs hiện có ({beliefs.length}) — chỉ admin sửa</h3>
       <table>
-        <thead><tr><th>Niềm tin</th><th>Chuyên môn</th><th className="n">Ver</th><th>Hành động</th></tr></thead>
+        <thead><tr><th>Niềm tin</th><th>Chuyên môn</th><th>Đối chứng</th><th className="n">Ver</th><th>Hành động</th></tr></thead>
         <tbody>
-          {beliefs.length === 0 && <tr><td colSpan={4} className="muted">Chưa có belief nào.</td></tr>}
+          {beliefs.length === 0 && <tr><td colSpan={5} className="muted">Chưa có belief nào.</td></tr>}
           {beliefs.map((b: any) => (
             <BeliefRow key={b.belief_id} b={b} onSave={(p: any) => admin("/v1/shared-beliefs", p, b.belief_id)}
               onDelete={() => admin(`/v1/shared-beliefs/${b.belief_id}/delete`, {}, b.belief_id)}
@@ -159,6 +168,9 @@ function BeliefRow({ b, onSave, onDelete, busy }: any) {
               : <div className="muted">{b.statement}</div>}
       </td>
       <td>{b.domain || "—"}</td>
+      <td>{b.source_url
+        ? <a href={b.source_url} target="_blank" rel="noopener">Mở file ↗</a>
+        : <span className="muted">{b.source || "—"}</span>}</td>
       <td className="n">v{b.version}</td>
       <td className="row">
         {edit
