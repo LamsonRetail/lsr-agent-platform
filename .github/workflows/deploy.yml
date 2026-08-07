@@ -53,4 +53,18 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new \
             "${{ secrets.LSR_DEPLOY_USER }}@${{ secrets.LSR_DEPLOY_HOST }}" \
-            'cd /opt/lsr-platform && sudo docker compose up -d --build && sudo docker compose restart caddy && sudo docker compose ps --format "table {{.Service}}\t{{.Status}}"'
+            'cd /opt/lsr-platform && sudo docker compose up -d --build && sleep 3 && sudo docker compose up -d && sudo docker compose restart caddy && sudo docker compose ps --format "table {{.Service}}\t{{.Status}}"'
+
+      - name: Verify services (fail nếu API không lên)
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.LSR_DEPLOY_USER }}@${{ secrets.LSR_DEPLOY_HOST }}" \
+            'set -e
+             for i in $(seq 1 12); do
+               ok=1
+               curl -sf -m 5 localhost:8090/health >/dev/null || ok=0
+               curl -sf -m 5 localhost:8081/health >/dev/null || ok=0
+               [ "$ok" = "1" ] && echo "✓ platform_api + collector healthy" && exit 0
+               sleep 5
+             done
+             echo "✗ Service không healthy sau 60s"; cd /opt/lsr-platform; sudo docker compose ps; exit 1'
