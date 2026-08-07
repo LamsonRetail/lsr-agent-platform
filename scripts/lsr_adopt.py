@@ -226,10 +226,13 @@ def main() -> int:
                    else enroll(args.platform, args.enroll_token, payload))
             print(f"  (đăng ký qua {'admin register' if do_admin else 'self-service enroll'})")
             env = root / ".env.lsr"
+            dash = res.get("dashboard_url", "")
+            back = res.get("backend_url", "")
             env.write_text(
                 f"LSR_AGENT_ID={args.id}\n"
                 f"LSR_TELEMETRY_API_KEY={res.get('telemetry_key', '')}\n"
-                f"LSR_COLLECTOR={args.collector}\n", encoding="utf-8")
+                f"LSR_COLLECTOR={args.collector}\n"
+                f"# Dashboard: {dash}\n# Backend:   {back}\n", encoding="utf-8")
             gi = root / ".gitignore"
             body = gi.read_text(encoding="utf-8") if gi.exists() else ""
             if ".env.lsr" not in body:
@@ -237,6 +240,9 @@ def main() -> int:
             print(f"✓ Đăng ký: {res.get('agent_id')} · deployment={res.get('deployment')} "
                   f"· schema={res.get('db_schema')}")
             print("✓ Ghi .env.lsr (đã gitignore) — nạp env này khi chạy agent")
+            if dash:
+                print(f"\n  📊 Dashboard agent : {dash}")
+                print(f"  🛠  Backend agent   : {back}")
         except urllib.error.HTTPError as e:
             print(f"✗ Đăng ký lỗi {e.code}: {e.read().decode()[:200]}")
             return 1

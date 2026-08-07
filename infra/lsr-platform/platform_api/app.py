@@ -41,6 +41,17 @@ ENROLL_TOKEN = os.environ.get("LSR_ENROLL_TOKEN", "")
 # URL collector CÔNG KHAI (để hướng dẫn cấu hình plugin cho agent bên ngoài).
 COLLECTOR_PUBLIC_URL = os.environ.get(
     "LSR_COLLECTOR_PUBLIC", "https://collector.34-126-154-135.sslip.io")
+# URL bảng điều khiển (web UI) — sinh link dashboard/backend riêng cho từng agent.
+APP_PUBLIC_URL = os.environ.get(
+    "LSR_APP_PUBLIC", "https://app.34-126-154-135.sslip.io").rstrip("/")
+
+
+def _agent_links(agent_id: str) -> dict:
+    """Link dashboard (theo dõi) + backend (điều khiển) riêng của một agent."""
+    return {
+        "dashboard_url": f"{APP_PUBLIC_URL}/agent/{agent_id}",
+        "backend_url": f"{APP_PUBLIC_URL}/agent/{agent_id}#backend",
+    }
 # Lark notify: bot của platform (fallback creds Minh Anh nếu chưa cấu hình riêng)
 LARK_APP_ID = os.environ.get("LARK_NOTIFY_APP_ID") or os.environ.get("MINH_ANH_LARK_APP_ID", "")
 LARK_APP_SECRET = os.environ.get("LARK_NOTIFY_APP_SECRET") or os.environ.get("MINH_ANH_LARK_APP_SECRET", "")
@@ -536,14 +547,15 @@ def health() -> dict:
 
 
 _BOOTSTRAP_DIR = pathlib.Path(__file__).parent / "bootstrap"
-_BOOTSTRAP_ALLOW = {"lsr_adopt.py", "lsr_trace.py"}
+# onboard.sh là TEMPLATE (không chứa token) — an toàn để phục vụ công khai.
+_BOOTSTRAP_ALLOW = {"lsr_adopt.py", "lsr_trace.py", "onboard.sh"}
 
 
 @app.get("/bootstrap/{name}")
 def bootstrap(name: str):
     """Phục vụ script bootstrap self-service (không cần GitHub/auth) — vì repo private.
 
-    Chỉ allowlist 2 file. Dùng: curl PLATFORM/bootstrap/lsr_adopt.py -O
+    Chỉ allowlist. Dùng: curl PLATFORM/bootstrap/lsr_adopt.py -O
     """
 
     if name not in _BOOTSTRAP_ALLOW:
@@ -551,7 +563,8 @@ def bootstrap(name: str):
     p = _BOOTSTRAP_DIR / name
     if not p.exists():
         raise HTTPException(status_code=503, detail="chưa publish (deploy lại platform)")
-    return PlainTextResponse(p.read_text(encoding="utf-8"), media_type="text/x-python")
+    mtype = "text/x-shellscript" if name.endswith(".sh") else "text/x-python"
+    return PlainTextResponse(p.read_text(encoding="utf-8"), media_type=mtype)
 
 
 @app.post("/v1/agents/register")
@@ -607,6 +620,7 @@ def register(agent: dict, authorization: str = Header(default=""),
         "dictionary_shared": dictionary_shared,
         "db_schema": schema,
         "deployment": agent.get("deployment", "managed"),
+        **_agent_links(agent_id),
     }
 
 
@@ -666,6 +680,7 @@ def enroll(agent: dict, authorization: str = Header(default="")) -> dict:
         "telemetry_key": telemetry_key,     # hiện MỘT LẦN — lưu vào env agent
         "db_schema": schema,
         "collector": COLLECTOR_PUBLIC_URL,
+        **_agent_links(agent_id),
         "next_steps": [
             "Cài plugin: claude plugin marketplace add LamsonRetail/lsr-agent-platform "
             "&& claude plugin install lsr-telemetry@lsr",

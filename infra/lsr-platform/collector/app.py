@@ -265,7 +265,8 @@ def ingest(trace: dict, authorization: str = Header(default="")) -> dict:
 def list_traces(agent_id: str | None = None, limit: int = 20) -> list[dict]:
     _ensure_schema()
     query = (
-        "SELECT run_id, agent_id, task_id, total_tokens, tool_calls, received_at "
+        "SELECT run_id, agent_id, task_id, total_tokens, tool_calls, "
+        "duration_ms, status, pii_flags, received_at "
         "FROM agent_traces"
     )
     args: list = []

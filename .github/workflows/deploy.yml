@@ -9,6 +9,7 @@ on:
       - "infra/lsr-platform/**"
       - "apps/platform-web/**"
       - "scripts/lsr_adopt.py"
+      - "scripts/lsr-onboard.sh"
       - "plugins/lsr-telemetry/scripts/lsr_trace.py"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
@@ -40,6 +41,7 @@ jobs:
           mkdir -p infra/lsr-platform/platform_api/bootstrap
           cp scripts/lsr_adopt.py infra/lsr-platform/platform_api/bootstrap/
           cp plugins/lsr-telemetry/scripts/lsr_trace.py infra/lsr-platform/platform_api/bootstrap/
+          cp scripts/lsr-onboard.sh infra/lsr-platform/platform_api/bootstrap/onboard.sh
 
       - name: Rsync infra → VM (giữ nguyên .env, volume)
         run: |

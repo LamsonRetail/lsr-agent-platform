@@ -1,5 +1,6 @@
 import { listAgents, tokenStats } from "@/lib/platform";
 import { StatusButton } from "@/components/Actions";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export default async function PlatformPage() {
             const pii = smap[a.agent_id]?.pii_flags || 0;
             return (
             <tr key={a.agent_id}>
-              <td><b>{a.name || a.agent_id}</b><div className="muted">{a.agent_id}</div></td>
+              <td><Link href={`/agent/${a.agent_id}`}><b>{a.name || a.agent_id}</b></Link><div className="muted">{a.agent_id}</div></td>
               <td>{a.squad || "—"}</td>
               <td>{a.owner || "—"}</td>
               <td>{badge(a.status)}</td>

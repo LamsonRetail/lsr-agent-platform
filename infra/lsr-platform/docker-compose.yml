@@ -73,6 +73,7 @@ services:
       # Self-service enroll (thành viên tự đăng ký agent) — rỗng = tắt
       LSR_ENROLL_TOKEN: ${LSR_ENROLL_TOKEN:-}
       LSR_COLLECTOR_PUBLIC: ${LSR_COLLECTOR_PUBLIC:-https://collector.34-126-154-135.sslip.io}
+      LSR_APP_PUBLIC: ${LSR_APP_PUBLIC:-https://app.34-126-154-135.sslip.io}
       # Lark notify cho reviewer/agent owner (fallback creds Minh Anh nếu chưa có bot riêng)
       LARK_NOTIFY_APP_ID: ${LARK_NOTIFY_APP_ID:-}
       LARK_NOTIFY_APP_SECRET: ${LARK_NOTIFY_APP_SECRET:-}
