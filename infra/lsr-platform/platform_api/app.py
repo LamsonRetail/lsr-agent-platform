@@ -19,6 +19,9 @@ import json
 import os
 import re
 import secrets
+import threading
+import time
+from datetime import datetime, timedelta, timezone
 
 import psycopg
 import requests
@@ -37,6 +40,31 @@ LARK_DOMAIN = os.environ.get("LARK_DOMAIN", "https://open.larksuite.com").rstrip
 LARK_NOTIFY = os.environ.get("LARK_NOTIFY_ENABLED", "true").lower() != "false"
 # Nhóm nhận thông báo khi CHƯA có scope contact:user.id:readonly (không tra được email→open_id)
 LARK_NOTIFY_CHAT_ID = os.environ.get("LARK_NOTIFY_CHAT_ID", "")
+
+# --- Cost & Quota ---------------------------------------------------------
+# Agent dùng SUBSCRIPTION của owner (không tính tiền theo token) → chi phí ở đây là
+# ƯỚC TÍNH quy đổi theo giá API công khai (USD / 1 triệu token), dùng làm thước đo
+# mức dùng + đặt hạn mức. Có thể override bằng env MODEL_PRICES_JSON.
+_DEFAULT_PRICES = {
+    # prefix model : (giá input, giá output) USD / 1M token
+    "claude-opus":   (15.0, 75.0),
+    "claude-sonnet": (3.0, 15.0),
+    "claude-haiku":  (0.80, 4.0),
+    "claude-fable":  (3.0, 15.0),
+    "claude-3-opus": (15.0, 75.0),
+    "claude-3-5-sonnet": (3.0, 15.0),
+    "claude-3-5-haiku": (0.80, 4.0),
+}
+try:
+    MODEL_PRICES = {**_DEFAULT_PRICES, **json.loads(os.environ.get("MODEL_PRICES_JSON", "{}"))}
+except Exception:
+    MODEL_PRICES = dict(_DEFAULT_PRICES)
+# Giá mặc định khi không nhận diện được model (lấy mức sonnet).
+_FALLBACK_PRICE = (3.0, 15.0)
+# Chu kỳ quét cảnh báo hạn mức (giây); 0 = tắt daemon.
+ALERT_INTERVAL = int(os.environ.get("QUOTA_ALERT_INTERVAL", "1800"))
+# Ngưỡng cảnh báo mặc định (%) nếu quota không đặt riêng.
+DEFAULT_ALERT_PCT = int(os.environ.get("QUOTA_DEFAULT_ALERT_PCT", "80"))
 
 app = FastAPI(title="LSR Platform API", version="0.1.0")
 _READY = False
@@ -305,6 +333,32 @@ def _ensure_schema() -> None:
                 provided_by text DEFAULT 'HR',
                 source_file text,
                 created_at  timestamptz DEFAULT now()
+            )
+            """
+        )
+        # --- Cost & Quota: hạn mức theo agent + lịch sử cảnh báo (chống spam) ---
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_quotas (
+                agent_id            text PRIMARY KEY,
+                monthly_usd_limit   numeric,
+                monthly_token_limit bigint,
+                alert_pct           int DEFAULT 80,
+                updated_at          timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS quota_alerts (
+                id          bigserial PRIMARY KEY,
+                agent_id    text,
+                period      text,          -- 'YYYY-MM'
+                level       int,           -- 80 | 100
+                usd         numeric,
+                tokens      bigint,
+                fired_at    timestamptz DEFAULT now(),
+                UNIQUE (agent_id, period, level)
             )
             """
         )
@@ -1569,3 +1623,271 @@ def list_training() -> list[dict]:
             "SELECT material_id, title, tags, provided_by, source_file, created_at "
             "FROM training_materials ORDER BY created_at DESC"
         ).fetchall()
+
+
+# ============================ Cost & Quota ============================
+# Chi phí ước tính (agent chạy bằng subscription của owner → không có hoá đơn theo
+# token; con số USD ở đây quy đổi theo giá API công khai để đo mức dùng + đặt hạn mức).
+
+def _price_for(model: str) -> tuple[float, float]:
+    m = (model or "").lower()
+    # khớp prefix dài nhất trước (vd 'claude-3-5-sonnet' trước 'claude-sonnet')
+    for key in sorted(MODEL_PRICES, key=len, reverse=True):
+        if key in m:
+            return MODEL_PRICES[key]
+    return _FALLBACK_PRICE
+
+
+def _cost_of_calls(calls) -> tuple[float, dict]:
+    """Trả (tổng USD ước tính, breakdown theo model{tokens,usd})."""
+
+    total = 0.0
+    by_model: dict = {}
+    for c in calls or []:
+        it = int(c.get("input_tokens", 0) or 0)
+        ot = int(c.get("output_tokens", 0) or 0)
+        pin, pout = _price_for(c.get("model", ""))
+        usd = it / 1e6 * pin + ot / 1e6 * pout
+        total += usd
+        mk = c.get("model") or "unknown"
+        b = by_model.setdefault(mk, {"tokens": 0, "usd": 0.0})
+        b["tokens"] += it + ot
+        b["usd"] += usd
+    return total, by_model
+
+
+def _month_bounds(period: str | None) -> tuple[datetime, datetime, str]:
+    """(start, end, 'YYYY-MM') cho tháng — mặc định tháng hiện tại (UTC+7)."""
+
+    tz = timezone(timedelta(hours=7))
+    now = datetime.now(tz)
+    if period:
+        y, m = int(period[:4]), int(period[5:7])
+    else:
+        y, m = now.year, now.month
+    start = datetime(y, m, 1, tzinfo=tz)
+    end = datetime(y + (m // 12), (m % 12) + 1, 1, tzinfo=tz)
+    return start, end, f"{y:04d}-{m:02d}"
+
+
+def _cost_rows(conn, start: datetime, end: datetime) -> list[dict]:
+    """Đọc trace trong khoảng, tính tokens + USD ước tính theo agent/ngày."""
+
+    rows = conn.execute(
+        """
+        SELECT agent_id,
+               (received_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AS day,
+               total_tokens,
+               coalesce(raw->'llm_calls','[]'::jsonb) AS calls
+        FROM agent_traces
+        WHERE received_at >= %s AND received_at < %s
+        """,
+        (start, end),
+    ).fetchall()
+    return rows
+
+
+def _aggregate_cost(rows: list[dict]):
+    """Gộp theo agent + theo ngày. Trả (per_agent, per_day)."""
+
+    per_agent: dict = {}
+    per_day: dict = {}
+    for r in rows:
+        aid = r["agent_id"] or "unknown"
+        usd, by_model = _cost_of_calls(r["calls"])
+        toks = int(r["total_tokens"] or 0)
+        a = per_agent.setdefault(aid, {"agent_id": aid, "runs": 0, "tokens": 0,
+                                       "usd": 0.0, "models": {}})
+        a["runs"] += 1
+        a["tokens"] += toks
+        a["usd"] += usd
+        for mk, b in by_model.items():
+            mm = a["models"].setdefault(mk, {"tokens": 0, "usd": 0.0})
+            mm["tokens"] += b["tokens"]
+            mm["usd"] += b["usd"]
+        dk = str(r["day"])
+        d = per_day.setdefault(dk, {"day": dk, "tokens": 0, "usd": 0.0})
+        d["tokens"] += toks
+        d["usd"] += usd
+    return per_agent, per_day
+
+
+def _quota_map(conn) -> dict:
+    return {q["agent_id"]: q for q in conn.execute(
+        "SELECT agent_id, monthly_usd_limit, monthly_token_limit, alert_pct "
+        "FROM agent_quotas").fetchall()}
+
+
+def _pct(usage: dict, q: dict | None) -> float | None:
+    """% hạn mức dùng — lấy max giữa % theo USD và % theo token."""
+
+    if not q:
+        return None
+    pcts = []
+    if q.get("monthly_usd_limit"):
+        pcts.append(usage["usd"] / float(q["monthly_usd_limit"]) * 100)
+    if q.get("monthly_token_limit"):
+        pcts.append(usage["tokens"] / float(q["monthly_token_limit"]) * 100)
+    return round(max(pcts), 1) if pcts else None
+
+
+@app.get("/v1/cost/summary")
+def cost_summary(period: str | None = None) -> dict:
+    """Tổng hợp chi phí ước tính + mức dùng theo agent cho một tháng."""
+
+    _ensure_schema()
+    start, end, pkey = _month_bounds(period)
+    with _db() as conn:
+        rows = _cost_rows(conn, start, end)
+        per_agent, per_day = _aggregate_cost(rows)
+        quotas = _quota_map(conn)
+        names = {a["agent_id"]: a for a in conn.execute(
+            "SELECT agent_id, name, owner, status FROM agents").fetchall()}
+    agents = []
+    for aid, u in per_agent.items():
+        q = quotas.get(aid)
+        meta = names.get(aid, {})
+        agents.append({
+            **u,
+            "usd": round(u["usd"], 4),
+            "name": meta.get("name"), "owner": meta.get("owner"),
+            "status": meta.get("status"),
+            "quota_usd": float(q["monthly_usd_limit"]) if q and q.get("monthly_usd_limit") else None,
+            "quota_tokens": int(q["monthly_token_limit"]) if q and q.get("monthly_token_limit") else None,
+            "alert_pct": q.get("alert_pct") if q else None,
+            "pct": _pct(u, q),
+        })
+    agents.sort(key=lambda x: x["usd"], reverse=True)
+    return {
+        "period": pkey,
+        "total_usd": round(sum(a["usd"] for a in agents), 4),
+        "total_tokens": sum(a["tokens"] for a in agents),
+        "total_runs": sum(a["runs"] for a in agents),
+        "agents": agents,
+    }
+
+
+@app.get("/v1/cost/timeseries")
+def cost_timeseries(period: str | None = None) -> dict:
+    """Chuỗi ngày (tokens + USD ước tính) trong tháng — cho biểu đồ."""
+
+    _ensure_schema()
+    start, end, pkey = _month_bounds(period)
+    with _db() as conn:
+        rows = _cost_rows(conn, start, end)
+    _, per_day = _aggregate_cost(rows)
+    series = [{"day": k, "tokens": v["tokens"], "usd": round(v["usd"], 4)}
+              for k, v in sorted(per_day.items())]
+    return {"period": pkey, "series": series}
+
+
+@app.get("/v1/quotas")
+def list_quotas() -> list[dict]:
+    _ensure_schema()
+    with _db() as conn:
+        return conn.execute(
+            "SELECT agent_id, monthly_usd_limit, monthly_token_limit, alert_pct, "
+            "updated_at FROM agent_quotas ORDER BY agent_id").fetchall()
+
+
+@app.post("/v1/quotas")
+def set_quota(body: dict, authorization: str = Header(default="")) -> dict:
+    """Đặt/sửa hạn mức tháng cho agent (USD ước tính và/hoặc token)."""
+
+    _require_admin(authorization)
+    _ensure_schema()
+    aid = body.get("agent_id")
+    if not aid:
+        raise HTTPException(status_code=422, detail="agent_id required")
+
+    def _num(v):
+        return None if v in (None, "", "null") else v
+
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO agent_quotas (agent_id, monthly_usd_limit, monthly_token_limit,
+                                      alert_pct, updated_at)
+            VALUES (%s,%s,%s,%s, now())
+            ON CONFLICT (agent_id) DO UPDATE SET
+              monthly_usd_limit=EXCLUDED.monthly_usd_limit,
+              monthly_token_limit=EXCLUDED.monthly_token_limit,
+              alert_pct=EXCLUDED.alert_pct, updated_at=now()
+            """,
+            (aid, _num(body.get("monthly_usd_limit")), _num(body.get("monthly_token_limit")),
+             int(body.get("alert_pct") or DEFAULT_ALERT_PCT)),
+        )
+        conn.commit()
+    return {"agent_id": aid, "ok": True}
+
+
+def _check_quota_alerts(conn) -> list[dict]:
+    """So mức dùng tháng hiện tại với hạn mức; gửi Lark khi vượt ngưỡng (1 lần/mức).
+
+    Mức cảnh báo: ngưỡng `alert_pct` của agent (mặc định 80%) và 100%.
+    Ghi vào quota_alerts (UNIQUE agent+period+level) → không spam lặp lại.
+    """
+
+    start, end, pkey = _month_bounds(None)
+    rows = _cost_rows(conn, start, end)
+    per_agent, _ = _aggregate_cost(rows)
+    quotas = _quota_map(conn)
+    owners = {a["agent_id"]: a for a in conn.execute(
+        "SELECT agent_id, name, owner FROM agents").fetchall()}
+    fired = []
+    for aid, q in quotas.items():
+        u = per_agent.get(aid, {"usd": 0.0, "tokens": 0})
+        pct = _pct(u, q)
+        if pct is None:
+            continue
+        thresh = int(q.get("alert_pct") or DEFAULT_ALERT_PCT)
+        for level in sorted({thresh, 100}):
+            if pct < level:
+                continue
+            # đã cảnh báo mức này trong tháng chưa?
+            dup = conn.execute(
+                "SELECT 1 FROM quota_alerts WHERE agent_id=%s AND period=%s AND level=%s",
+                (aid, pkey, level)).fetchone()
+            if dup:
+                continue
+            meta = owners.get(aid, {})
+            name = meta.get("name") or aid
+            msg = (f"⚠️ Hạn mức agent [{name}] tháng {pkey}: đã dùng ~{pct:.0f}% "
+                   f"(≈${u['usd']:.2f}, {u['tokens']:,} token). "
+                   f"Ngưỡng {level}%. Kiểm tra usage/điều chỉnh hạn mức.")
+            conn.execute(
+                "INSERT INTO quota_alerts (agent_id, period, level, usd, tokens) "
+                "VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+                (aid, pkey, level, round(u["usd"], 4), u["tokens"]))
+            _notify(conn, meta.get("owner"), "quota", aid, msg)
+            fired.append({"agent_id": aid, "level": level, "pct": pct,
+                          "usd": round(u["usd"], 2), "notified": meta.get("owner")})
+    conn.commit()
+    return fired
+
+
+@app.post("/v1/cost/check-alerts")
+def check_alerts(authorization: str = Header(default="")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        return {"fired": _check_quota_alerts(conn)}
+
+
+def _alert_loop() -> None:
+    """Daemon: định kỳ quét cảnh báo hạn mức (best-effort)."""
+
+    while True:
+        time.sleep(max(60, ALERT_INTERVAL))
+        try:
+            _ensure_schema()
+            with _db() as conn:
+                _check_quota_alerts(conn)
+        except Exception:
+            pass
+
+
+@app.on_event("startup")
+def _start_alert_daemon() -> None:
+    if ALERT_INTERVAL > 0:
+        threading.Thread(target=_alert_loop, daemon=True).start()

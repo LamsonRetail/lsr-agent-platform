@@ -47,7 +47,7 @@ Ký hiệu: ✅ xong & verify live · 🟡 code xong, chờ điều kiện bên 
 | C5 | Conflict → agent owner xác nhận (ở backend agent) | ✅ | |
 | C6 | Auto-route chuyên môn theo keywords | ✅ | notify đúng người |
 | C7 | **Link Lark đối chứng** (`source_url`) xuyên suốt | ✅ | UI cảnh báo "thiếu nguồn" |
-| C8 | Notify qua Lark cho reviewer | ✅ | scope contact OK; dùng email Lark trong tenant |
+| C8 | Notify qua Lark cho reviewer | 🟡 | code xong (batch → enterprise_email → quét đệ quy cây phòng ban); **chặn**: available range của app admin chỉ có 50 user whitelist (0 phòng ban) → không tra được người ngoài danh sách (vd BOD `thint@hapas.vn`) |
 
 ## D. Minh Anh (meeting agent)
 
@@ -66,7 +66,7 @@ Ký hiệu: ✅ xong & verify live · 🟡 code xong, chờ điều kiện bên 
 
 ## F. Backlog tính năng (4 nhóm bạn đã chọn)
 
-**Vận hành & tin cậy:** ⬜ cost/quota theo agent · ⬜ health monitor + cảnh báo Lark · ⬜ versioning/rollback prompt · ⬜ staging/canary
+**Vận hành & tin cậy:** ✅ cost/quota theo agent (dashboard + hạn mức + cảnh báo Lark tự động) · ⬜ health monitor + cảnh báo Lark · ⬜ versioning/rollback prompt · ⬜ staging/canary
 **Chất lượng & học hỏi:** ⬜ human feedback 👍/👎 có lý do · ⬜ golden set + regression test · ⬜ LLM judge (RIR/OFR/CTRL-Acc) · ⬜ marketplace prompt/skill
 **Kiến thức & phối hợp:** ⬜ semantic search resource index · ⬜ second brain toàn công ty · ⬜ agent-to-agent handoff
 **Quản trị & tuân thủ:** ⬜ audit log toàn platform · ⬜ RBAC theo phòng ban · ⬜ PII guard · ⬜ data retention
@@ -79,7 +79,7 @@ Ký hiệu: ✅ xong & verify live · 🟡 code xong, chờ điều kiện bên 
 
 | Chặn | Việc | Mở khoá |
 |------|------|---------|
-| C8 | Gửi email Lark **trong tenant** để test notify | Xác nhận notify tới người thật |
+| C8 | **Mở rộng available range** của app admin (Lark Admin → Developer Console → app → Permissions/Data scope → thêm phòng ban gốc hoặc toàn công ty) | Tra được open_id mọi reviewer/BOD; notify tới người thật |
 | D4 | Add Minh Anh vào 1 nhóm họp | Chạy thật biên bản họp |
 | E1 | Cấp scope `im:chat` (hoặc `im:chat.members:write_only`) cho app admin | Gỡ/thêm bot khi de/activate |
 | F | Danh sách squad/KPI/thành viên thật | Nạp second brain, chấm điểm thật |

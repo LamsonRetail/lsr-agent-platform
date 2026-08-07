@@ -23,6 +23,17 @@ export async function listAttempts() { return safe(() => jget(`${P}/v1/attempts`
 export async function listTraining() { return safe(() => jget(`${P}/v1/training`), []); }
 export async function tokenStats() { return safe(() => jget(`${C}/v1/stats`), []); }
 
+// --- Cost & Quota ---
+export async function costSummary(period?: string) {
+  const q = period ? `?period=${period}` : "";
+  return safe(() => jget(`${P}/v1/cost/summary${q}`), { period: "", total_usd: 0, total_tokens: 0, total_runs: 0, agents: [] });
+}
+export async function costTimeseries(period?: string) {
+  const q = period ? `?period=${period}` : "";
+  return safe(() => jget(`${P}/v1/cost/timeseries${q}`), { period: "", series: [] });
+}
+export async function quotas() { return safe(() => jget(`${P}/v1/quotas`), []); }
+
 async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try { return await fn(); } catch { return fallback; }
 }
