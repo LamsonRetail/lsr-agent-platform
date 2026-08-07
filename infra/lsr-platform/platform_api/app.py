@@ -616,14 +616,24 @@ def suggest_beliefs(body: dict, authorization: str = Header(default="")) -> dict
     domain = body.get("domain", "")
     filename = body.get("filename", "upload")
     # Tách câu/đoạn có tính "nguyên tắc" (heuristic; LLM judge ở giai đoạn sau).
-    KEYS = ("luôn", "không được", "phải", "nguyên tắc", "cam kết", "ưu tiên",
-            "chúng tôi tin", "giá trị", "tuyệt đối")
+    # So khớp KHÔNG phân biệt dấu để hoạt động với cả text có dấu lẫn không dấu.
+    import unicodedata
+
+    def _strip(s: str) -> str:
+        return "".join(
+            c for c in unicodedata.normalize("NFD", s.lower())
+            if unicodedata.category(c) != "Mn"
+        )
+
+    KEYS = tuple(_strip(k) for k in (
+        "luôn", "không được", "phải", "nguyên tắc", "cam kết", "ưu tiên",
+        "chúng tôi tin", "giá trị", "tuyệt đối", "không chia sẻ"))
     seen, out = set(), []
     for raw in re.split(r"[\n\.;]+", text):
         s = raw.strip()
         if len(s) < 15 or len(s) > 300:
             continue
-        low = s.lower()
+        low = _strip(s)
         if any(k in low for k in KEYS) and low not in seen:
             seen.add(low)
             out.append({
