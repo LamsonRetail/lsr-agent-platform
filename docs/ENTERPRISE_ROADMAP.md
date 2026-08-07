@@ -90,6 +90,17 @@ Ký hiệu: ✅ đã có · ➕ đề xuất bổ sung · 🔷 ưu tiên cao
 
 ---
 
+## ✅ Đã làm — nền forward-compat (chống rework)
+Đã dựng sẵn để 5 sóng dưới đây *cắm vào* mà không sửa agent/không phá dữ liệu cũ:
+- **Bề mặt enforcement DUY NHẤT**: collector `/v1/policy/check` + hook `PreToolUse`/
+  `UserPromptSubmit` trong plugin bắt buộc + bảng `policies` (admin ghi). Hiện no-op
+  (rỗng→allow) → **Sóng 1 chỉ cần thêm rule**, không đụng agent. Verify: deny theo
+  tool/pattern hoạt động.
+- **Trace** đã có `duration_ms/status/error` (tích luỹ sẵn cho Sóng 4).
+- **Audit `actor`** lấy từ header `X-Actor` (server web đóng dấu) → sẵn sàng cho RBAC.
+- **Con trỏ version prompt** trong manifest + registry → rollback = đổi con trỏ.
+- **`retention_config`** khai báo TTL + index thời gian (chưa bật purge).
+
 ## Đề xuất thứ tự (sóng tiếp theo)
 1. **Guardrails runtime** (prompt-injection + output DLP) — rủi ro bảo mật lớn nhất còn hở.
 2. **Data retention & purge** — chuẩn CAF bắt buộc, ta đang giữ vô hạn.
