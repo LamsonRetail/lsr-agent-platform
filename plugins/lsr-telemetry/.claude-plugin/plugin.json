@@ -1,6 +1,6 @@
 {
   "name": "lsr-telemetry",
-  "version": "0.1.0",
-  "description": "Ghi telemetry (tool call, token, output) của agent về LSR collector — control point khi dùng Claude Agent SDK subscription (không API key).",
+  "version": "0.2.0",
+  "description": "Ghi telemetry (tool call, token, output) + điểm chặn runtime (PreToolUse/UserPromptSubmit gọi Policy API) của agent về LSR platform — control point khi dùng Claude Agent SDK subscription (không API key).",
   "author": { "name": "LamsonRetail" }
 }
