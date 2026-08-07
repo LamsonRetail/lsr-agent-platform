@@ -33,10 +33,10 @@
 }
 
 platform.34-126-154-135.sslip.io {
-	# Self-service enroll: xác thực bằng LSR_ENROLL_TOKEN ở app (không cần gateway token)
-	# để thành viên tự đăng ký agent. Vẫn rate-limit theo IP.
-	@enroll path /v1/agents/enroll
-	handle @enroll {
+	# Self-service enroll + tải script bootstrap: mở (không cần gateway token; enroll
+	# vẫn cần LSR_ENROLL_TOKEN ở app, bootstrap chỉ allowlist 2 file). Vẫn rate-limit.
+	@selfserve path /v1/agents/enroll /bootstrap/*
+	handle @selfserve {
 		rate_limit {
 			zone zenroll {
 				key {remote_host}

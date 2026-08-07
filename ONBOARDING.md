@@ -82,9 +82,9 @@ Sai chuẩn → CI fail, không merge được. Admin review & merge.
 `.claude/settings.json`, và tự đăng ký nhận telemetry key, **không sửa logic agent**:
 
 ```bash
-# lấy script + trace handler từ repo platform (1 lần)
-curl -O https://raw.githubusercontent.com/LamsonRetail/lsr-agent-platform/main/scripts/lsr_adopt.py
-curl -O https://raw.githubusercontent.com/LamsonRetail/lsr-agent-platform/main/plugins/lsr-telemetry/scripts/lsr_trace.py
+# lấy script + trace handler TỪ PLATFORM (repo private nên không dùng raw GitHub)
+curl -O https://platform.34-126-154-135.sslip.io/bootstrap/lsr_adopt.py
+curl -O https://platform.34-126-154-135.sslip.io/bootstrap/lsr_trace.py
 
 # chạy trong repo agent của bạn (self-service bằng enroll token)
 python3 lsr_adopt.py \

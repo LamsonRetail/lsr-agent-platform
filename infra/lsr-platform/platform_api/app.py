@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import pathlib
 import re
 import secrets
 import threading
@@ -26,6 +27,7 @@ from datetime import datetime, timedelta, timezone
 import psycopg
 import requests
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi.responses import PlainTextResponse
 from psycopg.rows import dict_row
 from psycopg.types.json import Json
 
@@ -531,6 +533,25 @@ def _minh_anh_share(agent_id: str) -> bool:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+_BOOTSTRAP_DIR = pathlib.Path(__file__).parent / "bootstrap"
+_BOOTSTRAP_ALLOW = {"lsr_adopt.py", "lsr_trace.py"}
+
+
+@app.get("/bootstrap/{name}")
+def bootstrap(name: str):
+    """Phục vụ script bootstrap self-service (không cần GitHub/auth) — vì repo private.
+
+    Chỉ allowlist 2 file. Dùng: curl PLATFORM/bootstrap/lsr_adopt.py -O
+    """
+
+    if name not in _BOOTSTRAP_ALLOW:
+        raise HTTPException(status_code=404, detail="not found")
+    p = _BOOTSTRAP_DIR / name
+    if not p.exists():
+        raise HTTPException(status_code=503, detail="chưa publish (deploy lại platform)")
+    return PlainTextResponse(p.read_text(encoding="utf-8"), media_type="text/x-python")
 
 
 @app.post("/v1/agents/register")

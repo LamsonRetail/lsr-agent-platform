@@ -8,6 +8,8 @@ on:
     paths:
       - "infra/lsr-platform/**"
       - "apps/platform-web/**"
+      - "scripts/lsr_adopt.py"
+      - "plugins/lsr-telemetry/scripts/lsr_trace.py"
       - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
@@ -32,6 +34,12 @@ jobs:
         run: |
           mkdir -p infra/lsr-platform/lsr_brain/src
           cp -r src/rating_agent infra/lsr-platform/lsr_brain/src/
+
+      - name: Chuẩn bị script bootstrap self-service (platform tự serve)
+        run: |
+          mkdir -p infra/lsr-platform/platform_api/bootstrap
+          cp scripts/lsr_adopt.py infra/lsr-platform/platform_api/bootstrap/
+          cp plugins/lsr-telemetry/scripts/lsr_trace.py infra/lsr-platform/platform_api/bootstrap/
 
       - name: Rsync infra → VM (giữ nguyên .env, volume)
         run: |
