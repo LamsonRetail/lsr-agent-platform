@@ -205,6 +205,68 @@ reverse proxy + TLS. SSH & bố trí service: [infra/DEPLOY.md](infra/DEPLOY.md)
 
 ---
 
+## 10c. Bổ sung phạm vi (mới — chờ triển khai)
+
+### (1) Đăng ký agent CÓ SẴN từ dự án khác (external agents)
+Agent đã chạy ở repo/hạ tầng khác (không trên VM/Vercel của platform) vẫn **đăng ký
+được**, **giữ nguyên cấu hình**, platform chỉ **quan sát + điều phối**.
+
+- **Chế độ triển khai** thêm trường `deployment`: `managed` (platform host) |
+  **`external`** (team tự host). External thì platform **không** đụng vào runtime.
+- **Adopt bằng 1 lệnh** trong repo sẵn có: `lsr-agent adopt` →
+  (a) sinh `lsr-agent.yaml` từ cấu hình đang có (không sửa code), (b) cài **plugin
+  telemetry** cho Claude Code, (c) gọi `/v1/agents/register` với `deployment=external`
+  → nhận `TELEMETRY_API_KEY`; owner vẫn dùng **subscription của mình**.
+- **Nắm được để lên dashboard**: agent gửi trace (token, tool, output) về collector;
+  platform hiển thị usage/kết quả/test như agent managed.
+- **Giới hạn cần nói rõ**: với external, platform **không kill process được** — cơ chế
+  cắt là: thu hồi telemetry key + **cắt kết nối Lark** (xem (2)) + đánh dấu
+  `deactivated` trên dashboard (bot không nhận/không trả việc được nữa).
+- **Vẫn code thêm bằng Claude Code**: repo của team giữ nguyên; chỉ thêm plugin +
+  manifest, CI chuẩn chạy được nếu họ copy `tests/test_agent_standards.py`.
+
+### (2) Platform kết nối Lark bằng tài khoản admin (activate/deactivate đồng bộ)
+Khi platform bật/tắt agent → **bot/account Lark tương ứng cũng bật/tắt**.
+**Nguyên tắc tuyệt đối: KHÔNG xoá bất kỳ dữ liệu nào** (chỉ thay đổi trạng thái/quyền).
+
+- **App admin riêng** của platform (khác app của từng agent) với scope quản trị
+  (contact/user admin, chat member admin).
+- **Deactivate agent** → theo `connect_mode`:
+  - `bot`: **gỡ bot khỏi các chat** đang phục vụ (giữ nguyên lịch sử tin nhắn) +
+    ghi lại danh sách `chat_id` để khôi phục.
+  - `user`: **thu hồi quyền/đình chỉ đăng nhập** tài khoản đó (không xoá user, không
+    xoá dữ liệu, không "resign").
+- **Activate lại** → add bot trở lại đúng các chat đã lưu / khôi phục quyền.
+- **Audit**: mọi thao tác ghi `lark_admin_actions` (ai, khi nào, agent nào, trước/sau).
+- ⚠️ **Cần xác nhận khả thi**: Lark Open Platform **không có API public để bật/tắt một
+  Custom App**; việc disable app phải làm trong Admin Console. Vì vậy cơ chế khả thi
+  là **gỡ/khôi phục bot khỏi chat + thu hồi token**, và với user account là **đình chỉ
+  đăng nhập**. Sẽ xác minh scope thực tế khi có app admin.
+
+### (3) Second brain của team (bảng chung, không rải rác)
+Agent phục vụ squad/chapter/team cần biết **ai trong team, làm gì, phối hợp thế nào**.
+Dùng **bảng chung của platform** (không mỗi agent một nơi):
+
+| Bảng | Nội dung |
+|------|----------|
+| `teams` | team_id, loại (squad/chapter/team), tên, mục tiêu, lead, kênh Lark |
+| `team_members` | team_id, họ tên, `lark_user_id`, vai trò, chuyên môn, backup, giờ làm việc |
+| `team_kpis` | team_id, tên KPI, đơn vị, **công thức**, nguồn dữ liệu, target, kỳ, trọng số |
+| `team_context` | "second brain": ghi chú, quy ước, quyết định, cách phối hợp (dạng md + tags) |
+
+- Agent **đọc qua Platform API** (`GET /v1/teams/{id}/brain`) — không nhồi vào memory,
+  tra cứu khi cần (đúng nguyên tắc chống long-memory).
+- Nguồn nạp: **checklist golive** (mục B, C) + cập nhật dần từ Minh Anh (biên bản họp)
+  và quản lý team.
+
+### (4) Checklist golive bắt buộc
+Xem đầy đủ: **[GOLIVE_CHECKLIST.md](GOLIVE_CHECKLIST.md)** — 8 nhóm (định danh/sở hữu,
+con người & phối hợp, KPI & cách tính, phạm vi dữ liệu, kết nối & auth, chất lượng &
+an toàn, vận hành sau golive, tuân thủ). Platform **chặn golive** nếu thiếu mục bắt
+buộc; dữ liệu nộp vào chảy thẳng vào **second brain** (3) và bảng KPI.
+
+---
+
 ## 11. Lộ trình
 
 ### Giai đoạn 0 — Chốt thiết kế (đang ở đây)
@@ -228,6 +290,44 @@ reverse proxy + TLS. SSH & bố trí service: [infra/DEPLOY.md](infra/DEPLOY.md)
 
 ### Giai đoạn 4 — Vận hành
 - Multi-team, quota, cảnh báo, báo cáo định kỳ.
+
+---
+
+## 11b. Đề xuất tính năng agent platform (ứng viên — chọn rồi mới đưa vào lộ trình)
+
+Nhóm theo giá trị; ✅ = đã có, còn lại là đề xuất.
+
+**Vận hành & tin cậy**
+1. **Cost & quota theo agent/squad** — trần token/chi phí ngày–tháng, cảnh báo khi vọt.
+2. **Health monitor + cảnh báo Lark** — agent lỗi/không phản hồi/usage tụt → báo owner.
+3. **Kill switch tức thời + lịch sử** — tắt agent 1 nút, có audit ai tắt/khi nào (đã có nền).
+4. **Versioning & rollback prompt/config** — mỗi lần sửa system prompt/skill là 1 version,
+   quay lại được bản trước.
+5. **Staging/canary** — thử agent với nhóm nhỏ trước khi mở toàn team.
+
+**Chất lượng & học hỏi**
+6. **Human feedback loop** — 👍/👎 + lý do trên từng câu trả lời trong Lark → vào điểm chất lượng.
+7. **Golden set & regression test** — bộ câu hỏi chuẩn, chạy lại mỗi lần đổi prompt để
+   phát hiện tụt chất lượng.
+8. **LLM judge cho RIR/OFR/CTRL-Acc** — chấm ngữ nghĩa tự động (đang để nhãn tay).
+9. **Prompt/skill marketplace nội bộ** — chia sẻ prompt/MCP tốt giữa các team.
+
+**Kiến thức & phối hợp**
+10. **Second brain toàn công ty** (ngoài team) — thuật ngữ, quy trình, quyết định chung.
+11. **Agent-to-agent handoff** — agent chuyển việc cho agent khác (vd Minh Anh → agent squad).
+12. **Semantic search trên resource index** — tìm theo ngữ nghĩa thay vì từ khoá.
+
+**Quản trị & tuân thủ**
+13. **RBAC & phân quyền theo phòng ban** — ai xem/sửa/tắt agent nào.
+14. **Audit log toàn platform** — mọi thao tác admin, xem được, không xoá.
+15. **PII guard** — tự phát hiện/che dữ liệu nhạy cảm trong trace & log.
+16. **Data retention policy** — tự dọn trace cũ theo chính sách.
+
+**Trải nghiệm**
+17. **Agent catalog cho nhân viên** — "cửa hàng" agent nội bộ: agent nào làm được gì, dùng thế nào.
+18. **Onboarding wizard** — hướng dẫn tạo agent từng bước trên UI (thay vì CLI).
+19. **Báo cáo định kỳ tự động** — tuần/tháng gửi Lark: hiệu quả squad, top agent, agent cần xử lý.
+20. **Chat trực tiếp với agent trên dashboard** — thử nhanh không cần vào Lark.
 
 ---
 

@@ -250,3 +250,20 @@ Từ điển skill để **đánh giá agent theo skill**.
 
 Sau khi bạn confirm, tôi sẽ: (a) chốt schema, (b) sinh code data model + connector
 đọc/ghi Lark Base, (c) tách scorer thành 2 nhánh squad/agent, (d) module test agent.
+
+---
+
+## 9. Bảng bổ sung (phạm vi mới — PLAN §10c)
+
+| Bảng | Nội dung chính |
+|------|----------------|
+| `agents` (mở rộng) | + `deployment` (`managed`\|`external`), `backup_owner`, `lark_chat_ids` (để khôi phục khi activate lại) |
+| `teams` | team_id, loại (squad/chapter/team), tên, mục tiêu, lead, kênh Lark |
+| `team_members` | team_id, họ tên, `lark_user_id`, vai trò, chuyên môn, backup, giờ làm việc |
+| `team_kpis` | team_id, tên KPI, đơn vị, **công thức**, nguồn dữ liệu, target, kỳ, trọng số |
+| `team_context` | second brain: ghi chú/quy ước/quyết định (markdown + tags) |
+| `agent_golive_checklist` | câu trả lời checklist golive theo agent (xem GOLIVE_CHECKLIST.md) |
+| `lark_admin_actions` | audit thao tác admin Lark: agent, hành động, chat_id trước/sau, người thực hiện, thời điểm |
+
+> Nguyên tắc: **bảng chung của platform** — không để thông tin team rải rác theo từng agent.
+> Mọi thao tác Lark admin chỉ đổi trạng thái/quyền, **không xoá dữ liệu**.
