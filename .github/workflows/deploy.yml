@@ -46,6 +46,9 @@ jobs:
           cp installers/lsr-install.command infra/lsr-platform/platform_api/bootstrap/
           cp installers/lsr-install.bat infra/lsr-platform/platform_api/bootstrap/
           ( cd plugins && zip -rq ../infra/lsr-platform/platform_api/bootstrap/lsr-telemetry-plugin.zip lsr-telemetry -x '*/__pycache__/*' )
+          # Bake plugin vào image agent_runner (chạy agent trên VM)
+          rm -rf infra/lsr-platform/agent_runner/plugin
+          cp -r plugins/lsr-telemetry infra/lsr-platform/agent_runner/plugin
 
       - name: Rsync infra → VM (giữ nguyên .env, volume)
         run: |
@@ -67,7 +70,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new \
             "${{ secrets.LSR_DEPLOY_USER }}@${{ secrets.LSR_DEPLOY_HOST }}" \
-            'cd /opt/lsr-platform && sudo docker compose up -d --build && sleep 3 && sudo docker compose up -d && sudo docker compose restart caddy && sudo docker compose ps --format "table {{.Service}}\t{{.Status}}"'
+            'cd /opt/lsr-platform && sudo docker build -t lsr-agent-runner:latest ./agent_runner && sudo docker compose up -d --build && sleep 3 && sudo docker compose up -d && sudo docker compose restart caddy && sudo docker compose ps --format "table {{.Service}}\t{{.Status}}"'
 
       - name: Verify services (fail nếu API không lên)
         run: |

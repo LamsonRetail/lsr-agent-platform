@@ -42,3 +42,5 @@ infra/lsr-platform/platform_api/bootstrap/*.sh
 infra/lsr-platform/platform_api/bootstrap/*.command
 infra/lsr-platform/platform_api/bootstrap/*.bat
 infra/lsr-platform/platform_api/bootstrap/*.zip
+# plugin bake vào agent_runner khi deploy (nguồn: plugins/lsr-telemetry)
+infra/lsr-platform/agent_runner/plugin/

@@ -81,8 +81,33 @@ services:
       MINH_ANH_LARK_APP_SECRET: ${MINH_ANH_LARK_APP_SECRET:-}
       LARK_NOTIFY_CHAT_ID: ${LARK_NOTIFY_CHAT_ID:-}
       LARK_DOMAIN: ${LARK_DOMAIN:-https://open.larksuite.com}
+      AGENT_RUNNER_IMAGE: ${AGENT_RUNNER_IMAGE:-lsr-agent-runner:latest}
+      LSR_AGENT_NETWORK: ${LSR_AGENT_NETWORK:-lsr-platform_default}
+      # Nơi chạy agent GĐ này = docker-socket-proxy trên VM chung (quyền hạn chế).
+      # Tương lai: agent set runtime_host = daemon VM riêng → không đổi code.
+      AGENT_DOCKER_HOST: ${AGENT_DOCKER_HOST:-tcp://docker_proxy:2375}
     ports:
       - "127.0.0.1:8090:8090"
+    restart: unless-stopped
+    depends_on:
+      - docker_proxy
+
+  # Proxy socket Docker: platform_api chỉ được thao tác CONTAINER (tạo/stop/start),
+  # KHÔNG toàn quyền root socket. Chỉ socket được mount vào ĐÂY (không vào API).
+  docker_proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    environment:
+      CONTAINERS: 1        # xem/tạo container
+      IMAGES: 1            # dùng image runner local
+      NETWORKS: 1          # gắn network nội bộ
+      POST: 1              # cho phép tạo/stop/start (mặc định read-only)
+      EXEC: 0
+      VOLUMES: 0
+      INFO: 0
+      AUTH: 0
+      SWARM: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
 
   bq_sink:

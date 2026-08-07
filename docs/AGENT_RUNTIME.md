@@ -30,23 +30,29 @@ chứa `CLAUDE_CODE_OAUTH_TOKEN` (của owner), `LSR_AGENT_ID`, `LSR_COLLECTOR`,
 (hoặc systemd), `restart: unless-stopped`, có giới hạn tài nguyên (CPU/RAM) để không ảnh
 hưởng app khác trên VM dùng chung.
 
-**Cách owner token lên VM — 2 lựa chọn (cần chốt):**
-1. **Qua platform (self-service):** endpoint `POST /v1/self/deploy` (auth = agent token) nhận
-   `oauth_token` (owner dán token `claude setup-token`) + tham chiếu code (repo). Platform
-   (có quyền VM) tạo service, lưu token vào `/opt/lsr-agents/<id>/.env` (chmod 600, ngoài git).
-   → Owner không cần SSH. Token subscription đi qua platform (platform là control point).
-2. **Admin provisioning:** owner gửi token cho admin qua kênh an toàn; admin chạy script
-   `provision-agent-vm.sh <id>` (SSH sẵn) đặt token + dựng service. Kín hơn nhưng thủ công.
+## Đã chốt (thiết kế ít-đổi-khi-scale)
+- **Self-service qua platform:** `POST /v1/self/deploy` (auth = agent token) nhận `oauth_token`
+  (owner dán từ `claude setup-token`) + repo/start_cmd tuỳ chọn → platform chạy **1 container/agent**.
+- **Docker per-agent** với giới hạn CPU/RAM, `restart: unless-stopped`, network nội bộ.
+- **Trừu tượng hoá nơi chạy = `DockerClient(base_url=host)`:**
+  - **GĐ này (1 VM chung):** host = **docker-socket-proxy** (`tcp://docker_proxy:2375`) — platform_api
+    KHÔNG mount socket thẳng; proxy chỉ mở quyền CONTAINER/IMAGE/NETWORK + POST. Giảm blast radius.
+  - **Tương lai (agent/VM riêng):** đặt cột `agents.runtime_host` = daemon của VM đó
+    (`tcp://vm-x:2376` TLS). **KHÔNG đổi code** — cùng `_docker_client(agent_id)`.
+- **De/activate ⇄ stop/start** container tương ứng (nối trong `set_status`).
+- Token subscription truyền thẳng vào container qua daemon (không ghi file host → thân thiện đa-VM);
+  KHÔNG log. Xoay khi owner đổi.
 
-**Bảo mật bắt buộc:**
-- Token subscription là secret → `.env` root-only, KHÔNG commit, KHÔNG log; xoay khi owner đổi.
-- Cô lập tài nguyên per-agent (VM dùng chung với app khác ở port 3000/8080 — không được đụng).
-- De/activate agent → dừng/khởi động service tương ứng (đã có kill-switch collector; thêm
-  dừng process).
-- Ghi audit khi deploy/dừng agent.
+## Đường nâng cấp lên nhiều VM (khi cần) — chỉ config, không sửa code
+1. Dựng VM agent mới, chạy Docker + **docker-socket-proxy** (hoặc daemon TLS) trên đó.
+2. Set `agents.runtime_host` cho các agent muốn chuyển → lần deploy sau chạy trên VM mới.
+3. (tuỳ chọn) Cân bằng tải: gán runtime_host theo squad/nhóm.
 
-## Việc cần làm (khi chốt)
-- [ ] Script/endpoint provisioning (chọn cách 1 hoặc 2).
-- [ ] Template service (docker-compose fragment) cho agent + giới hạn tài nguyên.
-- [ ] Nối de/activate ⇄ start/stop service.
-- [ ] Cập nhật onboard: sau enroll → deploy runtime lên VM; Vercel chỉ cho FE/BE.
+## Bảo mật
+- Socket Docker chỉ vào **proxy** (quyền hạn chế), không vào API web-facing.
+- VM chung với app khác (port 3000/8080) — giới hạn tài nguyên per-agent, không đụng.
+- Ghi audit khi deploy/dừng agent (`deploy_vm`, `set_status.vm`).
+
+## Việc còn lại
+- [ ] Cập nhật onboard: sau enroll → gọi `/v1/self/deploy` (owner dán setup-token).
+- [ ] (tương lai) UI đặt `runtime_host` per-agent khi tách VM.

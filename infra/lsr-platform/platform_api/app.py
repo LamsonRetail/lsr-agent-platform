@@ -44,6 +44,34 @@ COLLECTOR_PUBLIC_URL = os.environ.get(
 # URL bảng điều khiển (web UI) — sinh link dashboard/backend riêng cho từng agent.
 APP_PUBLIC_URL = os.environ.get(
     "LSR_APP_PUBLIC", "https://app.34-126-154-135.sslip.io").rstrip("/")
+# --- Agent runtime trên VM (docker per-agent, subscription của owner) ---
+# Trừu tượng hoá "nơi chạy": platform nói chuyện với 1 Docker daemon qua base_url.
+# GĐ này: trỏ tới docker-socket-proxy trên VM chung (quyền hạn chế, KHÔNG mount socket
+# thẳng vào API). Tương lai: mỗi agent set `runtime_host` = daemon của VM riêng → KHÔNG
+# đổi code, chỉ đổi target.
+AGENT_RUNNER_IMAGE = os.environ.get("AGENT_RUNNER_IMAGE", "lsr-agent-runner:latest")
+AGENT_NETWORK = os.environ.get("LSR_AGENT_NETWORK", "lsr-platform_default")
+AGENT_DOCKER_HOST = os.environ.get("AGENT_DOCKER_HOST", "tcp://docker_proxy:2375")
+
+
+def _agent_container(agent_id: str) -> str:
+    return "lsr-agent-" + re.sub(r"[^a-z0-9_.-]", "-", agent_id.lower())
+
+
+def _agent_runtime_host(agent_id: str) -> str:
+    """Docker daemon để chạy agent: runtime_host riêng nếu có, mặc định proxy VM chung."""
+    try:
+        with _db() as conn:
+            row = conn.execute("SELECT runtime_host FROM agents WHERE agent_id=%s",
+                               (agent_id,)).fetchone()
+        return (row or {}).get("runtime_host") or AGENT_DOCKER_HOST
+    except Exception:
+        return AGENT_DOCKER_HOST
+
+
+def _docker_client(agent_id: str):
+    import docker  # type: ignore
+    return docker.DockerClient(base_url=_agent_runtime_host(agent_id))
 
 
 def _agent_links(agent_id: str, backend_url: str = "", dashboard_url: str = "") -> dict:
@@ -463,6 +491,8 @@ def _ensure_schema() -> None:
         # Backend riêng của agent (config/chi tiết/dashboard) — đăng ký kèm URL.
         conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS backend_url text")
         conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS dashboard_url text")
+        # Nơi chạy agent runtime: NULL = VM chung (proxy mặc định); set = daemon VM riêng.
+        conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime_host text")
         # Item 3: bảng policies (admin ghi; collector đọc để chặn runtime).
         conn.execute(
             """
@@ -669,6 +699,85 @@ def self_set_backend(body: dict, authorization: str = Header(default="")) -> dic
                {"backend_url": body.get("backend_url")})
         conn.commit()
     return {"agent_id": aid, "backend_url": body.get("backend_url"), "ok": True}
+
+
+@app.post("/v1/self/deploy")
+def self_deploy(body: dict, authorization: str = Header(default="")) -> dict:
+    """Self-service: chạy AGENT runtime trên VM (docker per-agent) bằng subscription owner.
+
+    body: { oauth_token (bắt buộc, từ `claude setup-token`), repo?, start_cmd?, mem_mb?, cpus? }
+    Token subscription lưu root-only trên VM, KHÔNG log. Một container / agent, giới hạn tài nguyên.
+    """
+
+    aid = _require_self(authorization)
+    tok = authorization[7:] if authorization.startswith("Bearer ") else ""
+    oauth = (body.get("oauth_token") or "").strip()
+    if not oauth:
+        raise HTTPException(status_code=422, detail="cần oauth_token (chạy `claude setup-token`)")
+    try:
+        client = _docker_client(aid)
+    except Exception:
+        raise HTTPException(status_code=501, detail="runtime chưa bật (thiếu docker SDK/host)")
+
+    # Env truyền thẳng vào container qua daemon (không ghi file host — thân thiện đa-VM).
+    env = {
+        "CLAUDE_CODE_OAUTH_TOKEN": oauth,
+        "LSR_AGENT_ID": aid,
+        "LSR_COLLECTOR": "http://collector:8081",   # nội bộ docker network (GĐ VM chung)
+        "LSR_TELEMETRY_API_KEY": tok,
+        "AGENT_REPO": body.get("repo") or "",
+        "AGENT_START_CMD": body.get("start_cmd") or "",
+    }
+    name = _agent_container(aid)
+    mem = int(body.get("mem_mb") or 512)
+    cpus = float(body.get("cpus") or 0.5)
+    try:
+        try:
+            client.containers.get(name).remove(force=True)
+        except Exception:
+            pass
+        c = client.containers.run(
+            AGENT_RUNNER_IMAGE, name=name, detach=True,
+            environment=env, network=AGENT_NETWORK,
+            restart_policy={"Name": "unless-stopped"},
+            mem_limit=f"{mem}m", nano_cpus=int(cpus * 1e9),
+            labels={"lsr-agent": aid},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"không chạy được container: {str(exc)[:200]}")
+    with _db() as conn:
+        _audit(conn, aid, "deploy_vm", "agent", aid,
+               {"container": name, "host": _agent_runtime_host(aid),
+                "repo": bool(body.get("repo")), "mem_mb": mem, "cpus": cpus})
+        conn.commit()
+    return {"agent_id": aid, "container": name, "status": c.status,
+            "runtime_host": _agent_runtime_host(aid),
+            "note": "agent chạy bằng subscription owner; telemetry + enforce đã bật"}
+
+
+@app.get("/v1/self/deploy/status")
+def self_deploy_status(authorization: str = Header(default="")) -> dict:
+    aid = _require_self(authorization)
+    try:
+        c = _docker_client(aid).containers.get(_agent_container(aid))
+        return {"agent_id": aid, "container": c.name, "status": c.status,
+                "runtime_host": _agent_runtime_host(aid),
+                "started": (c.attrs.get("State") or {}).get("StartedAt")}
+    except Exception:
+        return {"agent_id": aid, "status": "not_deployed"}
+
+
+def _agent_vm_action(agent_id: str, action: str) -> str:
+    """start/stop container runtime của agent (dùng khi de/activate). Best-effort."""
+    try:
+        c = _docker_client(agent_id).containers.get(_agent_container(agent_id))
+        if action == "stop":
+            c.stop(timeout=10)
+        elif action == "start":
+            c.start()
+        return c.status
+    except Exception:
+        return "n/a"
 
 
 @app.post("/v1/self/conflicts/{conflict_id}/resolve")
@@ -889,10 +998,13 @@ def set_status(agent_id: str, body: dict, authorization: str = Header(default=""
         if status in ("active", "deactivated"):
             # Đồng bộ Lark: tắt agent -> gỡ bot khỏi chat; bật lại -> thêm vào lại.
             lark = _sync_lark_status(conn, agent_id, activate=(status == "active"))
+        # Đồng bộ runtime VM: tắt agent -> stop container; bật lại -> start (nếu đã deploy).
+        vm = _agent_vm_action(agent_id, "start" if status == "active" else "stop") \
+            if status in ("active", "deactivated") else None
         _audit(conn, x_actor or "admin", "set_status", "agent", agent_id,
-               {"status": status, "forced": bool(body.get("force")), "lark_sync": lark})
+               {"status": status, "forced": bool(body.get("force")), "lark_sync": lark, "vm": vm})
         conn.commit()
-    return {"agent_id": agent_id, "status": status, "lark_sync": lark}
+    return {"agent_id": agent_id, "status": status, "lark_sync": lark, "vm": vm}
 
 
 # ======================= Second brain của team =======================
