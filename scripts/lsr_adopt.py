@@ -128,6 +128,11 @@ def install_hooks(root: Path, trace_src: Path | None) -> list[str]:
             settings = {}
     hooks = settings.setdefault("hooks", {})
     cmd = f'python3 "$CLAUDE_PROJECT_DIR/{TRACE_SCRIPT}"'
+    # Điểm chặn runtime (hỏi Policy API) + telemetry — khớp plugin lsr-telemetry.
+    hooks.setdefault("PreToolUse", []).append(
+        {"matcher": "*", "hooks": [{"type": "command", "command": f"{cmd} pre-tool"}]})
+    hooks.setdefault("UserPromptSubmit", []).append(
+        {"hooks": [{"type": "command", "command": f"{cmd} pre-prompt"}]})
     hooks.setdefault("PostToolUse", []).append(
         {"matcher": "*", "hooks": [{"type": "command", "command": f"{cmd} post-tool"}]})
     hooks.setdefault("Stop", []).append(
@@ -138,19 +143,29 @@ def install_hooks(root: Path, trace_src: Path | None) -> list[str]:
     return written
 
 
-def register(platform: str, admin_token: str, payload: dict) -> dict:
+def _post(platform: str, path: str, token: str, payload: dict) -> dict:
     req = urllib.request.Request(
-        platform.rstrip("/") + "/v1/agents/register",
+        platform.rstrip("/") + path,
         data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json",
-                 "Authorization": f"Bearer {admin_token}"},
+                 "Authorization": f"Bearer {token}"},
         method="POST",
     )
     gw = os.environ.get("LSR_GATEWAY_TOKEN")
     if gw:
-        req.add_header("X-Gateway-Token", gw)
+        req.add_header("X-Gateway-Token", gw)  # chỉ cần cho /register (admin); enroll thì bỏ qua
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read().decode())
+
+
+def register(platform: str, admin_token: str, payload: dict) -> dict:
+    """Admin đăng ký (đầy đủ quyền)."""
+    return _post(platform, "/v1/agents/register", admin_token, payload)
+
+
+def enroll(platform: str, enroll_token: str, payload: dict) -> dict:
+    """Self-service: thành viên tự đăng ký bằng enroll token (agent inactive + cấp key)."""
+    return _post(platform, "/v1/agents/enroll", enroll_token, payload)
 
 
 def main() -> int:
@@ -165,6 +180,8 @@ def main() -> int:
     ap.add_argument("--platform", default=os.environ.get("LSR_PLATFORM_URL", ""))
     ap.add_argument("--collector", default=os.environ.get("LSR_COLLECTOR", ""))
     ap.add_argument("--admin-token", default=os.environ.get("PLATFORM_ADMIN_TOKEN", ""))
+    ap.add_argument("--enroll-token", default=os.environ.get("LSR_ENROLL_TOKEN", ""),
+                    help="token self-service (thành viên tự đăng ký, không cần admin)")
     ap.add_argument("--trace-script", default="", help="đường dẫn lsr_trace.py của platform")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
@@ -194,14 +211,20 @@ def main() -> int:
         print("  ⚠ Chưa copy lsr_trace.py — chạy lại với --trace-script <đường dẫn> "
               "hoặc lấy từ plugins/lsr-telemetry/scripts/lsr_trace.py")
 
-    if args.platform and args.admin_token:
+    payload = {
+        "agent_id": args.id, "name": args.name, "owner": args.owner,
+        "squad": args.squad, "connect_mode": args.connect_mode,
+        "skills": skills, "deployment": "external",
+        "repo_url": repo_url, "host_note": args.host_note,
+    }
+    # Ưu tiên admin-token (đầy đủ); nếu không có thì dùng enroll-token (self-service).
+    do_admin = bool(args.platform and args.admin_token)
+    do_enroll = bool(args.platform and not args.admin_token and args.enroll_token)
+    if do_admin or do_enroll:
         try:
-            res = register(args.platform, args.admin_token, {
-                "agent_id": args.id, "name": args.name, "owner": args.owner,
-                "squad": args.squad, "connect_mode": args.connect_mode,
-                "skills": skills, "deployment": "external",
-                "repo_url": repo_url, "host_note": args.host_note,
-            })
+            res = (register(args.platform, args.admin_token, payload) if do_admin
+                   else enroll(args.platform, args.enroll_token, payload))
+            print(f"  (đăng ký qua {'admin register' if do_admin else 'self-service enroll'})")
             env = root / ".env.lsr"
             env.write_text(
                 f"LSR_AGENT_ID={args.id}\n"
@@ -218,7 +241,7 @@ def main() -> int:
             print(f"✗ Đăng ký lỗi {e.code}: {e.read().decode()[:200]}")
             return 1
     else:
-        print("• Bỏ qua đăng ký (thiếu --platform/--admin-token). Chạy lại khi có.")
+        print("• Bỏ qua đăng ký (cần --platform + một trong --admin-token/--enroll-token). Chạy lại khi có.")
 
     print("\nTiếp theo: owner chạy `claude setup-token` (subscription riêng) rồi "
           "nạp .env.lsr khi khởi động agent.")

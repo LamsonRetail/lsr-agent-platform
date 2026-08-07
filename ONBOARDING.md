@@ -75,6 +75,35 @@ Sai chuẩn → CI fail, không merge được. Admin review & merge.
 
 ---
 
+## Lối 3 — Agent đã CÓ SẴN trên Claude Code (adopt)
+
+Đã có dự án agent đang chạy? **Không cần viết lại.** Chạy script adopt **ngay trong repo đó**
+— nó dò cấu hình sẵn (git, MCP), cài hook telemetry + điểm chặn runtime vào
+`.claude/settings.json`, và tự đăng ký nhận telemetry key, **không sửa logic agent**:
+
+```bash
+# lấy script + trace handler từ repo platform (1 lần)
+curl -O https://raw.githubusercontent.com/LamsonRetail/lsr-agent-platform/main/scripts/lsr_adopt.py
+curl -O https://raw.githubusercontent.com/LamsonRetail/lsr-agent-platform/main/plugins/lsr-telemetry/scripts/lsr_trace.py
+
+# chạy trong repo agent của bạn (self-service bằng enroll token)
+python3 lsr_adopt.py \
+  --id AG-YOURNAME --name "Ten agent" --owner ban@hapas.vn --squad RETAIL \
+  --platform https://platform.34-126-154-135.sslip.io \
+  --collector https://collector.34-126-154-135.sslip.io \
+  --enroll-token "$LSR_ENROLL_TOKEN" \
+  --trace-script ./lsr_trace.py
+```
+
+Kết quả: sinh `lsr-agent.yaml` (`deployment: external`), cài hook (Pre/PostToolUse +
+UserPromptSubmit + Stop), ghi `.env.lsr` (đã gitignore) gồm `LSR_AGENT_ID` +
+`LSR_TELEMETRY_API_KEY` + `LSR_COLLECTOR`. Nạp `.env.lsr` khi chạy → platform nắm
+trace/token + enforce runtime, **không đụng code agent**.
+
+> Admin adopt hộ (đầy đủ quyền): thay `--enroll-token` bằng `--admin-token`.
+
+---
+
 ## Bảng UI (basic-auth `lamson`)
 `https://app.34-126-154-135.sslip.io` — Platform · Chi phí · Sức khoẻ · Test & Learn ·
 Golden · Duyệt tri thức · Audit.
