@@ -93,6 +93,74 @@ def _ensure_schema() -> None:
             )
             """
         )
+        # --- Second brain của team (BẢNG CHUNG, tránh rải rác) ---
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS teams (
+                team_id    text PRIMARY KEY,
+                kind       text DEFAULT 'squad',   -- squad | chapter | team
+                name       text,
+                objective  text,
+                lead       text,
+                lark_chats text[],
+                created_at timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS team_members (
+                id            bigserial PRIMARY KEY,
+                team_id       text,
+                full_name     text,
+                lark_user_id  text,
+                role          text,
+                expertise     text,
+                backup_for    text,
+                working_hours text,
+                UNIQUE (team_id, full_name)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS team_kpis (
+                id          bigserial PRIMARY KEY,
+                team_id     text,
+                kpi_name    text,
+                unit        text,
+                formula     text,
+                data_source text,
+                target      double precision,
+                period      text,
+                weight      double precision DEFAULT 1,
+                UNIQUE (team_id, kpi_name, period)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS team_context (
+                id         bigserial PRIMARY KEY,
+                team_id    text,
+                title      text,
+                md_content text,
+                tags       text[],
+                created_by text,
+                created_at timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_golive_checklist (
+                agent_id     text PRIMARY KEY,
+                payload      jsonb,
+                submitted_by text,
+                submitted_at timestamptz DEFAULT now()
+            )
+            """
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS test_assignments (
@@ -254,6 +322,19 @@ def set_status(agent_id: str, body: dict, authorization: str = Header(default=""
     status = body.get("status")
     if status not in ("registered", "testing", "active", "deactivated"):
         raise HTTPException(status_code=422, detail="invalid status")
+    # GATE: chỉ cho golive khi checklist đủ mục bắt buộc (bỏ qua nếu force=true).
+    if status == "active" and not body.get("force"):
+        with _db() as conn:
+            row = conn.execute(
+                "SELECT payload FROM agent_golive_checklist WHERE agent_id=%s", (agent_id,)
+            ).fetchone()
+        miss = missing_checklist((row or {}).get("payload") or {})
+        if miss:
+            raise HTTPException(
+                status_code=409,
+                detail={"error": "golive checklist chưa đủ", "missing": miss,
+                        "hint": "POST /v1/agents/{id}/golive-checklist"},
+            )
     golive = "now()" if status == "active" else "golive_at"
     with _db() as conn:
         cur = conn.execute(
@@ -264,6 +345,227 @@ def set_status(agent_id: str, body: dict, authorization: str = Header(default=""
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="not found")
     return {"agent_id": agent_id, "status": status}
+
+
+# ======================= Second brain của team =======================
+
+@app.post("/v1/teams")
+def upsert_team(t: dict, authorization: str = Header(default="")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    tid = t.get("team_id")
+    if not tid:
+        raise HTTPException(status_code=422, detail="team_id required")
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO teams (team_id, kind, name, objective, lead, lark_chats)
+            VALUES (%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (team_id) DO UPDATE SET kind=EXCLUDED.kind, name=EXCLUDED.name,
+              objective=EXCLUDED.objective, lead=EXCLUDED.lead, lark_chats=EXCLUDED.lark_chats
+            """,
+            (tid, t.get("kind", "squad"), t.get("name"), t.get("objective"),
+             t.get("lead"), t.get("lark_chats") or []),
+        )
+        conn.commit()
+    return {"team_id": tid, "ok": True}
+
+
+@app.get("/v1/teams")
+def list_teams() -> list[dict]:
+    _ensure_schema()
+    with _db() as conn:
+        return conn.execute("SELECT * FROM teams ORDER BY team_id").fetchall()
+
+
+@app.post("/v1/teams/{team_id}/members")
+def add_members(team_id: str, body: dict, authorization: str = Header(default="")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    members = body.get("members") or []
+    with _db() as conn:
+        for m in members:
+            conn.execute(
+                """
+                INSERT INTO team_members (team_id, full_name, lark_user_id, role,
+                                          expertise, backup_for, working_hours)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (team_id, full_name) DO UPDATE SET
+                  lark_user_id=EXCLUDED.lark_user_id, role=EXCLUDED.role,
+                  expertise=EXCLUDED.expertise, backup_for=EXCLUDED.backup_for,
+                  working_hours=EXCLUDED.working_hours
+                """,
+                (team_id, m.get("full_name"), m.get("lark_user_id"), m.get("role"),
+                 m.get("expertise"), m.get("backup_for"), m.get("working_hours")),
+            )
+        conn.commit()
+    return {"team_id": team_id, "members": len(members)}
+
+
+@app.post("/v1/teams/{team_id}/kpis")
+def add_kpis(team_id: str, body: dict, authorization: str = Header(default="")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    kpis = body.get("kpis") or []
+    with _db() as conn:
+        for k in kpis:
+            conn.execute(
+                """
+                INSERT INTO team_kpis (team_id, kpi_name, unit, formula, data_source,
+                                       target, period, weight)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (team_id, kpi_name, period) DO UPDATE SET
+                  unit=EXCLUDED.unit, formula=EXCLUDED.formula,
+                  data_source=EXCLUDED.data_source, target=EXCLUDED.target,
+                  weight=EXCLUDED.weight
+                """,
+                (team_id, k.get("kpi_name"), k.get("unit"), k.get("formula"),
+                 k.get("data_source"), k.get("target"), k.get("period"),
+                 k.get("weight", 1)),
+            )
+        conn.commit()
+    return {"team_id": team_id, "kpis": len(kpis)}
+
+
+@app.post("/v1/teams/{team_id}/context")
+def add_context(team_id: str, body: dict, authorization: str = Header(default="")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO team_context (team_id, title, md_content, tags, created_by) "
+            "VALUES (%s,%s,%s,%s,%s)",
+            (team_id, body.get("title"), body.get("md_content"),
+             body.get("tags") or [], body.get("created_by")),
+        )
+        conn.commit()
+    return {"team_id": team_id, "ok": True}
+
+
+@app.get("/v1/teams/{team_id}/brain")
+def team_brain(team_id: str) -> dict:
+    """Second brain của team — agent tra cứu khi cần (không nhồi vào memory)."""
+
+    _ensure_schema()
+    with _db() as conn:
+        team = conn.execute("SELECT * FROM teams WHERE team_id=%s", (team_id,)).fetchone()
+        if not team:
+            raise HTTPException(status_code=404, detail="team not found")
+        members = conn.execute(
+            "SELECT full_name, lark_user_id, role, expertise, backup_for, working_hours "
+            "FROM team_members WHERE team_id=%s ORDER BY full_name", (team_id,)).fetchall()
+        kpis = conn.execute(
+            "SELECT kpi_name, unit, formula, data_source, target, period, weight "
+            "FROM team_kpis WHERE team_id=%s ORDER BY kpi_name", (team_id,)).fetchall()
+        ctx = conn.execute(
+            "SELECT title, md_content, tags, created_at FROM team_context "
+            "WHERE team_id=%s ORDER BY created_at DESC LIMIT 50", (team_id,)).fetchall()
+    return {"team": team, "members": members, "kpis": kpis, "context": ctx}
+
+
+# ======================= Checklist golive =======================
+
+# Mục BẮT BUỘC (xem GOLIVE_CHECKLIST.md) — thiếu thì không cho golive.
+REQUIRED_CHECKLIST = [
+    # A. Định danh & sở hữu
+    "owner_email", "backup_owner", "team_id",
+    # B. Con người & phối hợp
+    "team_members", "approver", "collaboration_rules", "work_channels",
+    # C. Mục tiêu & KPI
+    "kpis", "agent_kpi", "alert_thresholds",
+    # D. Phạm vi & dữ liệu
+    "data_sources_allowed", "data_forbidden", "skills", "writes",
+    # E. Kết nối & xác thực
+    "auth_mode", "lark_connect", "telemetry_verified", "deployment",
+    # F. Chất lượng & an toàn
+    "tests_passed", "escalation_rules", "risks", "reviewer_first_week",
+    # G. Vận hành sau golive
+    "schedule", "retrain_process", "feedback_channel", "review_cadence",
+    # H. Tuân thủ
+    "team_notified", "scope_confirmed",
+]
+
+
+def missing_checklist(payload: dict) -> list[str]:
+    miss = []
+    for k in REQUIRED_CHECKLIST:
+        v = payload.get(k)
+        if v is None or (isinstance(v, (str, list, dict)) and len(v) == 0):
+            miss.append(k)
+    return miss
+
+
+@app.post("/v1/agents/{agent_id}/golive-checklist")
+def submit_checklist(agent_id: str, body: dict, authorization: str = Header(default="")) -> dict:
+    """Owner nộp checklist; dữ liệu team/KPI chảy thẳng vào second brain."""
+
+    _require_admin(authorization)
+    _ensure_schema()
+    payload = body.get("payload") or body
+    miss = missing_checklist(payload)
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO agent_golive_checklist (agent_id, payload, submitted_by)
+            VALUES (%s,%s,%s)
+            ON CONFLICT (agent_id) DO UPDATE SET payload=EXCLUDED.payload,
+              submitted_by=EXCLUDED.submitted_by, submitted_at=now()
+            """,
+            (agent_id, Json(payload), body.get("submitted_by") or payload.get("owner_email")),
+        )
+        # Nạp vào second brain (bảng chung) nếu có team_id.
+        tid = payload.get("team_id")
+        if tid:
+            conn.execute(
+                "INSERT INTO teams (team_id, name) VALUES (%s,%s) ON CONFLICT (team_id) DO NOTHING",
+                (tid, payload.get("team_name") or tid),
+            )
+            for m in payload.get("team_members") or []:
+                if isinstance(m, dict) and m.get("full_name"):
+                    conn.execute(
+                        """
+                        INSERT INTO team_members (team_id, full_name, lark_user_id, role, expertise)
+                        VALUES (%s,%s,%s,%s,%s)
+                        ON CONFLICT (team_id, full_name) DO UPDATE SET
+                          lark_user_id=EXCLUDED.lark_user_id, role=EXCLUDED.role,
+                          expertise=EXCLUDED.expertise
+                        """,
+                        (tid, m.get("full_name"), m.get("lark_user_id"), m.get("role"),
+                         m.get("expertise")),
+                    )
+            for k in payload.get("kpis") or []:
+                if isinstance(k, dict) and k.get("kpi_name"):
+                    conn.execute(
+                        """
+                        INSERT INTO team_kpis (team_id, kpi_name, unit, formula, data_source,
+                                               target, period, weight)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                        ON CONFLICT (team_id, kpi_name, period) DO UPDATE SET
+                          unit=EXCLUDED.unit, formula=EXCLUDED.formula,
+                          data_source=EXCLUDED.data_source, target=EXCLUDED.target
+                        """,
+                        (tid, k.get("kpi_name"), k.get("unit"), k.get("formula"),
+                         k.get("data_source"), k.get("target"), k.get("period"),
+                         k.get("weight", 1)),
+                    )
+        conn.commit()
+    return {"agent_id": agent_id, "complete": not miss, "missing": miss}
+
+
+@app.get("/v1/agents/{agent_id}/golive-checklist")
+def get_checklist(agent_id: str) -> dict:
+    _ensure_schema()
+    with _db() as conn:
+        row = conn.execute(
+            "SELECT payload, submitted_by, submitted_at FROM agent_golive_checklist "
+            "WHERE agent_id=%s", (agent_id,)).fetchone()
+    if not row:
+        return {"agent_id": agent_id, "submitted": False,
+                "missing": REQUIRED_CHECKLIST, "required": REQUIRED_CHECKLIST}
+    miss = missing_checklist(row["payload"] or {})
+    return {"agent_id": agent_id, "submitted": True, "complete": not miss,
+            "missing": miss, "payload": row["payload"],
+            "submitted_by": row["submitted_by"], "submitted_at": row["submitted_at"]}
 
 
 # ======================= Test & Learn =======================

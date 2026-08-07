@@ -291,6 +291,24 @@ buộc; dữ liệu nộp vào chảy thẳng vào **second brain** (3) và bả
 ### Giai đoạn 4 — Vận hành
 - Multi-team, quota, cảnh báo, báo cáo định kỳ.
 
+### Giai đoạn 5 — Phạm vi mới (§10c) + tính năng đã chọn (§11b)
+Thứ tự đã chốt: **Second brain + checklist golive trước**, rồi external agents, rồi Lark admin.
+- [x] **Second brain + checklist golive**: bảng chung `teams`/`team_members`/`team_kpis`/
+      `team_context` + `agent_golive_checklist`; API `/v1/teams/*`, `/v1/teams/{id}/brain`,
+      `/v1/agents/{id}/golive-checklist`; **gate chặn golive** khi thiếu mục bắt buộc.
+- [ ] Đăng ký **agent external** (`deployment=external`, `lsr-agent adopt`).
+- [ ] **Lark admin** đồng bộ de/activate (cần app admin + scope).
+
+**Tính năng đã chọn (cả 4 nhóm) — thứ tự đề xuất:**
+1. *Vận hành & tin cậy*: cost/quota theo agent → health monitor + cảnh báo Lark →
+   versioning/rollback prompt → staging/canary.
+2. *Chất lượng & học hỏi*: human feedback 👍/👎 có lý do → golden set + regression test →
+   LLM judge (RIR/OFR/CTRL-Acc) → marketplace prompt/skill.
+3. *Kiến thức & phối hợp*: semantic search resource index → second brain toàn công ty →
+   agent-to-agent handoff.
+4. *Quản trị & tuân thủ*: audit log toàn platform → RBAC theo phòng ban → PII guard →
+   data retention.
+
 ---
 
 ## 11b. Đề xuất tính năng agent platform (ứng viên — chọn rồi mới đưa vào lộ trình)
