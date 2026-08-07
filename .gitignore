@@ -1,8 +1,11 @@
-# Secrets
+# Secrets (chỉ chặn JSON nhạy cảm, KHÔNG chặn package.json/tsconfig...)
 .env
-*.json
-!config/*.json
+.env.*
+!.env.example
 service-account*.json
+*-key.json
+*credentials*.json
+gcp-*.json
 
 # Python
 __pycache__/

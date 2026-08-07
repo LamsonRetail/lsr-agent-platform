@@ -134,6 +134,13 @@ def _require_admin(authorization: str) -> None:
         raise HTTPException(status_code=401, detail="admin token required")
 
 
+def agent_schema(agent_id: str) -> str:
+    """Tên schema (dataset) riêng của agent trên Supabase chung."""
+
+    clean = re.sub(r"[^a-zA-Z0-9]+", "_", agent_id).strip("_").lower()
+    return f"agent_{clean or 'x'}"
+
+
 def _dictionary_resource(agent_id: str) -> dict:
     """Mục 'từ điển' meeting-notes Minh Anh share cho agent mới (khớp meeting.minh_anh)."""
 
@@ -202,6 +209,9 @@ def register(agent: dict, authorization: str = Header(default="")) -> dict:
                 skills, key_hash,
             ),
         )
+        # Dataset riêng cho agent trên Supabase chung: mỗi agent 1 schema Postgres.
+        schema = agent_schema(agent_id)
+        conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
         conn.commit()
     dictionary_shared = _minh_anh_share(agent_id)
     return {
@@ -209,6 +219,7 @@ def register(agent: dict, authorization: str = Header(default="")) -> dict:
         "status": "registered",
         "telemetry_key": telemetry_key,  # hiện MỘT LẦN
         "dictionary_shared": dictionary_shared,
+        "db_schema": schema,
     }
 
 

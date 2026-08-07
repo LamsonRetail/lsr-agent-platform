@@ -91,6 +91,18 @@ Host lsr-gcp
 ```
 Rồi chỉ cần: `ssh lsr-gcp`.
 
+## Supabase (bộ nhớ/DB chung — dataset riêng mỗi agent)
+Platform + agent dùng **Postgres**. Vì Supabase là Postgres, chuyển sang Supabase
+là **drop-in**: đặt `DATABASE_URL` (trong `/opt/lsr-platform/.env`) = connection
+string của Supabase (mục Project → Settings → Database → Connection string /
+pooler), rồi `docker compose up -d`. Collector + Platform API dùng chung URL đó.
+- **Bộ nhớ platform**: bảng `resource_index` + registry ở schema mặc định.
+- **Dataset riêng mỗi agent**: khi `register`, Platform API tạo **schema riêng**
+  `agent_<id>` trong cùng DB (trả về `db_schema`). Dữ liệu/bộ nhớ của agent nằm
+  trong schema đó → tách bạch nhưng chung một Supabase.
+> Cần bạn cung cấp **Supabase connection string** để trỏ `DATABASE_URL` sang. Đang
+> dùng Postgres nội bộ (Docker) cho tới khi có.
+
 ## CI/CD (auto-deploy khi push main)
 GitHub Actions `.github/workflows/deploy.yml`: push `main` chạm `infra/lsr-platform/**`
 → rsync lên VM (giữ `.env` + volume) → `docker compose up -d --build`. Secrets repo:
