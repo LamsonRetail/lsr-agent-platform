@@ -1,0 +1,73 @@
+# Đóng góp & tạo Agent — LSR Agent Platform
+
+Hướng dẫn cho **thành viên team** pull repo về và tạo thêm agent trong platform này.
+Mọi agent mới **phải theo chuẩn** (CI kiểm tự động) và **dùng auth của owner**, không
+dùng auth chung của platform.
+
+## 1. Lấy repo về
+```bash
+git clone https://github.com/LamsonRetail/lsr-agent-platform.git
+cd lsr-agent-platform
+```
+Yêu cầu: `git`, `python3` (test), `node` ≥ 20 (backend web), Docker (nếu chạy infra),
+và **subscription Claude riêng** của bạn (để agent bạn tạo dùng auth của bạn).
+
+Chạy test/validator ở máy:
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install pydantic PyYAML pytest requests
+pytest        # gồm cả kiểm chuẩn agent (tests/test_agent_standards.py)
+```
+
+## 2. Tạo một agent mới (theo chuẩn)
+```bash
+node scripts/new-agent.mjs <AGENT_ID> "Tên agent" <owner-email> [squad] [bot|user]
+# ví dụ:
+node scripts/new-agent.mjs AG-SALES-COACH "Sales Coach" an.nguyen@lamsonretail.vn SQ-SALES bot
+```
+Sinh `agents/<id>/`: `lsr-agent.yaml` (manifest chuẩn), `system_prompt.md`,
+`tests/agent_tests.yaml`. Manifest đã set sẵn: `auth: subscription`, `telemetry.enabled: true`.
+
+Kiểm chuẩn ngay:
+```bash
+pytest tests/test_agent_standards.py
+```
+
+## 3. Auth của OWNER (KHÔNG dùng auth chung platform)
+Mỗi agent chạy bằng **subscription Claude của owner**, không phải khoá chung:
+```bash
+claude setup-token        # owner đăng nhập subscription RIÊNG → token lưu ở máy/VPS chạy agent
+```
+- Platform **không** cấp khoá LLM. Chỉ cấp `TELEMETRY_API_KEY` (riêng agent) khi register.
+- CI **chặn** manifest có `api_key`/auth chung; `runtime.auth` phải là `subscription`.
+
+## 4. Đăng ký + golive
+```bash
+# đăng ký (nhận telemetry key + tạo schema DB riêng trên Supabase chung)
+curl -s $PLATFORM/v1/agents/register -H "Authorization: Bearer $ADMIN" \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id":"AG-...","name":"...","owner":"...@lamsonretail.vn","squad":"SQ-..."}'
+```
+Rồi: kết nối Lark (bot/user) → bật telemetry → **pass bộ test** → golive. Xem chi tiết
+[CREATE_AGENT.md](CREATE_AGENT.md).
+
+## 5. (Tuỳ chọn) Backend UI riêng cho agent
+```bash
+node scripts/new-agent-backend.mjs <AGENT_ID> "Tên agent"
+cd apps/agents/<AGENT_ID> && npm install && npm run build
+```
+Deploy: Vercel project riêng, **Root Directory = `apps/agents/<id>`** (xem
+[apps/agents/README.md](apps/agents/README.md)).
+
+## 6. Quy trình đóng góp
+1. Tạo nhánh: `git checkout -b agent/<id>`.
+2. Chạy `pytest` (phải xanh — gồm kiểm chuẩn agent).
+3. Mở PR vào `main`. **CI** (`.github/workflows/ci.yml`) chạy test + validator; không
+   đạt chuẩn → không merge.
+4. Merge → auto-deploy: backend VM (CI `deploy.yml`) + web (Vercel git).
+
+## Tiêu chuẩn agent (CI enforce)
+- `agent.owner` = email owner thật · `connect_mode` ∈ {bot,user}.
+- `runtime.auth = subscription` (auth của owner) · **không** api key/auth chung.
+- `telemetry.enabled = true` (control point) · có bộ test.
+- Bộ nhớ/DB nằm trên **Supabase chung**, mỗi agent **schema riêng** (tự tạo khi register).

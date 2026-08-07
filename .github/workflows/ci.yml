@@ -1,0 +1,21 @@
+name: CI (tests + agent standards)
+
+# Chạy test + KIỂM CHUẨN mọi agent trên mỗi push/PR. Agent mới không đúng chuẩn
+# (thiếu owner, auth != subscription, tắt telemetry, lộ api key...) sẽ FAIL ở đây.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Cài deps tối thiểu
+        run: pip install --quiet pydantic PyYAML pytest requests
+      - name: Chạy test + validator chuẩn agent
+        run: pytest -q
