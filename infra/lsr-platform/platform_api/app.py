@@ -61,6 +61,14 @@ def _ensure_schema() -> None:
             )
             """
         )
+        # Agent external (chạy ở dự án/hạ tầng khác) — thêm cột nếu DB cũ.
+        for ddl in (
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS deployment text DEFAULT 'managed'",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS repo_url text",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS host_note text",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS backup_owner text",
+        ):
+            conn.execute(ddl)
         # --- Test & Learn ---
         conn.execute(
             """
@@ -338,17 +346,22 @@ def register(agent: dict, authorization: str = Header(default="")) -> dict:
         conn.execute(
             """
             INSERT INTO agents (agent_id, name, owner, squad, connect_mode,
-                                is_squad_agent, skills, status, telemetry_key_hash)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,'registered',%s)
+                                is_squad_agent, skills, status, telemetry_key_hash,
+                                deployment, repo_url, host_note, backup_owner)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,'registered',%s,%s,%s,%s,%s)
             ON CONFLICT (agent_id) DO UPDATE SET
                 name=EXCLUDED.name, owner=EXCLUDED.owner, squad=EXCLUDED.squad,
                 connect_mode=EXCLUDED.connect_mode, is_squad_agent=EXCLUDED.is_squad_agent,
-                skills=EXCLUDED.skills, telemetry_key_hash=EXCLUDED.telemetry_key_hash
+                skills=EXCLUDED.skills, telemetry_key_hash=EXCLUDED.telemetry_key_hash,
+                deployment=EXCLUDED.deployment, repo_url=EXCLUDED.repo_url,
+                host_note=EXCLUDED.host_note, backup_owner=EXCLUDED.backup_owner
             """,
             (
                 agent_id, agent.get("name"), agent.get("owner"), agent.get("squad"),
                 agent.get("connect_mode", "bot"), bool(agent.get("is_squad_agent", False)),
                 skills, key_hash,
+                agent.get("deployment", "managed"), agent.get("repo_url"),
+                agent.get("host_note"), agent.get("backup_owner"),
             ),
         )
         # Dataset riêng cho agent trên Supabase chung: mỗi agent 1 schema Postgres.
@@ -362,6 +375,7 @@ def register(agent: dict, authorization: str = Header(default="")) -> dict:
         "telemetry_key": telemetry_key,  # hiện MỘT LẦN
         "dictionary_shared": dictionary_shared,
         "db_schema": schema,
+        "deployment": agent.get("deployment", "managed"),
     }
 
 
@@ -371,7 +385,8 @@ def list_agents() -> list[dict]:
     with _db() as conn:
         return conn.execute(
             "SELECT agent_id, name, owner, squad, connect_mode, is_squad_agent, "
-            "skills, status, registered_at, golive_at FROM agents ORDER BY registered_at DESC"
+            "skills, status, deployment, repo_url, host_note, registered_at, golive_at "
+            "FROM agents ORDER BY registered_at DESC"
         ).fetchall()
 
 
@@ -381,7 +396,8 @@ def get_agent(agent_id: str) -> dict:
     with _db() as conn:
         row = conn.execute(
             "SELECT agent_id, name, owner, squad, connect_mode, is_squad_agent, "
-            "skills, status, registered_at, golive_at FROM agents WHERE agent_id=%s",
+            "skills, status, deployment, repo_url, host_note, registered_at, golive_at "
+            "FROM agents WHERE agent_id=%s",
             (agent_id,),
         ).fetchone()
     if not row:

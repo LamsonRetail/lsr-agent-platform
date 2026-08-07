@@ -109,10 +109,34 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+def _agent_blocked(conn, agent_id: str) -> bool:
+    """Agent bị deactivate → từ chối nhận trace.
+
+    Đây là cơ chế 'cắt' cho agent EXTERNAL (platform không kill được process của họ):
+    không nhận trace = ngoài governance, và dashboard thấy ngay agent đã dừng báo cáo.
+    """
+
+    if not agent_id:
+        return False
+    try:
+        row = conn.execute(
+            "SELECT status FROM agents WHERE agent_id=%s", (agent_id,)
+        ).fetchone()
+    except Exception:
+        return False  # bảng agents chưa có (platform_api chưa khởi tạo) → cho qua
+    return bool(row and row.get("status") == "deactivated")
+
+
 @app.post("/v1/traces")
 def ingest(trace: dict, authorization: str = Header(default="")) -> dict:
     _check_auth(authorization)
     _ensure_schema()
+    with _db() as conn:
+        if _agent_blocked(conn, trace.get("agent_id")):
+            raise HTTPException(
+                status_code=403,
+                detail="agent đang deactivated — platform không nhận trace",
+            )
     llm_calls = trace.get("llm_calls", []) or []
     it = sum(int(c.get("input_tokens", 0)) for c in llm_calls)
     ot = sum(int(c.get("output_tokens", 0)) for c in llm_calls)
