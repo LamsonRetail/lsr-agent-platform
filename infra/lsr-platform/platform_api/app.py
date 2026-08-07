@@ -775,6 +775,7 @@ def _agent_vm_action(agent_id: str, action: str) -> str:
             c.stop(timeout=10)
         elif action == "start":
             c.start()
+        c.reload()  # đọc lại trạng thái mới sau thao tác (tránh status cache cũ)
         return c.status
     except Exception:
         return "n/a"
