@@ -74,6 +74,22 @@ services:
       - "127.0.0.1:8090:8090"
     restart: unless-stopped
 
+  bq_sink:
+    build: ./bq_sink
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://lsr:${POSTGRES_PASSWORD}@postgres:5432/lsr
+      BQ_PROJECT: ganesha-381907
+      BQ_DATASET: AI_DB
+      SINK_INTERVAL_SECONDS: "900"
+      # Nếu dùng service account key thay vì metadata scope:
+      # GOOGLE_APPLICATION_CREDENTIALS: /secrets/bq-sa.json
+    # volumes:
+    #   - ./secrets/bq-sa.json:/secrets/bq-sa.json:ro
+    restart: unless-stopped
+
   web:
     build: ./web            # nguồn app Next.js (đồng bộ từ apps/platform-web)
     depends_on: [platform_api, collector]

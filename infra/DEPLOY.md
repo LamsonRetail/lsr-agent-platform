@@ -91,17 +91,25 @@ Host lsr-gcp
 ```
 Rồi chỉ cần: `ssh lsr-gcp`.
 
-## Supabase (bộ nhớ/DB chung — dataset riêng mỗi agent)
-Platform + agent dùng **Postgres**. Vì Supabase là Postgres, chuyển sang Supabase
-là **drop-in**: đặt `DATABASE_URL` (trong `/opt/lsr-platform/.env`) = connection
-string của Supabase (mục Project → Settings → Database → Connection string /
-pooler), rồi `docker compose up -d`. Collector + Platform API dùng chung URL đó.
-- **Bộ nhớ platform**: bảng `resource_index` + registry ở schema mặc định.
-- **Dataset riêng mỗi agent**: khi `register`, Platform API tạo **schema riêng**
-  `agent_<id>` trong cùng DB (trả về `db_schema`). Dữ liệu/bộ nhớ của agent nằm
-  trong schema đó → tách bạch nhưng chung một Supabase.
-> Cần bạn cung cấp **Supabase connection string** để trỏ `DATABASE_URL` sang. Đang
-> dùng Postgres nội bộ (Docker) cho tới khi có.
+## Dữ liệu: Postgres trên VM (GCP) + BigQuery `AI_DB` — KHÔNG dùng Supabase
+- **DB giao dịch = Postgres chạy trên VM GCP** (Docker, volume `pgdata`): registry
+  agent, `resource_index` (bộ nhớ platform), Test & Learn, trace.
+- **Dataset riêng mỗi agent**: khi `register`, Platform API tạo **schema** `agent_<id>`
+  trong cùng DB (trả `db_schema`) → bộ nhớ agent tách bạch nhưng chung một Postgres.
+- **Kho phân tích = BigQuery `ganesha-381907:AI_DB`** (cạnh các dataset vận hành
+  `0_lsr_*`): service `bq_sink` đẩy `agent_traces` + `attempts` sang BigQuery mỗi
+  15 phút (watermark + insertId để dedup).
+
+**Quyền cho bq_sink** — chọn 1:
+1. **Thêm scope BigQuery cho VM** (cần stop/start VM):
+   `gcloud compute instances stop … && gcloud compute instances set-service-account …
+   --scopes=cloud-platform && gcloud compute instances start …`
+2. **Service account key**: tạo SA có `roles/bigquery.dataEditor`, đặt file JSON vào
+   `/opt/lsr-platform/secrets/bq-sa.json`, bật `GOOGLE_APPLICATION_CREDENTIALS` +
+   volume trong compose (đã ghi sẵn, đang comment). Không cần restart VM.
+
+> SA mặc định của VM (`…-compute@developer`) đã có `roles/editor` nhưng **scope**
+> instance thiếu BigQuery → hiện `bq_sink` chưa ghi được cho tới khi làm 1 trong 2 cách.
 
 ## CI/CD (auto-deploy khi push main)
 GitHub Actions `.github/workflows/deploy.yml`: push `main` chạm `infra/lsr-platform/**`

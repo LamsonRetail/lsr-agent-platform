@@ -20,5 +20,5 @@ config/usage/kết quả làm bài của riêng agent đó.
 
 ## Nguyên tắc
 - Mọi agent-backend đọc/ghi qua **Platform API + collector** (không có DB riêng cục bộ).
-- Bộ nhớ/DB của agent nằm trên **Supabase chung**, mỗi agent một **schema (dataset)
-  riêng** — xem `infra/DEPLOY.md` mục Supabase.
+- Bộ nhớ/DB của agent nằm trên **Postgres của platform (VM GCP)**, mỗi agent một
+  **schema riêng**; dữ liệu phân tích đẩy sang **BigQuery `AI_DB`** — xem `infra/DEPLOY.md`.

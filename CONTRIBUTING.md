@@ -43,7 +43,7 @@ claude setup-token        # owner đăng nhập subscription RIÊNG → token l�
 
 ## 4. Đăng ký + golive
 ```bash
-# đăng ký (nhận telemetry key + tạo schema DB riêng trên Supabase chung)
+# đăng ký (nhận telemetry key + tạo schema DB riêng trên Postgres platform)
 curl -s $PLATFORM/v1/agents/register -H "Authorization: Bearer $ADMIN" \
   -H "Content-Type: application/json" \
   -d '{"agent_id":"AG-...","name":"...","owner":"...@lamsonretail.vn","squad":"SQ-..."}'
@@ -70,4 +70,4 @@ Deploy: Vercel project riêng, **Root Directory = `apps/agents/<id>`** (xem
 - `agent.owner` = email owner thật · `connect_mode` ∈ {bot,user}.
 - `runtime.auth = subscription` (auth của owner) · **không** api key/auth chung.
 - `telemetry.enabled = true` (control point) · có bộ test.
-- Bộ nhớ/DB nằm trên **Supabase chung**, mỗi agent **schema riêng** (tự tạo khi register).
+- Bộ nhớ/DB nằm trên **Postgres của platform (VM GCP)**, mỗi agent **schema riêng** (tự tạo khi register); dữ liệu phân tích đẩy sang **BigQuery AI_DB**.
