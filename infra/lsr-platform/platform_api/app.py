@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 import psycopg
 import requests
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from psycopg.rows import dict_row
 from psycopg.types.json import Json
 
@@ -554,13 +554,21 @@ def health() -> dict:
 
 
 _BOOTSTRAP_DIR = pathlib.Path(__file__).parent / "bootstrap"
-# onboard.sh là TEMPLATE (không chứa token) — an toàn để phục vụ công khai.
-_BOOTSTRAP_ALLOW = {"lsr_adopt.py", "lsr_trace.py", "onboard.sh"}
+# Đều là TEMPLATE (không chứa token) — an toàn phục vụ công khai. Installer tự hỏi token.
+_BOOTSTRAP_ALLOW = {
+    "lsr_adopt.py", "lsr_trace.py", "onboard.sh",
+    "lsr-telemetry-plugin.zip",         # plugin đóng gói (cài không cần GitHub)
+    "lsr-install.command", "lsr-install.bat",  # installer click-and-run (Mac/Windows)
+}
+_BOOTSTRAP_MTYPE = {
+    ".py": "text/x-python", ".sh": "text/x-shellscript",
+    ".command": "text/x-shellscript", ".bat": "text/plain", ".zip": "application/zip",
+}
 
 
 @app.get("/bootstrap/{name}")
 def bootstrap(name: str):
-    """Phục vụ script bootstrap self-service (không cần GitHub/auth) — vì repo private.
+    """Phục vụ file bootstrap self-service (không cần GitHub/auth) — vì repo private.
 
     Chỉ allowlist. Dùng: curl PLATFORM/bootstrap/lsr_adopt.py -O
     """
@@ -570,8 +578,119 @@ def bootstrap(name: str):
     p = _BOOTSTRAP_DIR / name
     if not p.exists():
         raise HTTPException(status_code=503, detail="chưa publish (deploy lại platform)")
-    mtype = "text/x-shellscript" if name.endswith(".sh") else "text/x-python"
+    mtype = _BOOTSTRAP_MTYPE.get(p.suffix, "application/octet-stream")
+    if mtype == "application/zip":
+        return Response(p.read_bytes(), media_type=mtype,
+                        headers={"Content-Disposition": f'attachment; filename="{name}"'})
     return PlainTextResponse(p.read_text(encoding="utf-8"), media_type=mtype)
+
+
+# ==================== Agent-scoped API (/v1/self*) ====================
+# Backend riêng của agent gọi bằng CHÍNH telemetry key của nó (Bearer) — KHÔNG cần
+# admin token, KHÔNG cần gateway token. Chỉ thấy dữ liệu của agent đó.
+
+def _agent_from_token(authorization: str) -> str | None:
+    tok = authorization[7:] if authorization.startswith("Bearer ") else ""
+    if not tok:
+        return None
+    h = hashlib.sha256(tok.encode()).hexdigest()
+    try:
+        with _db() as conn:
+            row = conn.execute(
+                "SELECT agent_id FROM agents WHERE telemetry_key_hash=%s", (h,)).fetchone()
+        return row["agent_id"] if row else None
+    except Exception:
+        return None
+
+
+def _require_self(authorization: str) -> str:
+    aid = _agent_from_token(authorization)
+    if not aid:
+        raise HTTPException(status_code=401, detail="agent token required (LSR_AGENT_TOKEN)")
+    return aid
+
+
+@app.get("/v1/self")
+def self_info(authorization: str = Header(default="")) -> dict:
+    aid = _require_self(authorization)
+    with _db() as conn:
+        a = conn.execute(
+            "SELECT agent_id, name, owner, squad, connect_mode, status, deployment, "
+            "repo_url, prompt_version, prompt_ref, backend_url, dashboard_url, "
+            "registered_at, golive_at FROM agents WHERE agent_id=%s", (aid,)).fetchone()
+        st = conn.execute(
+            "SELECT count(*) AS runs, coalesce(sum(total_tokens),0) AS total_tokens, "
+            "coalesce(sum(tool_calls),0) AS tool_calls, coalesce(sum(pii_flags),0) AS pii_flags "
+            "FROM agent_traces WHERE agent_id=%s", (aid,)).fetchone()
+    return {"agent": a, "db_schema": agent_schema(aid), "stats": st}
+
+
+@app.get("/v1/self/conflicts")
+def self_conflicts(authorization: str = Header(default=""), status: str = "open") -> list[dict]:
+    aid = _require_self(authorization)
+    with _db() as conn:
+        return conn.execute(
+            "SELECT * FROM knowledge_conflicts WHERE agent_id=%s AND status=%s "
+            "ORDER BY created_at DESC LIMIT 100", (aid, status)).fetchall()
+
+
+@app.get("/v1/self/attempts")
+def self_attempts(authorization: str = Header(default="")) -> list[dict]:
+    aid = _require_self(authorization)
+    with _db() as conn:
+        return conn.execute(
+            "SELECT attempt_id, test_id, taker_type, taker_id, score, passed, at "
+            "FROM attempts WHERE taker_id=%s ORDER BY at DESC LIMIT 50", (aid,)).fetchall()
+
+
+@app.get("/v1/self/traces")
+def self_traces(authorization: str = Header(default=""), limit: int = 25) -> list[dict]:
+    aid = _require_self(authorization)
+    try:
+        r = requests.get(f"{COLLECTOR_URL}/v1/traces",
+                         params={"agent_id": aid, "limit": min(int(limit), 100)},
+                         headers={"Authorization": f"Bearer {COLLECTOR_INGEST_TOKEN}"}, timeout=8)
+        return r.json()
+    except Exception:
+        return []
+
+
+@app.post("/v1/self/backend")
+def self_set_backend(body: dict, authorization: str = Header(default="")) -> dict:
+    """Agent tự đặt URL backend/dashboard của mình (dùng bởi script provision Vercel)."""
+
+    aid = _require_self(authorization)
+    with _db() as conn:
+        conn.execute(
+            "UPDATE agents SET backend_url=coalesce(%s, backend_url), "
+            "dashboard_url=coalesce(%s, dashboard_url) WHERE agent_id=%s",
+            (body.get("backend_url"), body.get("dashboard_url"), aid))
+        _audit(conn, aid, "set_backend", "agent", aid,
+               {"backend_url": body.get("backend_url")})
+        conn.commit()
+    return {"agent_id": aid, "backend_url": body.get("backend_url"), "ok": True}
+
+
+@app.post("/v1/self/conflicts/{conflict_id}/resolve")
+def self_resolve(conflict_id: str, body: dict, authorization: str = Header(default="")) -> dict:
+    aid = _require_self(authorization)
+    _ensure_schema()
+    decision = body.get("decision")
+    valid = ("resolved_keep_shared", "resolved_update_shared", "dismissed")
+    if decision not in valid:
+        raise HTTPException(status_code=422, detail=f"decision phải thuộc {valid}")
+    with _db() as conn:
+        c = conn.execute("SELECT agent_id FROM knowledge_conflicts WHERE conflict_id=%s",
+                         (conflict_id,)).fetchone()
+        if not c:
+            raise HTTPException(status_code=404, detail="không tìm thấy conflict")
+        if c["agent_id"] != aid:
+            raise HTTPException(status_code=403, detail="conflict không thuộc agent này")
+        conn.execute("UPDATE knowledge_conflicts SET status=%s, resolution=%s, resolved_at=now() "
+                     "WHERE conflict_id=%s", (decision, body.get("resolution"), conflict_id))
+        _audit(conn, aid, "resolve_conflict", "conflict", conflict_id, {"decision": decision})
+        conn.commit()
+    return {"conflict_id": conflict_id, "status": decision}
 
 
 @app.post("/v1/agents/register")
@@ -688,15 +807,21 @@ def enroll(agent: dict, authorization: str = Header(default="")) -> dict:
     return {
         "agent_id": agent_id,
         "status": "registered",
-        "telemetry_key": telemetry_key,     # hiện MỘT LẦN — lưu vào env agent
-        "db_schema": schema,
+        "telemetry_key": telemetry_key,     # hiện MỘT LẦN — dùng cho plugin VÀ backend
+        "agent_token": telemetry_key,       # alias: LSR_AGENT_TOKEN cho API /v1/self*
+        "db_schema": schema,                # schema Postgres riêng của agent (truy cập qua /v1/self*)
         "collector": COLLECTOR_PUBLIC_URL,
+        "platform": f"{APP_PUBLIC_URL}".replace("app.", "platform."),
         **_agent_links(agent_id, agent.get("backend_url"), agent.get("dashboard_url")),
         "next_steps": [
             "Cài plugin: claude plugin marketplace add LamsonRetail/lsr-agent-platform "
             "&& claude plugin install lsr-telemetry@lsr",
-            f"Đặt env: LSR_COLLECTOR={COLLECTOR_PUBLIC_URL} "
-            f"LSR_AGENT_ID={agent_id} LSR_TELEMETRY_API_KEY=<telemetry_key ở trên>",
+            f"Env agent (runtime): LSR_COLLECTOR={COLLECTOR_PUBLIC_URL} "
+            f"LSR_AGENT_ID={agent_id} LSR_TELEMETRY_API_KEY=<telemetry_key>",
+            "Env backend (Vercel, tài khoản OWNER): LSR_AGENT_TOKEN=<telemetry_key> "
+            "— backend gọi /v1/self* để lấy dữ liệu agent (không cần admin/gateway token).",
+            "Deploy backend: node scripts/provision-vercel.mjs " + agent_id +
+            " (dùng VERCEL_TOKEN của owner) → tự set backend_url.",
             "Hoàn tất golive checklist rồi nhờ admin chuyển sang 'active'.",
         ],
     }

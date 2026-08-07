@@ -38,12 +38,13 @@ w(".gitignore", "node_modules/\n.next/\n.env\n.env.local\nnext-env.d.ts\n.vercel
 w("public/.gitkeep", "");
 
 w(".env.example",
-`# Agent backend — chạy trong monorepo, deploy chung platform.
+`# Agent backend — deploy trên VERCEL bằng tài khoản của OWNER (không dùng platform).
 AGENT_ID=${id}
 LSR_PLATFORM_URL=https://platform.34-126-154-135.sslip.io
 LSR_COLLECTOR=https://collector.34-126-154-135.sslip.io
-PLATFORM_ADMIN_TOKEN=...
-LSR_GATEWAY_TOKEN=...
+# Token của CHÍNH agent (telemetry key lấy từ enroll) — dùng cho API /v1/self*.
+# KHÔNG dùng admin token / gateway token (backend chỉ thấy dữ liệu agent này).
+LSR_AGENT_TOKEN=lsr_tel_...
 `);
 
 w("Dockerfile",
@@ -69,18 +70,19 @@ CMD ["node","server.js"]
 
 w("lib/platform.ts",
 `import "server-only";
+// Backend gọi API agent-scoped bằng token của CHÍNH agent (không admin/gateway).
 const P = process.env.LSR_PLATFORM_URL || "http://localhost:8090";
-const C = process.env.LSR_COLLECTOR || "http://localhost:8081";
-const GW = process.env.LSR_GATEWAY_TOKEN || "";
+const TOK = process.env.LSR_AGENT_TOKEN || "";
 export const AGENT_ID = process.env.AGENT_ID || "${id}";
-function h(){ return GW ? { "X-Gateway-Token": GW } : {}; }
+function h(){ return TOK ? { "Authorization": "Bearer "+TOK } : {}; }
 async function get(u){ const r = await fetch(u, { cache: "no-store", headers: h() }); if(!r.ok) throw new Error(u+" "+r.status); return r.json(); }
-export async function agent(){ const all = await get(P+"/v1/agents").catch(()=>[]); return (all||[]).find(a=>a.agent_id===AGENT_ID) || {agent_id:AGENT_ID}; }
-export async function stats(){ const all = await get(C+"/v1/stats").catch(()=>[]); return (all||[]).find(s=>s.agent_id===AGENT_ID) || {}; }
-export async function attempts(){ return get(P+"/v1/attempts?taker_id="+encodeURIComponent(AGENT_ID)).catch(()=>[]); }
-export async function conflicts(){ return get(P+"/v1/knowledge/conflicts?status=open&agent_id="+encodeURIComponent(AGENT_ID)).catch(()=>[]); }
-export async function traces(n=25){ return get(C+"/v1/traces?agent_id="+encodeURIComponent(AGENT_ID)+"&limit="+n).catch(()=>[]); }
-export async function tests(){ const all = await get(P+"/v1/tests").catch(()=>[]); return all||[]; }
+async function self(){ return get(P+"/v1/self"); }
+export async function agent(){ const d = await self().catch(()=>null); return (d && d.agent) || {agent_id:AGENT_ID}; }
+export async function stats(){ const d = await self().catch(()=>null); return (d && d.stats) || {}; }
+export async function schema(){ const d = await self().catch(()=>null); return d ? d.db_schema : ""; }
+export async function attempts(){ return get(P+"/v1/self/attempts").catch(()=>[]); }
+export async function conflicts(){ return get(P+"/v1/self/conflicts").catch(()=>[]); }
+export async function traces(n=25){ return get(P+"/v1/self/traces?limit="+n).catch(()=>[]); }
 export const PLATFORM_URL = P;
 `);
 
@@ -89,10 +91,10 @@ w("app/api/conflicts/[id]/resolve/route.ts",
 import { PLATFORM_URL } from "@/lib/platform";
 export async function POST(req, { params }) {
   const body = await req.json().catch(() => ({}));
-  const gw = process.env.LSR_GATEWAY_TOKEN;
-  const r = await fetch(PLATFORM_URL + "/v1/knowledge/conflicts/" + params.id + "/resolve", {
+  const tok = process.env.LSR_AGENT_TOKEN || "";
+  const r = await fetch(PLATFORM_URL + "/v1/self/conflicts/" + params.id + "/resolve", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...(gw ? { "X-Gateway-Token": gw } : {}) },
+    headers: { "Content-Type": "application/json", ...(tok ? { Authorization: "Bearer " + tok } : {}) },
     body: JSON.stringify(body),
   });
   const data = await r.json().catch(() => ({}));

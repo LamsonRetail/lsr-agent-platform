@@ -15,7 +15,26 @@ Hằng số: `PLATFORM=https://platform.34-126-154-135.sslip.io` ·
 
 ---
 
-## Lối 1 — Plugin (nhanh)
+## Lối 0 — Cài nhanh "click & run" (cho người không rành kỹ thuật)
+
+Tải trình cài đặt về, **nhấp đúp**, trả lời vài câu hỏi (mã agent, tên, email, squad) — xong.
+
+- **macOS:** tải `lsr-install.command` → nhấp đúp (nếu bị chặn: chuột phải → Open).
+  ```
+  https://platform.34-126-154-135.sslip.io/bootstrap/lsr-install.command
+  ```
+- **Windows:** tải `lsr-install.bat` → nhấp đúp.
+  ```
+  https://platform.34-126-154-135.sslip.io/bootstrap/lsr-install.bat
+  ```
+
+Trình cài tự: cài plugin telemetry (tải sẵn gói nếu không dùng được GitHub), đăng ký agent,
+ghi cấu hình `.env.lsr`, in link Dashboard/Backend. Cần cài sẵn **Claude Code** + **Python**
+(trình cài sẽ báo nếu thiếu). Yêu cầu **mã mời (enroll token)** — xin admin.
+
+---
+
+## Lối 1 — Plugin (nhanh, dòng lệnh)
 
 **1. Cài plugin telemetry** (một lần):
 ```bash

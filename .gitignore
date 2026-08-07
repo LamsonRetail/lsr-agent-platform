@@ -39,3 +39,6 @@ infra/lsr-platform/secrets/
 # bootstrap được CI copy khi deploy (nguồn: scripts/ + plugins/)
 infra/lsr-platform/platform_api/bootstrap/*.py
 infra/lsr-platform/platform_api/bootstrap/*.sh
+infra/lsr-platform/platform_api/bootstrap/*.command
+infra/lsr-platform/platform_api/bootstrap/*.bat
+infra/lsr-platform/platform_api/bootstrap/*.zip
