@@ -28,10 +28,12 @@ export default async function PlatformPage() {
       <h3>Agents</h3>
       <table>
         <thead><tr><th>Agent</th><th>Squad</th><th>Owner</th><th>Status</th>
-          <th className="n">Token</th><th className="n">Runs</th><th>Hành động</th></tr></thead>
+          <th className="n">Token</th><th className="n">Runs</th><th className="n">PII đã che</th><th>Hành động</th></tr></thead>
         <tbody>
-          {agents.length === 0 && <tr><td colSpan={7} className="muted">Chưa có agent nào đăng ký.</td></tr>}
-          {agents.map((a: any) => (
+          {agents.length === 0 && <tr><td colSpan={8} className="muted">Chưa có agent nào đăng ký.</td></tr>}
+          {agents.map((a: any) => {
+            const pii = smap[a.agent_id]?.pii_flags || 0;
+            return (
             <tr key={a.agent_id}>
               <td><b>{a.name || a.agent_id}</b><div className="muted">{a.agent_id}</div></td>
               <td>{a.squad || "—"}</td>
@@ -39,9 +41,10 @@ export default async function PlatformPage() {
               <td>{badge(a.status)}</td>
               <td className="n">{(smap[a.agent_id]?.total_tokens || 0).toLocaleString()}</td>
               <td className="n">{smap[a.agent_id]?.runs || 0}</td>
+              <td className="n">{pii > 0 ? <span className="b b-warn">{pii}</span> : "0"}</td>
               <td><StatusButton agentId={a.agent_id} status={a.status} /></td>
             </tr>
-          ))}
+          );})}
         </tbody>
       </table>
     </>

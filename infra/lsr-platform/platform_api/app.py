@@ -25,7 +25,7 @@ from datetime import datetime, timedelta, timezone
 
 import psycopg
 import requests
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from psycopg.rows import dict_row
 from psycopg.types.json import Json
 
@@ -65,6 +65,12 @@ _FALLBACK_PRICE = (3.0, 15.0)
 ALERT_INTERVAL = int(os.environ.get("QUOTA_ALERT_INTERVAL", "1800"))
 # Ngưỡng cảnh báo mặc định (%) nếu quota không đặt riêng.
 DEFAULT_ALERT_PCT = int(os.environ.get("QUOTA_DEFAULT_ALERT_PCT", "80"))
+# --- A3 Health monitor: agent 'active' im lặng quá ngưỡng giờ → cảnh báo ---
+HEALTH_SILENT_HOURS = int(os.environ.get("HEALTH_SILENT_HOURS", "24"))
+# --- A4 LLM-judge (tùy chọn): endpoint chấm chủ quan; rỗng = tắt, fallback contains ---
+JUDGE_URL = os.environ.get("JUDGE_URL", "").rstrip("/")
+JUDGE_TOKEN = os.environ.get("JUDGE_TOKEN", "")
+JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "claude-haiku-4-5-20251001")
 
 app = FastAPI(title="LSR Platform API", version="0.1.0")
 _READY = False
@@ -362,6 +368,72 @@ def _ensure_schema() -> None:
             )
             """
         )
+        # --- A1: Audit log toàn platform (ai làm gì, khi nào) ---
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id          bigserial PRIMARY KEY,
+                actor       text,          -- admin | email reviewer/owner
+                action      text,          -- register | set_status | set_quota | ...
+                target_type text,          -- agent | knowledge | conflict | belief | ...
+                target_id   text,
+                detail      jsonb,
+                at          timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log(at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_target ON audit_log(target_id)")
+        # --- A3: Health alerts (agent active nhưng im lặng) — dedup theo ngày ---
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_health_alerts (
+                id        bigserial PRIMARY KEY,
+                agent_id  text,
+                kind      text,            -- silent | never
+                day       text,            -- 'YYYY-MM-DD'
+                detail    text,
+                fired_at  timestamptz DEFAULT now(),
+                UNIQUE (agent_id, kind, day)
+            )
+            """
+        )
+        # --- A4: Golden set + regression run ---
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS golden_cases (
+                case_id    text PRIMARY KEY,
+                skill      text,
+                prompt     text,
+                expected   text,
+                atype      text DEFAULT 'contains',  -- exact|regex|numeric_tolerance|contains|llm_judge
+                tol        numeric DEFAULT 0,
+                weight     numeric DEFAULT 1,
+                rubric     text,                      -- cho llm_judge
+                active     boolean DEFAULT true,
+                created_by text,
+                created_at timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS regression_runs (
+                run_id      text PRIMARY KEY,
+                target_type text,          -- agent | prompt | model
+                target_id   text,
+                skill       text,
+                score       numeric,
+                passed      boolean,
+                n_total     int,
+                n_pass      int,
+                threshold   numeric,
+                detail      jsonb,
+                run_by      text,
+                at          timestamptz DEFAULT now()
+            )
+            """
+        )
         conn.commit()
     _READY = True
 
@@ -462,6 +534,9 @@ def register(agent: dict, authorization: str = Header(default="")) -> dict:
         # Dataset riêng cho agent trên Supabase chung: mỗi agent 1 schema Postgres.
         schema = agent_schema(agent_id)
         conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
+        _audit(conn, "admin", "register", "agent", agent_id,
+               {"name": agent.get("name"), "owner": agent.get("owner"),
+                "deployment": agent.get("deployment", "managed")})
         conn.commit()
     dictionary_shared = _minh_anh_share(agent_id)
     return {
@@ -533,6 +608,8 @@ def set_status(agent_id: str, body: dict, authorization: str = Header(default=""
         if status in ("active", "deactivated"):
             # Đồng bộ Lark: tắt agent -> gỡ bot khỏi chat; bật lại -> thêm vào lại.
             lark = _sync_lark_status(conn, agent_id, activate=(status == "active"))
+        _audit(conn, "admin", "set_status", "agent", agent_id,
+               {"status": status, "forced": bool(body.get("force")), "lark_sync": lark})
         conn.commit()
     return {"agent_id": agent_id, "status": status, "lark_sync": lark}
 
@@ -816,6 +893,21 @@ def _sync_lark_status(conn, agent_id: str, activate: bool) -> list[dict]:
     return results
 
 
+def _audit(conn, actor: str, action: str, target_type: str, target_id: str,
+           detail: dict | None = None) -> None:
+    """Ghi audit log — best-effort, không làm hỏng request nếu lỗi."""
+
+    try:
+        conn.execute(
+            "INSERT INTO audit_log (actor, action, target_type, target_id, detail) "
+            "VALUES (%s,%s,%s,%s,%s)",
+            (actor or "unknown", action, target_type, target_id,
+             Json(detail or {})),
+        )
+    except Exception:
+        pass
+
+
 def _notify(conn, to_email: str, kind: str, ref_id: str, message: str) -> None:
     """Ghi hàng đợi + GỬI LARK cho người nhận (reviewer/agent owner)."""
 
@@ -904,6 +996,8 @@ def upsert_belief(b: dict, authorization: str = Header(default="")) -> dict:
             (bid, b.get("title"), b.get("statement"), b.get("domain"),
              b.get("source", "admin"), b.get("source_url"), b.get("updated_by", "admin")),
         )
+        _audit(conn, b.get("updated_by", "admin"), "upsert_belief", "belief", bid,
+               {"title": b.get("title"), "domain": b.get("domain")})
         conn.commit()
     return {"belief_id": bid, "ok": True}
 
@@ -972,6 +1066,8 @@ def add_reviewer(body: dict, authorization: str = Header(default="")) -> dict:
             "ON CONFLICT (email, domain) DO NOTHING",
             (email, domain, body.get("added_by", "admin")),
         )
+        _audit(conn, body.get("added_by", "admin"), "add_reviewer", "reviewer", email,
+               {"domain": domain})
         conn.commit()
     return {"email": email, "domain": domain, "ok": True}
 
@@ -1130,6 +1226,8 @@ def review_knowledge(item_id: str, body: dict) -> dict:
             "reviewed_at=now() WHERE item_id=%s",
             (decision, reviewer, body.get("note"), item_id),
         )
+        _audit(conn, reviewer, "review_knowledge", "knowledge", item_id,
+               {"decision": decision, "domain": item["domain"]})
         conn.commit()
     return {"item_id": item_id, "status": decision, "reviewed_by": reviewer}
 
@@ -1198,6 +1296,8 @@ def resolve_conflict(conflict_id: str, body: dict) -> dict:
             "WHERE conflict_id=%s",
             (decision, body.get("resolution"), conflict_id),
         )
+        _audit(conn, body.get("owner_email") or "owner", "resolve_conflict", "conflict",
+               conflict_id, {"decision": decision, "agent_id": c.get("agent_id")})
         # Nếu chọn cập nhật shared → tạo knowledge item chờ reviewer duyệt (không tự ghi belief).
         if decision == "resolved_update_shared":
             iid = "k_" + secrets.token_hex(6)
@@ -1817,6 +1917,9 @@ def set_quota(body: dict, authorization: str = Header(default="")) -> dict:
             (aid, _num(body.get("monthly_usd_limit")), _num(body.get("monthly_token_limit")),
              int(body.get("alert_pct") or DEFAULT_ALERT_PCT)),
         )
+        _audit(conn, "admin", "set_quota", "agent", aid,
+               {"usd": body.get("monthly_usd_limit"), "tokens": body.get("monthly_token_limit"),
+                "alert_pct": body.get("alert_pct")})
         conn.commit()
     return {"agent_id": aid, "ok": True}
 
@@ -1883,6 +1986,7 @@ def _alert_loop() -> None:
             _ensure_schema()
             with _db() as conn:
                 _check_quota_alerts(conn)
+                _check_health_alerts(conn)
         except Exception:
             pass
 
@@ -1891,3 +1995,296 @@ def _alert_loop() -> None:
 def _start_alert_daemon() -> None:
     if ALERT_INTERVAL > 0:
         threading.Thread(target=_alert_loop, daemon=True).start()
+
+
+# ============================ A1: Audit log ============================
+
+@app.get("/v1/audit")
+def list_audit(action: str | None = None, target_id: str | None = None,
+               actor: str | None = None, limit: int = 100) -> list[dict]:
+    """Nhật ký thao tác toàn platform (ai làm gì, khi nào) — cho quản trị/tuân thủ."""
+
+    _ensure_schema()
+    sql = "SELECT actor, action, target_type, target_id, detail, at FROM audit_log"
+    where, args = [], []
+    if action:
+        where.append("action=%s"); args.append(action)
+    if target_id:
+        where.append("target_id=%s"); args.append(target_id)
+    if actor:
+        where.append("actor=%s"); args.append(actor)
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY at DESC LIMIT %s"
+    args.append(min(int(limit), 500))
+    with _db() as conn:
+        return conn.execute(sql, args).fetchall()
+
+
+# ============================ A3: Health monitor ============================
+
+def _health_rows(conn) -> list[dict]:
+    """Mỗi agent: status + lần trace gần nhất + số giờ im lặng + cờ health."""
+
+    last = {r["agent_id"]: r for r in conn.execute(
+        "SELECT agent_id, max(received_at) AS last_trace, count(*) AS runs "
+        "FROM agent_traces GROUP BY agent_id").fetchall()}
+    agents = conn.execute(
+        "SELECT agent_id, name, owner, status FROM agents ORDER BY agent_id").fetchall()
+    out = []
+    now = datetime.now(timezone.utc)
+    for a in agents:
+        lt = last.get(a["agent_id"], {})
+        last_trace = lt.get("last_trace")
+        hours = None
+        if last_trace:
+            hours = round((now - last_trace).total_seconds() / 3600, 1)
+        health = "ok"
+        if a["status"] == "active":
+            if last_trace is None:
+                health = "never"
+            elif hours is not None and hours >= HEALTH_SILENT_HOURS:
+                health = "silent"
+        out.append({**a, "last_trace": last_trace.isoformat() if last_trace else None,
+                    "runs": lt.get("runs", 0), "silent_hours": hours, "health": health})
+    return out
+
+
+@app.get("/v1/health/agents")
+def health_agents() -> dict:
+    _ensure_schema()
+    with _db() as conn:
+        rows = _health_rows(conn)
+    return {"threshold_hours": HEALTH_SILENT_HOURS, "agents": rows,
+            "n_problem": sum(1 for r in rows if r["health"] != "ok")}
+
+
+def _check_health_alerts(conn) -> list[dict]:
+    """Agent active mà im lặng/never → cảnh báo Lark (1 lần/agent/ngày)."""
+
+    _, _, _ = _month_bounds(None)
+    day = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d")
+    fired = []
+    for r in _health_rows(conn):
+        if r["health"] not in ("silent", "never"):
+            continue
+        dup = conn.execute(
+            "SELECT 1 FROM agent_health_alerts WHERE agent_id=%s AND kind=%s AND day=%s",
+            (r["agent_id"], r["health"], day)).fetchone()
+        if dup:
+            continue
+        name = r["name"] or r["agent_id"]
+        if r["health"] == "never":
+            detail = "chưa từng gửi trace nào dù đang active"
+        else:
+            detail = f"im lặng ~{r['silent_hours']}h (ngưỡng {HEALTH_SILENT_HOURS}h)"
+        conn.execute(
+            "INSERT INTO agent_health_alerts (agent_id, kind, day, detail) "
+            "VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+            (r["agent_id"], r["health"], day, detail))
+        _notify(conn, r["owner"], "health", r["agent_id"],
+                f"🩺 Agent [{name}] có vấn đề sức khoẻ: {detail}. Kiểm tra agent còn chạy không.")
+        fired.append({"agent_id": r["agent_id"], "kind": r["health"], "detail": detail})
+    conn.commit()
+    return fired
+
+
+@app.post("/v1/health/check-alerts")
+def health_check_alerts(authorization: str = Header(default="")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        return {"fired": _check_health_alerts(conn)}
+
+
+# ============================ A4: Golden set + regression ============================
+
+def _judge_llm(prompt: str, expected: str, rubric: str, response: str) -> tuple[bool, str]:
+    """Chấm chủ quan qua LLM (tùy chọn). Trả (pass, note). Tắt/nghẽn → fallback contains."""
+
+    if not JUDGE_URL:
+        return ((expected or "").lower() in (response or "").lower(),
+                "fallback contains (JUDGE_URL chưa cấu hình)")
+    try:
+        sys = ("Bạn là giám khảo chấm câu trả lời. Chỉ trả JSON "
+               '{"pass": true/false, "reason": "..."} — không thêm gì khác.')
+        user = (f"Yêu cầu: {prompt}\nĐáp án mong đợi/tiêu chí: {expected}\n"
+                f"Rubric: {rubric or '(không)'}\nCâu trả lời của agent: {response}\n"
+                "Câu trả lời có ĐẠT không?")
+        r = requests.post(
+            f"{JUDGE_URL}/v1/chat/completions",
+            headers={"Authorization": f"Bearer {JUDGE_TOKEN}", "Content-Type": "application/json"},
+            json={"model": JUDGE_MODEL, "temperature": 0,
+                  "messages": [{"role": "system", "content": sys},
+                               {"role": "user", "content": user}]},
+            timeout=30)
+        txt = r.json()["choices"][0]["message"]["content"]
+        m = re.search(r"\{.*\}", txt, re.S)
+        j = json.loads(m.group(0)) if m else {}
+        return bool(j.get("pass")), str(j.get("reason", ""))[:300]
+    except Exception as exc:
+        return ((expected or "").lower() in (response or "").lower(),
+                f"fallback contains (judge lỗi: {str(exc)[:80]})")
+
+
+@app.post("/v1/golden-cases")
+def add_golden_case(body: dict, authorization: str = Header(default="")) -> dict:
+    """Thêm/sửa ca golden (bộ chuẩn để test hồi quy)."""
+
+    _require_admin(authorization)
+    _ensure_schema()
+    cid = body.get("case_id") or ("g_" + secrets.token_hex(6))
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO golden_cases (case_id, skill, prompt, expected, atype, tol,
+                                      weight, rubric, active, created_by)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (case_id) DO UPDATE SET skill=EXCLUDED.skill, prompt=EXCLUDED.prompt,
+              expected=EXCLUDED.expected, atype=EXCLUDED.atype, tol=EXCLUDED.tol,
+              weight=EXCLUDED.weight, rubric=EXCLUDED.rubric, active=EXCLUDED.active
+            """,
+            (cid, body.get("skill"), body.get("prompt"), body.get("expected"),
+             body.get("atype", "contains"), float(body.get("tol", 0) or 0),
+             float(body.get("weight", 1) or 1), body.get("rubric"),
+             bool(body.get("active", True)), body.get("created_by", "admin")),
+        )
+        _audit(conn, body.get("created_by", "admin"), "golden_case", "golden", cid,
+               {"skill": body.get("skill"), "atype": body.get("atype")})
+        conn.commit()
+    return {"case_id": cid, "ok": True}
+
+
+@app.get("/v1/golden-cases")
+def list_golden_cases(skill: str | None = None) -> list[dict]:
+    _ensure_schema()
+    sql = "SELECT case_id, skill, prompt, expected, atype, tol, weight, rubric, active FROM golden_cases"
+    args: list = []
+    if skill:
+        sql += " WHERE skill=%s"; args.append(skill)
+    sql += " ORDER BY created_at DESC"
+    with _db() as conn:
+        return conn.execute(sql, args).fetchall()
+
+
+@app.post("/v1/regression/run")
+def run_regression(body: dict, authorization: str = Header(default="")) -> dict:
+    """Chạy hồi quy trên golden set.
+
+    body: { target_id, target_type, skill?, threshold?, answers: [{case_id, response}] }
+    Chấm deterministic (exact/regex/numeric/contains) + llm_judge (nếu cấu hình).
+    """
+
+    _require_admin(authorization)
+    _ensure_schema()
+    answers = {a.get("case_id"): a.get("response", "") for a in (body.get("answers") or [])}
+    skill = body.get("skill")
+    threshold = float(body.get("threshold", 0.8) or 0.8)
+    with _db() as conn:
+        sql = "SELECT * FROM golden_cases WHERE active=true"
+        args: list = []
+        if skill:
+            sql += " AND skill=%s"; args.append(skill)
+        cases = conn.execute(sql, args).fetchall()
+        if not cases:
+            raise HTTPException(status_code=422, detail="không có golden case active")
+        total_w = sum(float(c["weight"] or 1) for c in cases) or 1.0
+        got, detail = 0.0, []
+        for c in cases:
+            resp = answers.get(c["case_id"], "")
+            if c["atype"] == "llm_judge":
+                ok, note = _judge_llm(c["prompt"], c["expected"], c["rubric"], resp)
+            else:
+                ok = _assert_answer(c["expected"], resp, c["atype"], float(c["tol"] or 0))
+                note = ""
+            w = float(c["weight"] or 1)
+            if ok:
+                got += w
+            detail.append({"case_id": c["case_id"], "skill": c["skill"], "ok": ok,
+                           "atype": c["atype"], "note": note})
+        score = round(got / total_w, 4)
+        passed = score >= threshold
+        n_pass = sum(1 for d in detail if d["ok"])
+        rid = "r_" + secrets.token_hex(6)
+        conn.execute(
+            """
+            INSERT INTO regression_runs (run_id, target_type, target_id, skill, score,
+                                         passed, n_total, n_pass, threshold, detail, run_by)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """,
+            (rid, body.get("target_type", "agent"), body.get("target_id"), skill,
+             score, passed, len(cases), n_pass, threshold, Json(detail),
+             body.get("run_by", "admin")),
+        )
+        _audit(conn, body.get("run_by", "admin"), "regression_run", "regression", rid,
+               {"target_id": body.get("target_id"), "score": score, "passed": passed})
+        conn.commit()
+    return {"run_id": rid, "score": score, "passed": passed,
+            "n_total": len(cases), "n_pass": n_pass, "threshold": threshold, "detail": detail}
+
+
+@app.get("/v1/regression/runs")
+def list_regression_runs(target_id: str | None = None, limit: int = 50) -> list[dict]:
+    _ensure_schema()
+    sql = ("SELECT run_id, target_type, target_id, skill, score, passed, n_total, "
+           "n_pass, threshold, run_by, at FROM regression_runs")
+    args: list = []
+    if target_id:
+        sql += " WHERE target_id=%s"; args.append(target_id)
+    sql += " ORDER BY at DESC LIMIT %s"
+    args.append(min(int(limit), 200))
+    with _db() as conn:
+        return conn.execute(sql, args).fetchall()
+
+
+# ============================ A5: Extract PDF/Word + dọn agent ============================
+
+@app.post("/v1/extract")
+async def extract_document(file: UploadFile = File(...),
+                           authorization: str = Header(default="")) -> dict:
+    """Trích text từ PDF/DOCX/TXT server-side (cho import shared beliefs)."""
+
+    _require_admin(authorization)
+    data = await file.read()
+    name = (file.filename or "").lower()
+    text = ""
+    try:
+        if name.endswith(".pdf"):
+            import io
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(data))
+            text = "\n".join((p.extract_text() or "") for p in reader.pages)
+        elif name.endswith(".docx"):
+            import io
+            import docx
+            d = docx.Document(io.BytesIO(data))
+            text = "\n".join(p.text for p in d.paragraphs)
+        else:  # txt/md
+            text = data.decode("utf-8", errors="replace")
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"không trích được text: {str(exc)[:120]}")
+    return {"filename": file.filename, "chars": len(text), "text": text[:200_000]}
+
+
+@app.post("/v1/agents/{agent_id}/delete")
+def delete_agent(agent_id: str, body: dict | None = None,
+                 authorization: str = Header(default="")) -> dict:
+    """Gỡ agent khỏi REGISTRY (chỉ metadata). KHÔNG xoá trace/schema/dữ liệu.
+
+    Dùng để dọn agent demo/test. Trace lịch sử vẫn còn để truy vết.
+    """
+
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        row = conn.execute("SELECT name, status FROM agents WHERE agent_id=%s",
+                           (agent_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="not found")
+        conn.execute("DELETE FROM agents WHERE agent_id=%s", (agent_id,))
+        conn.execute("DELETE FROM agent_quotas WHERE agent_id=%s", (agent_id,))
+        _audit(conn, "admin", "delete_agent", "agent", agent_id,
+               {"name": row.get("name"), "note": "registry only; traces kept"})
+        conn.commit()
+    return {"agent_id": agent_id, "deleted_from_registry": True,
+            "data_kept": "traces + schema giữ nguyên"}

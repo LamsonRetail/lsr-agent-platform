@@ -80,8 +80,23 @@ export function BeliefsTab({ beliefs, domains }: { beliefs: any[]; domains: any[
 
   async function readFile(f: File) {
     setFilename(f.name);
-    if (/\.(txt|md|markdown|csv)$/i.test(f.name)) setText(await f.text());
-    else setMsg("✗ PDF/Word: hãy copy nội dung dán vào ô bên dưới (chưa hỗ trợ parse nhị phân ở trình duyệt).");
+    if (/\.(txt|md|markdown|csv)$/i.test(f.name)) {
+      setText(await f.text());
+      return;
+    }
+    // PDF/DOCX: trích text server-side.
+    setMsg("Đang trích text server-side...");
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const r = await fetch("/api/extract", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : JSON.stringify(j.error));
+      setText(j.text || "");
+      setMsg(`✓ Trích ${j.chars?.toLocaleString?.() || 0} ký tự từ ${f.name}.`);
+    } catch (e: any) {
+      setMsg("✗ Không trích được: " + String(e.message || e));
+    }
   }
 
   async function suggest() {

@@ -34,6 +34,12 @@ export async function costTimeseries(period?: string) {
 }
 export async function quotas() { return safe(() => jget(`${P}/v1/quotas`), []); }
 
+// --- A1 audit / A3 health / A4 golden+regression ---
+export async function auditLog(params = "") { return safe(() => jget(`${P}/v1/audit${params}`), []); }
+export async function healthAgents() { return safe(() => jget(`${P}/v1/health/agents`), { threshold_hours: 24, agents: [], n_problem: 0 }); }
+export async function goldenCases() { return safe(() => jget(`${P}/v1/golden-cases`), []); }
+export async function regressionRuns() { return safe(() => jget(`${P}/v1/regression/runs`), []); }
+
 async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try { return await fn(); } catch { return fallback; }
 }
@@ -57,6 +63,22 @@ export async function adminPost(path: string, body: any) {
 }
 
 export const PLATFORM_URL = P;
+
+// Upload multipart (admin) — dùng cho /v1/extract (parse PDF/Word server-side).
+export async function adminForm(path: string, form: FormData) {
+  const r = await fetch(`${P}${path}`, {
+    method: "POST",
+    headers: gwHeaders({ Authorization: `Bearer ${ADMIN}` }),
+    body: form,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const err: any = new Error("platform api error");
+    err.status = r.status; err.data = data;
+    throw err;
+  }
+  return data;
+}
 
 // --- LSR Brain: shared brain + hàng chờ duyệt ---
 export async function pendingKnowledge() { return safe(() => jget(`${P}/v1/knowledge/items?status=pending`), []); }

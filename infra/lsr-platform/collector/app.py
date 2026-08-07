@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 
 import psycopg
 from fastapi import FastAPI, Header, HTTPException
@@ -20,6 +21,26 @@ from psycopg.rows import dict_row
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 INGEST_TOKEN = os.environ.get("COLLECTOR_INGEST_TOKEN", "")
+# --- PII guard: che dữ liệu nhạy cảm TRƯỚC khi lưu (chống lộ vào DB/BigQuery) ---
+PII_REDACT = os.environ.get("PII_REDACT", "true").lower() != "false"
+_PII_PATTERNS = [
+    ("EMAIL", re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")),
+    ("CARD", re.compile(r"\b(?:\d[ -]?){13,16}\b")),          # thẻ ngân hàng
+    ("PHONE", re.compile(r"\b(?:\+?84|0)\d{9,10}\b")),         # SĐT VN
+    ("ID", re.compile(r"\b\d{12}\b|\b\d{9}\b")),               # CCCD/CMND
+]
+
+
+def _redact(text: str) -> tuple[str, int]:
+    """Trả (text đã che, số lần che). Giữ nguyên nếu tắt PII_REDACT."""
+
+    if not text or not PII_REDACT:
+        return text or "", 0
+    n = 0
+    for label, pat in _PII_PATTERNS:
+        text, k = pat.subn(f"[{label}]", text)
+        n += k
+    return text, n
 
 app = FastAPI(title="LSR Collector", version="0.1.0")
 
@@ -59,6 +80,8 @@ def _ensure_schema() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_traces_agent ON agent_traces(agent_id)"
         )
+        # PII guard: đếm số lần che trong mỗi trace (0 = sạch).
+        conn.execute("ALTER TABLE agent_traces ADD COLUMN IF NOT EXISTS pii_flags int DEFAULT 0")
         # Resource index: file/link được share cho agent (lưu ngoài memory).
         conn.execute(
             """
@@ -140,13 +163,17 @@ def ingest(trace: dict, authorization: str = Header(default="")) -> dict:
     llm_calls = trace.get("llm_calls", []) or []
     it = sum(int(c.get("input_tokens", 0)) for c in llm_calls)
     ot = sum(int(c.get("output_tokens", 0)) for c in llm_calls)
+    # PII guard: che final_output + toàn bộ raw (che trên chuỗi JSON, giữ cấu trúc).
+    final_out, n1 = _redact(trace.get("final_output") or "")
+    raw_json, n2 = _redact(json.dumps(trace, ensure_ascii=False))
+    pii_flags = n1 + n2
     with _db() as conn:
         conn.execute(
             """
             INSERT INTO agent_traces
               (run_id, agent_id, task_id, source, input_tokens, output_tokens,
-               total_tokens, tool_calls, final_output, raw)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+               total_tokens, tool_calls, final_output, raw, pii_flags)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """,
             (
                 trace.get("run_id"),
@@ -157,12 +184,13 @@ def ingest(trace: dict, authorization: str = Header(default="")) -> dict:
                 ot,
                 it + ot,
                 len(trace.get("tool_calls", []) or []),
-                trace.get("final_output"),
-                json.dumps(trace),
+                final_out,
+                raw_json,
+                pii_flags,
             ),
         )
         conn.commit()
-    return {"ok": True, "total_tokens": it + ot}
+    return {"ok": True, "total_tokens": it + ot, "pii_redacted": pii_flags}
 
 
 @app.get("/v1/traces")
@@ -191,7 +219,8 @@ def stats() -> list[dict]:
             SELECT agent_id,
                    count(*)            AS runs,
                    sum(total_tokens)   AS total_tokens,
-                   sum(tool_calls)     AS tool_calls
+                   sum(tool_calls)     AS tool_calls,
+                   coalesce(sum(pii_flags),0) AS pii_flags
             FROM agent_traces
             GROUP BY agent_id
             ORDER BY total_tokens DESC NULLS LAST

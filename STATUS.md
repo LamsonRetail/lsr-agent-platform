@@ -66,12 +66,12 @@ Ký hiệu: ✅ xong & verify live · 🟡 code xong, chờ điều kiện bên 
 
 ## F. Backlog tính năng (4 nhóm bạn đã chọn)
 
-**Vận hành & tin cậy:** ✅ cost/quota theo agent (dashboard + hạn mức + cảnh báo Lark tự động) · ⬜ health monitor + cảnh báo Lark · ⬜ versioning/rollback prompt · ⬜ staging/canary
-**Chất lượng & học hỏi:** ⬜ human feedback 👍/👎 có lý do · ⬜ golden set + regression test · ⬜ LLM judge (RIR/OFR/CTRL-Acc) · ⬜ marketplace prompt/skill
+**Vận hành & tin cậy:** ✅ cost/quota theo agent (dashboard + hạn mức + cảnh báo Lark tự động) · ✅ health monitor + cảnh báo Lark (agent active im lặng) · ⬜ versioning/rollback prompt · ⬜ staging/canary
+**Chất lượng & học hỏi:** ⬜ human feedback 👍/👎 có lý do · ✅ golden set + regression test · ✅ LLM judge (pluggable, JUDGE_URL) · ⬜ marketplace prompt/skill
 **Kiến thức & phối hợp:** ⬜ semantic search resource index · ⬜ second brain toàn công ty · ⬜ agent-to-agent handoff
-**Quản trị & tuân thủ:** ⬜ audit log toàn platform · ⬜ RBAC theo phòng ban · ⬜ PII guard · ⬜ data retention
+**Quản trị & tuân thủ:** ✅ audit log toàn platform · ⬜ RBAC theo phòng ban · ✅ PII guard (redact ở collector) · ⬜ data retention
 
-**Khác:** ⬜ SSO thay ô nhập email (reviewer/owner) · ⬜ parse PDF/Word server-side · ⬜ dọn agent demo trong registry · ⬜ nạp squad/KPI/thành viên thật
+**Khác:** ⬜ SSO thay ô nhập email (reviewer/owner) · ✅ parse PDF/Word server-side (endpoint /v1/extract + wire import beliefs) · ✅ dọn agent demo trong registry (endpoint /v1/agents/{id}/delete) · ⬜ nạp squad/KPI/thành viên thật
 
 ---
 
