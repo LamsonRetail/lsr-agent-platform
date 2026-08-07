@@ -74,6 +74,8 @@ def _ensure_schema() -> None:
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS repo_url text",
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS host_note text",
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS backup_owner text",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS lark_app_id text",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS lark_chat_ids text[]",
         ):
             conn.execute(ddl)
         # --- Test & Learn ---
@@ -109,6 +111,19 @@ def _ensure_schema() -> None:
             """
         )
         # --- Second brain của team (BẢNG CHUNG, tránh rải rác) ---
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lark_admin_actions (
+                id         bigserial PRIMARY KEY,
+                agent_id   text,
+                action     text,        -- remove_bot | add_bot
+                chat_id    text,
+                ok         boolean,
+                detail     text,
+                acted_at   timestamptz DEFAULT now()
+            )
+            """
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS teams (
@@ -460,7 +475,12 @@ def set_status(agent_id: str, body: dict, authorization: str = Header(default=""
         conn.commit()
         if cur.rowcount == 0:
             raise HTTPException(status_code=404, detail="not found")
-    return {"agent_id": agent_id, "status": status}
+        lark = []
+        if status in ("active", "deactivated"):
+            # Đồng bộ Lark: tắt agent -> gỡ bot khỏi chat; bật lại -> thêm vào lại.
+            lark = _sync_lark_status(conn, agent_id, activate=(status == "active"))
+        conn.commit()
+    return {"agent_id": agent_id, "status": status, "lark_sync": lark}
 
 
 # ======================= Second brain của team =======================
@@ -646,6 +666,47 @@ def _send_lark(to_email: str, text: str) -> bool:
         return r.json().get("code") == 0
     except Exception:
         return False
+
+
+def _lark_chat_member(chat_id: str, app_id: str, add: bool) -> tuple[bool, str]:
+    """Thêm/gỡ BOT khỏi một chat. Chỉ đổi thành viên — KHÔNG xoá tin nhắn/dữ liệu."""
+
+    token = _lark_token()
+    if not token:
+        return False, "no lark token"
+    url = f"{LARK_DOMAIN}/open-apis/im/v1/chats/{chat_id}/members?member_id_type=app_id"
+    try:
+        if add:
+            r = requests.post(url, headers={"Authorization": f"Bearer {token}"},
+                              json={"id_list": [app_id]}, timeout=10)
+        else:
+            r = requests.delete(url, headers={"Authorization": f"Bearer {token}"},
+                                json={"id_list": [app_id]}, timeout=10)
+        d = r.json()
+        return d.get("code") == 0, str(d.get("msg"))[:120]
+    except Exception as exc:
+        return False, str(exc)[:120]
+
+
+def _sync_lark_status(conn, agent_id: str, activate: bool) -> list[dict]:
+    """Đồng bộ trạng thái agent sang Lark: gỡ bot khi tắt, thêm lại khi bật."""
+
+    row = conn.execute(
+        "SELECT lark_app_id, lark_chat_ids FROM agents WHERE agent_id=%s", (agent_id,)
+    ).fetchone() or {}
+    app_id = row.get("lark_app_id")
+    chats = row.get("lark_chat_ids") or []
+    results = []
+    if not app_id or not chats:
+        return results
+    for cid in chats:
+        ok, detail = _lark_chat_member(cid, app_id, add=activate)
+        action = "add_bot" if activate else "remove_bot"
+        conn.execute(
+            "INSERT INTO lark_admin_actions (agent_id, action, chat_id, ok, detail) "
+            "VALUES (%s,%s,%s,%s,%s)", (agent_id, action, cid, ok, detail))
+        results.append({"chat_id": cid, "action": action, "ok": ok, "detail": detail})
+    return results
 
 
 def _notify(conn, to_email: str, kind: str, ref_id: str, message: str) -> None:
