@@ -28,6 +28,11 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H "${{ secrets.LSR_DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
+      - name: Chuẩn bị lib cho lsr_brain
+        run: |
+          mkdir -p infra/lsr-platform/lsr_brain/src
+          cp -r src/rating_agent infra/lsr-platform/lsr_brain/src/
+
       - name: Rsync infra → VM (giữ nguyên .env, volume)
         run: |
           rsync -az \

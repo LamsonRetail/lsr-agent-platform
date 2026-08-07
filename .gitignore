@@ -32,3 +32,4 @@ htmlcov/
 # Output
 output/
 *.log
+infra/lsr-platform/lsr_brain/src/

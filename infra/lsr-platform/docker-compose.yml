@@ -90,6 +90,16 @@ services:
     #   - ./secrets/bq-sa.json:/secrets/bq-sa.json:ro
     restart: unless-stopped
 
+  lsr_brain:
+    build: ./lsr_brain          # runner consolidate hàng tuần (cuối tuần)
+    depends_on: [platform_api]
+    environment:
+      LSR_PLATFORM_URL: http://platform_api:8090
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      BRAIN_RUN_DOW: "6"        # 6 = Chủ nhật
+      BRAIN_RUN_HOUR: "20"      # 20h giờ VN
+    restart: unless-stopped
+
   web:
     build: ./web            # nguồn app Next.js (đồng bộ từ apps/platform-web)
     depends_on: [platform_api, collector]

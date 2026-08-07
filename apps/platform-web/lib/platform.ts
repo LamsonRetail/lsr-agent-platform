@@ -46,3 +46,10 @@ export async function adminPost(path: string, body: any) {
 }
 
 export const PLATFORM_URL = P;
+
+// --- LSR Brain: shared brain + hàng chờ duyệt ---
+export async function pendingKnowledge() { return safe(() => jget(`${P}/v1/knowledge/items?status=pending`), []); }
+export async function approvedKnowledge() { return safe(() => jget(`${P}/v1/knowledge/items?status=approved`), []); }
+export async function openConflicts() { return safe(() => jget(`${P}/v1/knowledge/conflicts?status=open`), []); }
+export async function sharedBrain() { return safe(() => jget(`${P}/v1/shared-brain`), { beliefs: [], knowledge: [] }); }
+export async function reviewers() { return safe(() => jget(`${P}/v1/knowledge/reviewers`), []); }

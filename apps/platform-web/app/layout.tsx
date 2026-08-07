@@ -16,6 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <nav className="nav">
             <Link href="/">Platform</Link>
             <Link href="/test-learn">Test &amp; Learn</Link>
+            <Link href="/review">Duyệt tri thức</Link>
           </nav>
           <div className="spacer" />
           <span className="muted">dữ liệu live</span>
