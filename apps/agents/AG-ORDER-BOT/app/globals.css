@@ -6,3 +6,7 @@
 .c .v{font-size:24px;font-weight:700}table{width:100%;border-collapse:collapse;background:var(--s);border:1px solid var(--b);border-radius:12px;overflow:hidden}
 th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--b)}th{font-size:11px;text-transform:uppercase;color:var(--m)}tr:last-child td{border-bottom:0}
 .bg{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;border:1px solid var(--b)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{border:1px solid var(--b);background:var(--s);color:var(--t);padding:5px 10px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12.5px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+input{font-family:inherit;font-size:13px;padding:6px 9px;border-radius:8px;border:1px solid var(--b);background:var(--s);color:var(--t)}

@@ -8,3 +8,5 @@ async function get(u){ const r = await fetch(u, { cache: "no-store", headers: h(
 export async function agent(){ const all = await get(P+"/v1/agents").catch(()=>[]); return (all||[]).find(a=>a.agent_id===AGENT_ID) || {agent_id:AGENT_ID}; }
 export async function stats(){ const all = await get(C+"/v1/stats").catch(()=>[]); return (all||[]).find(s=>s.agent_id===AGENT_ID) || {}; }
 export async function attempts(){ return get(P+"/v1/attempts?taker_id="+encodeURIComponent(AGENT_ID)).catch(()=>[]); }
+export async function conflicts(){ return get(P+"/v1/knowledge/conflicts?status=open&agent_id="+encodeURIComponent(AGENT_ID)).catch(()=>[]); }
+export const PLATFORM_URL = P;

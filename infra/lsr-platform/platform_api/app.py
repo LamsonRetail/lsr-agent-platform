@@ -188,6 +188,16 @@ def _ensure_schema() -> None:
         )
         conn.execute(
             """
+            CREATE TABLE IF NOT EXISTS knowledge_domains (
+                domain     text PRIMARY KEY,
+                label      text,
+                keywords   text[],          -- tag/keywords để nhận diện chuyên môn
+                created_at timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS knowledge_items (
                 item_id      text PRIMARY KEY,
                 title        text,
@@ -685,6 +695,73 @@ def add_reviewer(body: dict, authorization: str = Header(default="")) -> dict:
     return {"email": email, "domain": domain, "ok": True}
 
 
+@app.post("/v1/knowledge/domains")
+def upsert_domain(body: dict, authorization: str = Header(default="")) -> dict:
+    """CHỈ admin: định nghĩa chuyên môn + tag/keywords (để chọn & auto-route)."""
+
+    _require_admin(authorization)
+    _ensure_schema()
+    d = body.get("domain")
+    if not d:
+        raise HTTPException(status_code=422, detail="domain required")
+    kws = body.get("keywords") or []
+    if isinstance(kws, str):
+        kws = [k.strip() for k in kws.split(",") if k.strip()]
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO knowledge_domains (domain, label, keywords) VALUES (%s,%s,%s) "
+            "ON CONFLICT (domain) DO UPDATE SET label=EXCLUDED.label, keywords=EXCLUDED.keywords",
+            (d, body.get("label") or d, kws),
+        )
+        conn.commit()
+    return {"domain": d, "keywords": kws, "ok": True}
+
+
+@app.get("/v1/knowledge/domains")
+def list_domains() -> list[dict]:
+    _ensure_schema()
+    with _db() as conn:
+        return conn.execute(
+            "SELECT domain, label, keywords FROM knowledge_domains ORDER BY domain"
+        ).fetchall()
+
+
+@app.post("/v1/knowledge/domains/{domain}/delete")
+def delete_domain(domain: str, authorization: str = Header(default="")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        conn.execute("DELETE FROM knowledge_domains WHERE domain=%s", (domain,))
+        conn.commit()
+    return {"domain": domain, "deleted": True}
+
+
+@app.post("/v1/knowledge/reviewers/remove")
+def remove_reviewer(body: dict, authorization: str = Header(default="")) -> dict:
+    """CHỈ admin: gỡ quyền phê duyệt của một người khỏi một chuyên môn."""
+
+    _require_admin(authorization)
+    _ensure_schema()
+    email, domain = body.get("email"), body.get("domain")
+    if not email or not domain:
+        raise HTTPException(status_code=422, detail="email và domain là bắt buộc")
+    with _db() as conn:
+        cur = conn.execute(
+            "DELETE FROM knowledge_reviewers WHERE email=%s AND domain=%s", (email, domain))
+        conn.commit()
+    return {"email": email, "domain": domain, "removed": cur.rowcount}
+
+
+@app.post("/v1/shared-beliefs/{belief_id}/delete")
+def delete_belief(belief_id: str, authorization: str = Header(default="")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        conn.execute("DELETE FROM shared_beliefs WHERE belief_id=%s", (belief_id,))
+        conn.commit()
+    return {"belief_id": belief_id, "deleted": True}
+
+
 @app.get("/v1/knowledge/reviewers")
 def list_reviewers() -> list[dict]:
     _ensure_schema()
@@ -801,12 +878,20 @@ def raise_conflict(body: dict, authorization: str = Header(default="")) -> dict:
 
 
 @app.get("/v1/knowledge/conflicts")
-def list_conflicts(status: str = "open") -> list[dict]:
+def list_conflicts(status: str = "open", agent_id: str | None = None,
+                   owner_email: str | None = None) -> list[dict]:
+    """Lọc theo agent_id/owner — conflict hiển thị ở BACKEND CỦA TỪNG AGENT."""
+
     _ensure_schema()
+    sql = "SELECT * FROM knowledge_conflicts WHERE status=%s"
+    args: list = [status]
+    if agent_id:
+        sql += " AND agent_id=%s"; args.append(agent_id)
+    if owner_email:
+        sql += " AND owner_email=%s"; args.append(owner_email)
+    sql += " ORDER BY created_at DESC LIMIT 100"
     with _db() as conn:
-        return conn.execute(
-            "SELECT * FROM knowledge_conflicts WHERE status=%s ORDER BY created_at DESC LIMIT 100",
-            (status,)).fetchall()
+        return conn.execute(sql, args).fetchall()
 
 
 @app.post("/v1/knowledge/conflicts/{conflict_id}/resolve")

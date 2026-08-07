@@ -53,3 +53,4 @@ export async function approvedKnowledge() { return safe(() => jget(`${P}/v1/know
 export async function openConflicts() { return safe(() => jget(`${P}/v1/knowledge/conflicts?status=open`), []); }
 export async function sharedBrain() { return safe(() => jget(`${P}/v1/shared-brain`), { beliefs: [], knowledge: [] }); }
 export async function reviewers() { return safe(() => jget(`${P}/v1/knowledge/reviewers`), []); }
+export async function knowledgeDomains() { return safe(() => jget(`${P}/v1/knowledge/domains`), []); }

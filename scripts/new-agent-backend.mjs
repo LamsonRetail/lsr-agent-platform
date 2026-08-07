@@ -78,6 +78,77 @@ async function get(u){ const r = await fetch(u, { cache: "no-store", headers: h(
 export async function agent(){ const all = await get(P+"/v1/agents").catch(()=>[]); return (all||[]).find(a=>a.agent_id===AGENT_ID) || {agent_id:AGENT_ID}; }
 export async function stats(){ const all = await get(C+"/v1/stats").catch(()=>[]); return (all||[]).find(s=>s.agent_id===AGENT_ID) || {}; }
 export async function attempts(){ return get(P+"/v1/attempts?taker_id="+encodeURIComponent(AGENT_ID)).catch(()=>[]); }
+export async function conflicts(){ return get(P+"/v1/knowledge/conflicts?status=open&agent_id="+encodeURIComponent(AGENT_ID)).catch(()=>[]); }
+export const PLATFORM_URL = P;
+`);
+
+w("app/api/conflicts/[id]/resolve/route.ts",
+`import { NextResponse } from "next/server";
+import { PLATFORM_URL } from "@/lib/platform";
+export async function POST(req, { params }) {
+  const body = await req.json().catch(() => ({}));
+  const gw = process.env.LSR_GATEWAY_TOKEN;
+  const r = await fetch(PLATFORM_URL + "/v1/knowledge/conflicts/" + params.id + "/resolve", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(gw ? { "X-Gateway-Token": gw } : {}) },
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  return NextResponse.json(data, { status: r.status });
+}
+`);
+
+w("components/Conflicts.tsx",
+`"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+
+/** Mâu thuẫn shared brain vs brain của agent — CHỈ agent owner xác nhận (ở backend agent). */
+export default function Conflicts({ conflicts, ownerHint }) {
+  const router = useRouter();
+  const [email, setEmail] = useState(ownerHint || "");
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState("");
+  async function resolve(id, decision) {
+    setBusy(id); setMsg("");
+    try {
+      const r = await fetch("/api/conflicts/" + id + "/resolve", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision, owner_email: email }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail ?? j));
+      setMsg("✓ Đã xác nhận."); router.refresh();
+    } catch (e) { setMsg("✗ " + String(e.message || e)); } finally { setBusy(""); }
+  }
+  return (<>
+    <h3>Mâu thuẫn cần xác nhận ({conflicts.length})</h3>
+    <div className="row" style={{ marginBottom: 10 }}>
+      <span className="m">Owner xác nhận:</span>
+      <input value={email} onChange={(e) => setEmail(e.target.value)}
+        placeholder="email agent owner" style={{ width: 260 }} />
+    </div>
+    {msg && <p className="m">{msg}</p>}
+    <table><thead><tr><th>Shared brain nói</th><th>Agent brain nói</th><th>Xác nhận</th></tr></thead>
+    <tbody>
+      {conflicts.length === 0 && <tr><td colSpan={3} className="m">Không có mâu thuẫn nào.</td></tr>}
+      {conflicts.map((c) => (
+        <tr key={c.conflict_id}>
+          <td>{c.shared_claim}</td>
+          <td>{c.agent_claim}</td>
+          <td>
+            <button className="btn" disabled={!email || busy === c.conflict_id}
+              onClick={() => resolve(c.conflict_id, "resolved_keep_shared")}>Giữ shared</button>{" "}
+            <button className="btn" disabled={!email || busy === c.conflict_id}
+              onClick={() => resolve(c.conflict_id, "resolved_update_shared")}>Đề xuất cập nhật</button>{" "}
+            <button className="btn" disabled={!email || busy === c.conflict_id}
+              onClick={() => resolve(c.conflict_id, "dismissed")}>Bỏ qua</button>
+          </td>
+        </tr>
+      ))}
+    </tbody></table>
+  </>);
+}
 `);
 
 w("app/globals.css",
@@ -89,6 +160,10 @@ w("app/globals.css",
 .c .v{font-size:24px;font-weight:700}table{width:100%;border-collapse:collapse;background:var(--s);border:1px solid var(--b);border-radius:12px;overflow:hidden}
 th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--b)}th{font-size:11px;text-transform:uppercase;color:var(--m)}tr:last-child td{border-bottom:0}
 .bg{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;border:1px solid var(--b)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{border:1px solid var(--b);background:var(--s);color:var(--t);padding:5px 10px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12.5px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+input{font-family:inherit;font-size:13px;padding:6px 9px;border-radius:8px;border:1px solid var(--b);background:var(--s);color:var(--t)}
 `);
 
 w("app/layout.tsx",
@@ -98,10 +173,11 @@ export default function L({ children }){ return (<html lang="vi"><body><div clas
 `);
 
 w("app/page.tsx",
-`import { agent, stats, attempts, AGENT_ID } from "@/lib/platform";
+`import { agent, stats, attempts, conflicts, AGENT_ID } from "@/lib/platform";
+import Conflicts from "@/components/Conflicts";
 export const dynamic = "force-dynamic";
 export default async function Page(){
-  const [a, s, at] = await Promise.all([agent(), stats(), attempts()]);
+  const [a, s, at, cf] = await Promise.all([agent(), stats(), attempts(), conflicts()]);
   return (<>
     <h1>Backend · {a.name || AGENT_ID}</h1>
     <div className="m">{AGENT_ID} · squad {a.squad || "—"} · owner {a.owner || "—"} · <span className="bg">{a.status || "?"}</span></div>
@@ -115,6 +191,7 @@ export default async function Page(){
       {(at||[]).length===0 && <tr><td colSpan={3} className="m">chưa có</td></tr>}
       {(at||[]).map(x=>(<tr key={x.attempt_id}><td>{x.test_id}</td><td>{Math.round((x.score||0)*100)}</td><td>{x.passed?"pass":"fail"}</td></tr>))}
     </tbody></table>
+    <Conflicts conflicts={cf} ownerHint={a.owner || ""} />
     <p className="m" style={{marginTop:16}}>Backend riêng của agent — deploy chung repo platform. Thêm Config/Schedule tại đây.</p>
   </>);
 }
