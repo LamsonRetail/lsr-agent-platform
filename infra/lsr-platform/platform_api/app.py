@@ -591,6 +591,7 @@ def _ensure_schema() -> None:
             "ALTER TABLE policies ADD COLUMN IF NOT EXISTS scope text DEFAULT 'org'",
             "ALTER TABLE policies ADD COLUMN IF NOT EXISTS domain text",
             "ALTER TABLE policies ADD COLUMN IF NOT EXISTS owner text",
+            "ALTER TABLE policies ADD COLUMN IF NOT EXISTS source_url text",
             "ALTER TABLE policies ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()",
         ):
             conn.execute(ddl)
