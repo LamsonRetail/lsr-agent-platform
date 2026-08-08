@@ -520,6 +520,107 @@ def _ensure_schema() -> None:
             )
             """
         )
+        # ===== Brain v2: tri thức/kỹ năng/chính sách + graph liên kết =====
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS brain_items (
+                item_id     text PRIMARY KEY,
+                kind        text DEFAULT 'knowledge',   -- knowledge|process|definition|lesson|belief|faq
+                title       text,
+                content     text,
+                domain      text,
+                tags        text[] DEFAULT '{}',
+                scope       text DEFAULT 'shared',       -- shared|agent
+                agent_id    text,                        -- nếu scope=agent
+                source_agent text,
+                source_team text,
+                source_url  text,
+                source_ref  text,
+                status      text DEFAULT 'pending',      -- draft|pending|approved|rejected|deprecated
+                reviewed_by text, review_note text, reviewed_at timestamptz,
+                version     int DEFAULT 1,
+                created_by  text, created_at timestamptz DEFAULT now(),
+                updated_by  text, updated_at timestamptz DEFAULT now(),
+                confidence  numeric
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_brain_scope ON brain_items(scope, agent_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_brain_domain ON brain_items(domain)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_brain_status ON brain_items(status)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS brain_skills (
+                skill_id    text PRIMARY KEY,
+                name        text,
+                kind        text DEFAULT 'mcp',          -- mcp|builtin|api
+                description text,
+                domain      text,
+                tags        text[] DEFAULT '{}',
+                scope       text DEFAULT 'shared',
+                agent_id    text,
+                owner       text,
+                status      text DEFAULT 'proposed',     -- proposed|active|deprecated
+                source_url  text,
+                created_at  timestamptz DEFAULT now(),
+                updated_at  timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS brain_links (
+                link_id    text PRIMARY KEY,
+                from_id    text, from_type text,          -- kb|skill|policy
+                to_id      text, to_type   text,
+                rel        text,                          -- relates_to|depends_on|derived_from|supersedes|contradicts|refines|uses_skill|governed_by
+                note       text,
+                status     text DEFAULT 'suggested',      -- suggested|confirmed
+                source_url text,
+                created_by text,
+                created_at timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_link_from ON brain_links(from_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_link_to ON brain_links(to_id)")
+        # policies: mở rộng cho góc nhìn org (title/mô tả/scope/domain/owner/status)
+        for ddl in (
+            "ALTER TABLE policies ADD COLUMN IF NOT EXISTS title text",
+            "ALTER TABLE policies ADD COLUMN IF NOT EXISTS description text",
+            "ALTER TABLE policies ADD COLUMN IF NOT EXISTS scope text DEFAULT 'org'",
+            "ALTER TABLE policies ADD COLUMN IF NOT EXISTS domain text",
+            "ALTER TABLE policies ADD COLUMN IF NOT EXISTS owner text",
+            "ALTER TABLE policies ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now()",
+        ):
+            conn.execute(ddl)
+        # Migrate 1 lần: knowledge_items + shared_beliefs -> brain_items (idempotent)
+        conn.execute(
+            """
+            INSERT INTO brain_items(item_id,kind,title,content,domain,source_team,source_ref,
+                                    source_url,status,reviewed_by,review_note,reviewed_at,created_at)
+            SELECT item_id,'knowledge',title,md_content,domain,source_team,source_ref,
+                   source_url,status,reviewed_by,review_note,reviewed_at,created_at
+            FROM knowledge_items ON CONFLICT (item_id) DO NOTHING
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO brain_items(item_id,kind,title,content,domain,source_url,status,created_by,created_at)
+            SELECT belief_id,'belief',title,statement,domain,source_url,'approved',
+                   coalesce(updated_by,'admin'),updated_at
+            FROM shared_beliefs ON CONFLICT (item_id) DO NOTHING
+            """
+        )
+        # Migrate skills từ manifest (agents.skills) -> brain_skills
+        conn.execute(
+            """
+            INSERT INTO brain_skills(skill_id,name,kind,scope,status)
+            SELECT DISTINCT 'sk-'||s, s, 'mcp','shared','active'
+            FROM agents, unnest(coalesce(skills,'{}')) s WHERE s <> ''
+            ON CONFLICT (skill_id) DO NOTHING
+            """
+        )
         conn.commit()
     _READY = True
 
@@ -2784,13 +2885,10 @@ def set_retention(body: dict, authorization: str = Header(default=""),
 # ============================ Shared Brain — đồ thị 3D ============================
 
 @app.get("/v1/brain/graph")
-def brain_graph() -> dict:
-    """Đồ thị tri thức shared brain cho visualize 3D.
-
-    Node: domain / belief / knowledge (approved) / team.
-    Link: belief→domain, knowledge→domain, knowledge→team.
-    Mỗi node kèm source_url (link Lark) để click mở chi tiết.
-    """
+def brain_graph(scope: str = "shared", agent_id: str | None = None) -> dict:
+    """Đồ thị brain cho visualize 3D: node kb/belief/skill/policy/domain/team +
+    cạnh có LOẠI quan hệ (brain_links) + cạnh cấu trúc (in_domain/from_team).
+    scope=shared (mặc định) hoặc scope=agent&agent_id=... cho brain riêng agent."""
 
     _ensure_schema()
     nodes: dict = {}
@@ -2800,35 +2898,271 @@ def brain_graph() -> dict:
         if nid not in nodes:
             nodes[nid] = {"id": nid, "type": ntype, "label": (label or nid)[:80], **extra}
 
+    where = "scope=%s" + (" AND agent_id=%s" if scope == "agent" and agent_id else "")
+    args = [scope] + ([agent_id] if scope == "agent" and agent_id else [])
     with _db() as conn:
-        for d in conn.execute("SELECT domain, label FROM knowledge_domains").fetchall():
-            _node(f"domain:{d['domain']}", "domain", d.get("label") or d["domain"])
-        for b in conn.execute(
-            "SELECT belief_id, title, statement, domain, source_url FROM shared_beliefs"
-        ).fetchall():
-            bid = f"belief:{b['belief_id']}"
-            _node(bid, "belief", b.get("title") or b["belief_id"],
-                  detail=(b.get("statement") or "")[:600], source_url=b.get("source_url"),
-                  domain=b.get("domain"))
-            if b.get("domain"):
-                _node(f"domain:{b['domain']}", "domain", b["domain"])
-                links.append({"source": bid, "target": f"domain:{b['domain']}", "type": "in_domain"})
-        for k in conn.execute(
-            "SELECT item_id, title, md_content, domain, source_team, source_url "
-            "FROM knowledge_items WHERE status='approved'"
-        ).fetchall():
-            kid = f"item:{k['item_id']}"
-            _node(kid, "knowledge", k.get("title") or k["item_id"],
-                  detail=(k.get("md_content") or "")[:600], source_url=k.get("source_url"),
-                  domain=k.get("domain"), source_team=k.get("source_team"))
-            if k.get("domain"):
-                _node(f"domain:{k['domain']}", "domain", k["domain"])
-                links.append({"source": kid, "target": f"domain:{k['domain']}", "type": "in_domain"})
-            if k.get("source_team"):
-                _node(f"team:{k['source_team']}", "team", k["source_team"])
-                links.append({"source": kid, "target": f"team:{k['source_team']}", "type": "from_team"})
+        for it in conn.execute(
+            f"SELECT item_id,kind,title,content,domain,source_team,source_url FROM brain_items "
+            f"WHERE {where} AND status='approved'", args).fetchall():
+            t = "belief" if it["kind"] == "belief" else "knowledge"
+            _node(it["item_id"], t, it.get("title"), detail=(it.get("content") or "")[:600],
+                  source_url=it.get("source_url"), domain=it.get("domain"), kind=it["kind"],
+                  source_team=it.get("source_team"))
+            if it.get("domain"):
+                _node(f"domain:{it['domain']}", "domain", it["domain"])
+                links.append({"source": it["item_id"], "target": f"domain:{it['domain']}", "rel": "in_domain"})
+            if it.get("source_team"):
+                _node(f"team:{it['source_team']}", "team", it["source_team"])
+                links.append({"source": it["item_id"], "target": f"team:{it['source_team']}", "rel": "from_team"})
+        for s in conn.execute(
+            f"SELECT skill_id,name,domain,source_url FROM brain_skills WHERE {where} AND status='active'",
+            args).fetchall():
+            _node(s["skill_id"], "skill", s.get("name"), source_url=s.get("source_url"), domain=s.get("domain"))
+            if s.get("domain"):
+                _node(f"domain:{s['domain']}", "domain", s["domain"])
+                links.append({"source": s["skill_id"], "target": f"domain:{s['domain']}", "rel": "in_domain"})
+        if scope == "shared":
+            for p in conn.execute(
+                "SELECT policy_id,title,reason,domain,source_url FROM policies WHERE active=true"
+            ).fetchall():
+                _node(p["policy_id"], "policy", p.get("title") or p.get("reason") or p["policy_id"],
+                      source_url=p.get("source_url"), domain=p.get("domain"))
+                if p.get("domain"):
+                    _node(f"domain:{p['domain']}", "domain", p["domain"])
+                    links.append({"source": p["policy_id"], "target": f"domain:{p['domain']}", "rel": "in_domain"})
+        # Cạnh typed (chỉ nối node đã tồn tại)
+        for l in conn.execute("SELECT from_id,to_id,rel,status FROM brain_links").fetchall():
+            if l["from_id"] in nodes and l["to_id"] in nodes:
+                links.append({"source": l["from_id"], "target": l["to_id"],
+                              "rel": l["rel"], "status": l["status"]})
 
     node_list = list(nodes.values())
     counts = {t: sum(1 for n in node_list if n["type"] == t)
-              for t in ("domain", "belief", "knowledge", "team")}
+              for t in ("domain", "belief", "knowledge", "skill", "policy", "team")}
     return {"nodes": node_list, "links": links, "counts": counts}
+
+
+# ============================ Brain v2 — items / skills / policies / links ============================
+_REL_OK = {"relates_to","depends_on","derived_from","supersedes","contradicts","refines","uses_skill","governed_by"}
+_KIND_OK = {"knowledge","process","definition","lesson","belief","faq"}
+
+
+def _rev_can_domain(conn, email: str, domain: str) -> bool:
+    """Reviewer được duyệt domain này? (hoặc domain='*')."""
+    if not email:
+        return False
+    row = conn.execute(
+        "SELECT 1 FROM knowledge_reviewers WHERE email=%s AND (domain=%s OR domain='*')",
+        (email, domain or "")).fetchone()
+    return bool(row)
+
+
+@app.get("/v1/brain/items")
+def brain_items(scope: str = "shared", agent_id: str | None = None, kind: str | None = None,
+                domain: str | None = None, status: str | None = None, tag: str | None = None,
+                q: str | None = None, limit: int = 200) -> list[dict]:
+    _ensure_schema()
+    sql = ("SELECT item_id,kind,title,content,domain,tags,scope,agent_id,source_agent,"
+           "source_team,source_url,status,reviewed_by,version,created_at,updated_at "
+           "FROM brain_items WHERE scope=%s")
+    args: list = [scope]
+    if scope == "agent" and agent_id:
+        sql += " AND agent_id=%s"; args.append(agent_id)
+    for col, val in (("kind", kind), ("domain", domain), ("status", status)):
+        if val:
+            sql += f" AND {col}=%s"; args.append(val)
+    if tag:
+        sql += " AND %s = ANY(tags)"; args.append(tag)
+    if q:
+        sql += " AND (title ILIKE %s OR content ILIKE %s)"; args += [f"%{q}%", f"%{q}%"]
+    sql += " ORDER BY updated_at DESC LIMIT %s"; args.append(min(int(limit), 500))
+    with _db() as conn:
+        return conn.execute(sql, args).fetchall()
+
+
+@app.post("/v1/brain/items")
+def brain_item_upsert(body: dict, authorization: str = Header(default=""),
+                      x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    """Tạo/sửa tri thức (admin). Import cũng qua đây. Mặc định status=pending (belief=approved)."""
+    _require_admin(authorization)
+    _ensure_schema()
+    iid = body.get("item_id") or ("k_" + secrets.token_hex(6))
+    kind = body.get("kind", "knowledge")
+    if kind not in _KIND_OK:
+        raise HTTPException(status_code=422, detail=f"kind phải thuộc {_KIND_OK}")
+    tags = body.get("tags") or []
+    if isinstance(tags, str):
+        tags = [t.strip() for t in tags.split(",") if t.strip()]
+    status = body.get("status") or ("approved" if kind == "belief" else "pending")
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO brain_items(item_id,kind,title,content,domain,tags,scope,agent_id,
+                source_agent,source_team,source_url,source_ref,status,version,created_by,updated_by)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,1,%s,%s)
+            ON CONFLICT (item_id) DO UPDATE SET kind=EXCLUDED.kind,title=EXCLUDED.title,
+                content=EXCLUDED.content,domain=EXCLUDED.domain,tags=EXCLUDED.tags,
+                source_url=EXCLUDED.source_url,status=EXCLUDED.status,
+                version=brain_items.version+1,updated_by=EXCLUDED.updated_by,updated_at=now()
+            """,
+            (iid, kind, body.get("title"), body.get("content"), body.get("domain"), tags,
+             body.get("scope", "shared"), body.get("agent_id"), body.get("source_agent"),
+             body.get("source_team"), body.get("source_url"), body.get("source_ref"),
+             status, x_actor or "admin", x_actor or "admin"),
+        )
+        _audit(conn, x_actor or "admin", "brain_upsert", "brain_item", iid,
+               {"kind": kind, "domain": body.get("domain"), "status": status})
+        conn.commit()
+    return {"item_id": iid, "status": status, "ok": True}
+
+
+@app.post("/v1/brain/items/{item_id}/review")
+def brain_item_review(item_id: str, body: dict) -> dict:
+    """Reviewer (theo domain) hoặc admin duyệt/loại tri thức."""
+    _ensure_schema()
+    decision = body.get("decision")
+    if decision not in ("approved", "rejected", "deprecated"):
+        raise HTTPException(status_code=422, detail="decision: approved|rejected|deprecated")
+    reviewer = body.get("reviewer_email") or ""
+    is_admin = body.get("admin_token") and body["admin_token"] == ADMIN_TOKEN
+    with _db() as conn:
+        it = conn.execute("SELECT domain FROM brain_items WHERE item_id=%s", (item_id,)).fetchone()
+        if not it:
+            raise HTTPException(status_code=404, detail="không tìm thấy")
+        if not is_admin and not _rev_can_domain(conn, reviewer, it["domain"]):
+            raise HTTPException(status_code=403, detail=f"{reviewer} không có quyền duyệt domain '{it['domain']}'")
+        conn.execute("UPDATE brain_items SET status=%s,reviewed_by=%s,review_note=%s,reviewed_at=now(),"
+                     "updated_at=now() WHERE item_id=%s",
+                     (decision, reviewer or "admin", body.get("note"), item_id))
+        _audit(conn, reviewer or "admin", "brain_review", "brain_item", item_id, {"decision": decision})
+        conn.commit()
+    return {"item_id": item_id, "status": decision}
+
+
+@app.post("/v1/brain/items/{item_id}/delete")
+def brain_item_delete(item_id: str, authorization: str = Header(default=""),
+                      x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        conn.execute("DELETE FROM brain_items WHERE item_id=%s", (item_id,))
+        conn.execute("DELETE FROM brain_links WHERE from_id=%s OR to_id=%s", (item_id, item_id))
+        _audit(conn, x_actor or "admin", "brain_delete", "brain_item", item_id, {})
+        conn.commit()
+    return {"item_id": item_id, "deleted": True}
+
+
+@app.get("/v1/brain/skills")
+def brain_skills(scope: str = "shared", agent_id: str | None = None, domain: str | None = None,
+                 status: str | None = None) -> list[dict]:
+    _ensure_schema()
+    sql = ("SELECT skill_id,name,kind,description,domain,tags,scope,agent_id,owner,status,"
+           "source_url,updated_at FROM brain_skills WHERE scope=%s")
+    args: list = [scope]
+    if scope == "agent" and agent_id:
+        sql += " AND agent_id=%s"; args.append(agent_id)
+    for col, val in (("domain", domain), ("status", status)):
+        if val:
+            sql += f" AND {col}=%s"; args.append(val)
+    sql += " ORDER BY updated_at DESC"
+    with _db() as conn:
+        return conn.execute(sql, args).fetchall()
+
+
+@app.post("/v1/brain/skills")
+def brain_skill_upsert(body: dict, authorization: str = Header(default=""),
+                       x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    sid = body.get("skill_id") or ("sk-" + (body.get("name") or secrets.token_hex(4)))
+    tags = body.get("tags") or []
+    if isinstance(tags, str):
+        tags = [t.strip() for t in tags.split(",") if t.strip()]
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO brain_skills(skill_id,name,kind,description,domain,tags,scope,agent_id,
+                                     owner,status,source_url,updated_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now())
+            ON CONFLICT (skill_id) DO UPDATE SET name=EXCLUDED.name,kind=EXCLUDED.kind,
+              description=EXCLUDED.description,domain=EXCLUDED.domain,tags=EXCLUDED.tags,
+              status=EXCLUDED.status,source_url=EXCLUDED.source_url,updated_at=now()
+            """,
+            (sid, body.get("name"), body.get("kind", "mcp"), body.get("description"),
+             body.get("domain"), tags, body.get("scope", "shared"), body.get("agent_id"),
+             body.get("owner"), body.get("status", "proposed"), body.get("source_url")),
+        )
+        _audit(conn, x_actor or "admin", "skill_upsert", "skill", sid, {"status": body.get("status")})
+        conn.commit()
+    return {"skill_id": sid, "ok": True}
+
+
+@app.get("/v1/brain/policies")
+def brain_policies() -> list[dict]:
+    _ensure_schema()
+    with _db() as conn:
+        return conn.execute(
+            "SELECT policy_id,title,description,scope,agent_id,phase,effect,domain,owner,"
+            "active,reason,created_at,updated_at FROM policies ORDER BY created_at DESC").fetchall()
+
+
+@app.get("/v1/brain/links")
+def brain_links(status: str | None = None) -> list[dict]:
+    _ensure_schema()
+    sql = "SELECT link_id,from_id,from_type,to_id,to_type,rel,note,status,source_url,created_by,created_at FROM brain_links"
+    args: list = []
+    if status:
+        sql += " WHERE status=%s"; args.append(status)
+    sql += " ORDER BY created_at DESC LIMIT 500"
+    with _db() as conn:
+        return conn.execute(sql, args).fetchall()
+
+
+@app.post("/v1/brain/links")
+def brain_link_create(body: dict, authorization: str = Header(default=""),
+                      x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    if body.get("rel") not in _REL_OK:
+        raise HTTPException(status_code=422, detail=f"rel phải thuộc {_REL_OK}")
+    lid = body.get("link_id") or ("l_" + secrets.token_hex(6))
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO brain_links(link_id,from_id,from_type,to_id,to_type,rel,note,status,"
+            "source_url,created_by) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "ON CONFLICT (link_id) DO NOTHING",
+            (lid, body.get("from_id"), body.get("from_type", "kb"), body.get("to_id"),
+             body.get("to_type", "kb"), body.get("rel"), body.get("note"),
+             body.get("status", "confirmed"), body.get("source_url"), x_actor or "admin"))
+        _audit(conn, x_actor or "admin", "link_create", "brain_link", lid,
+               {"rel": body.get("rel"), "from": body.get("from_id"), "to": body.get("to_id")})
+        conn.commit()
+    return {"link_id": lid, "ok": True}
+
+
+@app.post("/v1/brain/links/{link_id}/confirm")
+def brain_link_confirm(link_id: str, body: dict, authorization: str = Header(default=""),
+                       x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    decision = body.get("decision", "confirmed")  # confirmed | rejected
+    with _db() as conn:
+        if decision == "rejected":
+            conn.execute("DELETE FROM brain_links WHERE link_id=%s", (link_id,))
+        else:
+            conn.execute("UPDATE brain_links SET status='confirmed' WHERE link_id=%s", (link_id,))
+        _audit(conn, x_actor or "admin", "link_confirm", "brain_link", link_id, {"decision": decision})
+        conn.commit()
+    return {"link_id": link_id, "status": decision}
+
+
+@app.post("/v1/brain/links/{link_id}/delete")
+def brain_link_delete(link_id: str, authorization: str = Header(default=""),
+                      x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        conn.execute("DELETE FROM brain_links WHERE link_id=%s", (link_id,))
+        _audit(conn, x_actor or "admin", "link_delete", "brain_link", link_id, {})
+        conn.commit()
+    return {"link_id": link_id, "deleted": True}
