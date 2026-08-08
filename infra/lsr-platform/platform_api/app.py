@@ -2779,3 +2779,56 @@ def set_retention(body: dict, authorization: str = Header(default=""),
                {"ttl_days": body.get("ttl_days"), "enabled": body.get("enabled")})
         conn.commit()
     return {"scope": scope, "ok": True}
+
+
+# ============================ Shared Brain — đồ thị 3D ============================
+
+@app.get("/v1/brain/graph")
+def brain_graph() -> dict:
+    """Đồ thị tri thức shared brain cho visualize 3D.
+
+    Node: domain / belief / knowledge (approved) / team.
+    Link: belief→domain, knowledge→domain, knowledge→team.
+    Mỗi node kèm source_url (link Lark) để click mở chi tiết.
+    """
+
+    _ensure_schema()
+    nodes: dict = {}
+    links: list = []
+
+    def _node(nid, ntype, label, **extra):
+        if nid not in nodes:
+            nodes[nid] = {"id": nid, "type": ntype, "label": (label or nid)[:80], **extra}
+
+    with _db() as conn:
+        for d in conn.execute("SELECT domain, label FROM knowledge_domains").fetchall():
+            _node(f"domain:{d['domain']}", "domain", d.get("label") or d["domain"])
+        for b in conn.execute(
+            "SELECT belief_id, title, statement, domain, source_url FROM shared_beliefs"
+        ).fetchall():
+            bid = f"belief:{b['belief_id']}"
+            _node(bid, "belief", b.get("title") or b["belief_id"],
+                  detail=(b.get("statement") or "")[:600], source_url=b.get("source_url"),
+                  domain=b.get("domain"))
+            if b.get("domain"):
+                _node(f"domain:{b['domain']}", "domain", b["domain"])
+                links.append({"source": bid, "target": f"domain:{b['domain']}", "type": "in_domain"})
+        for k in conn.execute(
+            "SELECT item_id, title, md_content, domain, source_team, source_url "
+            "FROM knowledge_items WHERE status='approved'"
+        ).fetchall():
+            kid = f"item:{k['item_id']}"
+            _node(kid, "knowledge", k.get("title") or k["item_id"],
+                  detail=(k.get("md_content") or "")[:600], source_url=k.get("source_url"),
+                  domain=k.get("domain"), source_team=k.get("source_team"))
+            if k.get("domain"):
+                _node(f"domain:{k['domain']}", "domain", k["domain"])
+                links.append({"source": kid, "target": f"domain:{k['domain']}", "type": "in_domain"})
+            if k.get("source_team"):
+                _node(f"team:{k['source_team']}", "team", k["source_team"])
+                links.append({"source": kid, "target": f"team:{k['source_team']}", "type": "from_team"})
+
+    node_list = list(nodes.values())
+    counts = {t: sum(1 for n in node_list if n["type"] == t)
+              for t in ("domain", "belief", "knowledge", "team")}
+    return {"nodes": node_list, "links": links, "counts": counts}
