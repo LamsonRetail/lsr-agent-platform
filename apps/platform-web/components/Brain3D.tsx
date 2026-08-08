@@ -13,6 +13,13 @@ const COLOR: Record<string, string> = {
 };
 const KIND: Record<string, string> = {
   domain: "Chuyên môn", belief: "Shared belief", knowledge: "Tri thức", team: "Team nguồn",
+  skill: "Kỹ năng", policy: "Chính sách",
+};
+// Màu cạnh theo LOẠI quan hệ (typed edges); cạnh cấu trúc mờ.
+const REL_COLOR: Record<string, string> = {
+  relates_to: "#8892a6", depends_on: "#3b7bc4", derived_from: "#5b5bd6", supersedes: "#b7791f",
+  contradicts: "#d1495b", refines: "#1f9d57", uses_skill: "#12a4a4", governed_by: "#a4128f",
+  in_domain: "#ffffff22", from_team: "#ffffff22",
 };
 
 export default function Brain3D({ data }: { data: { nodes: any[]; links: any[]; counts: any } }) {
@@ -42,9 +49,10 @@ export default function Brain3D({ data }: { data: { nodes: any[]; links: any[]; 
           nodeColor={(n: any) => COLOR[n.type] || "#999"}
           nodeVal={(n: any) => (n.type === "domain" ? 6 : n.type === "team" ? 5 : 2)}
           nodeOpacity={0.9}
-          linkColor={() => "#ffffff33"}
-          linkDirectionalParticles={1}
-          linkDirectionalParticleWidth={1.4}
+          linkColor={(l: any) => REL_COLOR[l.rel] || "#ffffff33"}
+          linkWidth={(l: any) => (l.rel && !["in_domain", "from_team"].includes(l.rel) ? 1.5 : 0.5)}
+          linkDirectionalParticles={(l: any) => (l.rel && !["in_domain", "from_team"].includes(l.rel) ? 2 : 0)}
+          linkDirectionalParticleWidth={1.6}
           onNodeClick={onNodeClick}
         />
       </div>
