@@ -48,7 +48,11 @@ export async function agentDetail(id: string) { return safe(() => jget(`${P}/v1/
 export async function agentTraces(id: string, limit = 20) { return safe(() => jget(`${C}/v1/traces?agent_id=${id}&limit=${limit}`), []); }
 export async function conflictsForAgent(id: string) { return safe(() => jget(`${P}/v1/knowledge/conflicts?status=open&agent_id=${id}`), []); }
 export async function auditForTarget(id: string) { return safe(() => jget(`${P}/v1/audit?target_id=${id}&limit=30`), []); }
-export async function brainGraph() { return safe(() => jget(`${P}/v1/brain/graph`), { nodes: [], links: [], counts: {} }); }
+export async function brainGraph(qs = "") { return safe(() => jget(`${P}/v1/brain/graph${qs}`), { nodes: [], links: [], counts: {} }); }
+export async function brainItems(qs = "?scope=shared") { return safe(() => jget(`${P}/v1/brain/items${qs}`), []); }
+export async function brainSkills(qs = "?scope=shared") { return safe(() => jget(`${P}/v1/brain/skills${qs}`), []); }
+export async function brainPolicies() { return safe(() => jget(`${P}/v1/brain/policies`), []); }
+export async function brainLinks(qs = "") { return safe(() => jget(`${P}/v1/brain/links${qs}`), []); }
 
 async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try { return await fn(); } catch { return fallback; }

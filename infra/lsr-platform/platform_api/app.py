@@ -3018,14 +3018,15 @@ def brain_item_upsert(body: dict, authorization: str = Header(default=""),
 
 
 @app.post("/v1/brain/items/{item_id}/review")
-def brain_item_review(item_id: str, body: dict) -> dict:
+def brain_item_review(item_id: str, body: dict, authorization: str = Header(default="")) -> dict:
     """Reviewer (theo domain) hoặc admin duyệt/loại tri thức."""
     _ensure_schema()
     decision = body.get("decision")
     if decision not in ("approved", "rejected", "deprecated"):
         raise HTTPException(status_code=422, detail="decision: approved|rejected|deprecated")
     reviewer = body.get("reviewer_email") or ""
-    is_admin = body.get("admin_token") and body["admin_token"] == ADMIN_TOKEN
+    is_admin = (ADMIN_TOKEN and authorization == f"Bearer {ADMIN_TOKEN}") or \
+               (body.get("admin_token") and body["admin_token"] == ADMIN_TOKEN)
     with _db() as conn:
         it = conn.execute("SELECT domain FROM brain_items WHERE item_id=%s", (item_id,)).fetchone()
         if not it:

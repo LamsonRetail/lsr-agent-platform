@@ -10,6 +10,14 @@ const ALLOWED = [
   /^\/v1\/knowledge\/reviewers\/remove$/,
   /^\/v1\/knowledge\/domains$/,
   /^\/v1\/knowledge\/domains\/[^/]+\/delete$/,
+  // Brain v2
+  /^\/v1\/brain\/items$/,
+  /^\/v1\/brain\/items\/[^/]+\/review$/,
+  /^\/v1\/brain\/items\/[^/]+\/delete$/,
+  /^\/v1\/brain\/skills$/,
+  /^\/v1\/brain\/links$/,
+  /^\/v1\/brain\/links\/[^/]+\/confirm$/,
+  /^\/v1\/brain\/links\/[^/]+\/delete$/,
 ];
 
 export async function POST(req: Request) {
