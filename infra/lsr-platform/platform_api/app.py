@@ -3168,3 +3168,107 @@ def brain_link_delete(link_id: str, authorization: str = Header(default=""),
         _audit(conn, x_actor or "admin", "link_delete", "brain_link", link_id, {})
         conn.commit()
     return {"link_id": link_id, "deleted": True}
+
+
+# ============================ Brain per-agent (agent-scoped, /v1/self/brain/*) ============================
+# Mọi agent quản lý brain RIÊNG bằng token của mình — giống console platform nhưng scope=agent.
+
+@app.get("/v1/self/brain/items")
+def self_brain_items(authorization: str = Header(default=""), status: str | None = None,
+                     domain: str | None = None, q: str | None = None) -> list[dict]:
+    aid = _require_self(authorization)
+    sql = ("SELECT item_id,kind,title,content,domain,tags,source_agent,source_team,source_url,"
+           "status,version,created_at,updated_at FROM brain_items WHERE scope='agent' AND agent_id=%s")
+    args: list = [aid]
+    if status: sql += " AND status=%s"; args.append(status)
+    if domain: sql += " AND domain=%s"; args.append(domain)
+    if q: sql += " AND (title ILIKE %s OR content ILIKE %s)"; args += [f"%{q}%", f"%{q}%"]
+    sql += " ORDER BY updated_at DESC LIMIT 300"
+    with _db() as conn:
+        return conn.execute(sql, args).fetchall()
+
+
+@app.post("/v1/self/brain/items")
+def self_brain_upsert(body: dict, authorization: str = Header(default="")) -> dict:
+    aid = _require_self(authorization)
+    _ensure_schema()
+    iid = body.get("item_id") or ("ak_" + secrets.token_hex(6))
+    kind = body.get("kind", "knowledge")
+    if kind not in _KIND_OK:
+        raise HTTPException(status_code=422, detail=f"kind phải thuộc {_KIND_OK}")
+    tags = body.get("tags") or []
+    if isinstance(tags, str): tags = [t.strip() for t in tags.split(",") if t.strip()]
+    with _db() as conn:
+        # chỉ cho sửa item thuộc chính agent này
+        ex = conn.execute("SELECT agent_id FROM brain_items WHERE item_id=%s", (iid,)).fetchone()
+        if ex and ex["agent_id"] != aid:
+            raise HTTPException(status_code=403, detail="item không thuộc agent này")
+        conn.execute(
+            """
+            INSERT INTO brain_items(item_id,kind,title,content,domain,tags,scope,agent_id,
+                source_agent,source_url,source_ref,status,version,created_by,updated_by)
+            VALUES (%s,%s,%s,%s,%s,%s,'agent',%s,%s,%s,%s,%s,1,%s,%s)
+            ON CONFLICT (item_id) DO UPDATE SET kind=EXCLUDED.kind,title=EXCLUDED.title,
+                content=EXCLUDED.content,domain=EXCLUDED.domain,tags=EXCLUDED.tags,
+                source_url=EXCLUDED.source_url,status=EXCLUDED.status,
+                version=brain_items.version+1,updated_by=EXCLUDED.updated_by,updated_at=now()
+            """,
+            (iid, kind, body.get("title"), body.get("content"), body.get("domain"), tags, aid,
+             aid, body.get("source_url"), body.get("source_ref"),
+             body.get("status", "approved"), aid, aid))  # owner tự quản → mặc định approved trong agent
+        _audit(conn, aid, "self_brain_upsert", "brain_item", iid, {"kind": kind})
+        conn.commit()
+    return {"item_id": iid, "ok": True, "scope": "agent", "agent_id": aid}
+
+
+@app.post("/v1/self/brain/items/{item_id}/delete")
+def self_brain_delete(item_id: str, authorization: str = Header(default="")) -> dict:
+    aid = _require_self(authorization)
+    with _db() as conn:
+        r = conn.execute("SELECT agent_id FROM brain_items WHERE item_id=%s", (item_id,)).fetchone()
+        if not r or r["agent_id"] != aid:
+            raise HTTPException(status_code=403, detail="không thuộc agent này")
+        conn.execute("DELETE FROM brain_items WHERE item_id=%s", (item_id,))
+        conn.execute("DELETE FROM brain_links WHERE from_id=%s OR to_id=%s", (item_id, item_id))
+        _audit(conn, aid, "self_brain_delete", "brain_item", item_id, {})
+        conn.commit()
+    return {"item_id": item_id, "deleted": True}
+
+
+@app.get("/v1/self/brain/links")
+def self_brain_links(authorization: str = Header(default="")) -> list[dict]:
+    aid = _require_self(authorization)
+    with _db() as conn:
+        ids = [r["item_id"] for r in conn.execute(
+            "SELECT item_id FROM brain_items WHERE scope='agent' AND agent_id=%s", (aid,)).fetchall()]
+        if not ids:
+            return []
+        return conn.execute(
+            "SELECT link_id,from_id,to_id,rel,status,created_by,created_at FROM brain_links "
+            "WHERE from_id = ANY(%s) OR to_id = ANY(%s) ORDER BY created_at DESC", (ids, ids)).fetchall()
+
+
+@app.post("/v1/self/brain/links")
+def self_brain_link(body: dict, authorization: str = Header(default="")) -> dict:
+    aid = _require_self(authorization)
+    if body.get("rel") not in _REL_OK:
+        raise HTTPException(status_code=422, detail=f"rel phải thuộc {_REL_OK}")
+    lid = "l_" + secrets.token_hex(6)
+    with _db() as conn:
+        # from_id phải thuộc agent này
+        r = conn.execute("SELECT agent_id FROM brain_items WHERE item_id=%s", (body.get("from_id"),)).fetchone()
+        if not r or r["agent_id"] != aid:
+            raise HTTPException(status_code=403, detail="from_id không thuộc agent này")
+        conn.execute("INSERT INTO brain_links(link_id,from_id,from_type,to_id,to_type,rel,status,created_by) "
+                     "VALUES (%s,%s,%s,%s,%s,%s,'confirmed',%s)",
+                     (lid, body.get("from_id"), "kb", body.get("to_id"), body.get("to_type", "kb"),
+                      body.get("rel"), aid))
+        _audit(conn, aid, "self_link_create", "brain_link", lid, {"rel": body.get("rel")})
+        conn.commit()
+    return {"link_id": lid, "ok": True}
+
+
+@app.get("/v1/self/brain/graph")
+def self_brain_graph(authorization: str = Header(default="")) -> dict:
+    aid = _require_self(authorization)
+    return brain_graph(scope="agent", agent_id=aid)

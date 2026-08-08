@@ -83,7 +83,71 @@ export async function schema(){ const d = await self().catch(()=>null); return d
 export async function attempts(){ return get(P+"/v1/self/attempts").catch(()=>[]); }
 export async function conflicts(){ return get(P+"/v1/self/conflicts").catch(()=>[]); }
 export async function traces(n=25){ return get(P+"/v1/self/traces?limit="+n).catch(()=>[]); }
-export const PLATFORM_URL = P;
+export async function brainItems(){ return get(P+"/v1/self/brain/items").catch(()=>[]); }
+export async function brainLinks(){ return get(P+"/v1/self/brain/links").catch(()=>[]); }
+export const PLATFORM_URL = P; export const AGENT_TOKEN = TOK;
+`);
+
+// API proxy cho brain (mutation) — giữ token server-side.
+w("app/api/brain/route.ts",
+`import { NextResponse } from "next/server";
+import { PLATFORM_URL, AGENT_TOKEN } from "@/lib/platform";
+export async function POST(req) {
+  const { path, payload } = await req.json().catch(() => ({}));
+  if (typeof path !== "string" || !path.startsWith("/v1/self/brain/")) return NextResponse.json({ error: "path không hợp lệ" }, { status: 400 });
+  const r = await fetch(PLATFORM_URL + path, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + AGENT_TOKEN }, body: JSON.stringify(payload || {}) });
+  const d = await r.json().catch(() => ({})); return NextResponse.json(d, { status: r.status });
+}
+`);
+
+// Màn hình quản lý BRAIN của agent (scope agent) — giống console platform, gọn.
+w("app/brain/page.tsx",
+`import { brainItems, brainLinks, AGENT_ID } from "@/lib/platform";
+import BrainMini from "@/components/BrainMini";
+export const dynamic = "force-dynamic";
+export default async function Page(){
+  const [items, links] = await Promise.all([brainItems(), brainLinks()]);
+  return (<>
+    <h1>Brain của {AGENT_ID}</h1>
+    <div className="m">Tri thức RIÊNG của agent (scope=agent). Import, liên kết, xoá — trong phạm vi agent này.</div>
+    <BrainMini items={items} links={links} />
+  </>);
+}
+`);
+
+w("components/BrainMini.tsx",
+`"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+export default function BrainMini({ items, links }){
+  const router=useRouter(); const [f,setF]=useState({title:"",content:"",domain:"",kind:"knowledge",source_url:""}); const [busy,setBusy]=useState(false);
+  const set=k=>e=>setF({...f,[k]:e.target.value});
+  async function call(path,payload){ setBusy(true); try{ const r=await fetch("/api/brain",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path,payload})}); if(!r.ok) throw new Error((await r.json()).error||r.status); router.refresh(); }catch(e){ alert(e.message||e); } finally{ setBusy(false);} }
+  const lk=id=>links.filter(l=>l.from_id===id||l.to_id===id);
+  return (<>
+    <div className="c" style={{padding:14,marginBottom:12}}>
+      <b>Thêm tri thức</b>
+      <div className="row" style={{gap:8,marginTop:8}}>
+        <select value={f.kind} onChange={set("kind")}>{["knowledge","process","definition","lesson","faq"].map(k=><option key={k}>{k}</option>)}</select>
+        <input placeholder="domain" value={f.domain} onChange={set("domain")} />
+      </div>
+      <input placeholder="Tiêu đề" value={f.title} onChange={set("title")} style={{width:"100%",marginTop:8}} />
+      <textarea placeholder="Nội dung" value={f.content} onChange={set("content")} rows={2} style={{width:"100%",marginTop:8}} />
+      <input placeholder="Link Lark nguồn" value={f.source_url} onChange={set("source_url")} style={{width:"100%",marginTop:8}} />
+      <button className="btn" disabled={busy||!f.title} onClick={()=>call("/v1/self/brain/items",f)} style={{marginTop:8}}>Lưu</button>
+    </div>
+    <table><thead><tr><th>Tên</th><th>Loại</th><th>Domain</th><th>Liên kết</th><th>Nguồn</th><th></th></tr></thead><tbody>
+      {items.length===0 && <tr><td colSpan={6} className="m">Chưa có tri thức.</td></tr>}
+      {items.map(i=>(<tr key={i.item_id}>
+        <td><b>{i.title}</b><div className="m" style={{fontSize:11}}>{i.item_id}</div></td>
+        <td>{i.kind}</td><td>{i.domain||"—"}</td><td>{lk(i.item_id).length}</td>
+        <td>{i.source_url?<a href={i.source_url} target="_blank">Lark</a>:"—"}</td>
+        <td><button className="btn" disabled={busy} onClick={()=>{const to=prompt("Nối tới item_id?");const rel=prompt("quan hệ","relates_to");if(to&&rel)call("/v1/self/brain/links",{from_id:i.item_id,to_id:to,rel});}}>+link</button>
+            <button className="btn" disabled={busy} onClick={()=>call("/v1/self/brain/items/"+i.item_id+"/delete",{})}>xoá</button></td>
+      </tr>))}
+    </tbody></table>
+  </>);
+}
 `);
 
 w("app/api/conflicts/[id]/resolve/route.ts",
@@ -176,7 +240,7 @@ import Link from "next/link";
 export const metadata = { title: "Agent Backend · ${name}" };
 export default function L({ children }){ return (<html lang="vi"><body><div className="wrap">
   <nav className="row" style={{ marginBottom: 14, gap: 14 }}>
-    <Link href="/">Dashboard</Link><Link href="/traces">Chi tiết</Link><Link href="/config">Config</Link>
+    <Link href="/">Dashboard</Link><Link href="/traces">Chi tiết</Link><Link href="/brain">Brain</Link><Link href="/config">Config</Link>
   </nav>
   {children}
 </div></body></html>); }
