@@ -53,3 +53,4 @@ input,textarea{font-family:inherit;font-size:13px;padding:7px 10px;border-radius
 .bar>span{position:absolute;right:6px;top:0;line-height:20px;font-size:11px}
 .card{background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
 .err{color:var(--critical);font-size:12px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}

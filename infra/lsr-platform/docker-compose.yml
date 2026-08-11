@@ -49,12 +49,27 @@ services:
       - "127.0.0.1:8081:8081"
     restart: unless-stopped
 
+  # Cổng sự kiện hợp nhất (P1): long-connection Lark → /v1/ingest (dedupe+route+enqueue).
+  event_gateway:
+    build: ./event_gateway
+    depends_on: [platform_api]
+    environment:
+      PLATFORM_URL: http://platform_api:8090
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}     # dùng làm ingest token nội bộ
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
+      MINH_ANH_LARK_APP_ID: ${MINH_ANH_LARK_APP_ID:-}
+      MINH_ANH_LARK_APP_SECRET: ${MINH_ANH_LARK_APP_SECRET:-}
+      LARK_DOMAIN_CONST: LARK
+    restart: unless-stopped
+
   minh_anh_bot:
     build: ./minh_anh_bot
+    depends_on: [platform_api]
     environment:
-      MINH_ANH_LARK_APP_ID: ${MINH_ANH_LARK_APP_ID}
-      MINH_ANH_LARK_APP_SECRET: ${MINH_ANH_LARK_APP_SECRET}
-      LARK_DOMAIN_CONST: LARK        # LARK (LarkSuite) | FEISHU
+      # P1: minh_anh_bot là CONSUMER — lấy job từ platform, không tự nghe Lark nữa.
+      LSR_PLATFORM_URL: http://platform_api:8090
+      LSR_AGENT_ID: AG-MINH-ANH
+      LSR_AGENT_TOKEN: ${MINH_ANH_AGENT_TOKEN:-}
       DRY_RUN: "true"                # true = chỉ log, không gửi tin/tạo task
       LSR_COLLECTOR: http://collector:8081
       LSR_TRANSCRIBE_URL: ${LSR_TRANSCRIBE_URL:-https://slashingly-unexistent-hue.ngrok-free.dev}
@@ -74,6 +89,8 @@ services:
       PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
       # Self-service enroll (thành viên tự đăng ký agent) — rỗng = tắt
       LSR_ENROLL_TOKEN: ${LSR_ENROLL_TOKEN:-}
+      # Ingest token cho event_gateway (rỗng = dùng chung PLATFORM_ADMIN_TOKEN)
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
       LSR_COLLECTOR_PUBLIC: ${LSR_COLLECTOR_PUBLIC:-https://collector.34-126-154-135.sslip.io}
       LSR_APP_PUBLIC: ${LSR_APP_PUBLIC:-https://app.34-126-154-135.sslip.io}
       # Lark notify cho reviewer/agent owner (fallback creds Minh Anh nếu chưa có bot riêng)

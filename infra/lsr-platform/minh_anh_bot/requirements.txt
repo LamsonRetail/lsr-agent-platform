@@ -1,1 +1,2 @@
-lark-oapi>=1.4
+# Minh Anh consumer chỉ dùng stdlib (urllib) để gọi platform API.
+# Lark long-connection đã chuyển sang service event_gateway.

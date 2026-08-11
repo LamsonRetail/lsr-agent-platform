@@ -18,6 +18,10 @@ const ALLOWED = [
   /^\/v1\/brain\/links$/,
   /^\/v1\/brain\/links\/[^/]+\/confirm$/,
   /^\/v1\/brain\/links\/[^/]+\/delete$/,
+  // P1: ingress — routing + jobs/DLQ
+  /^\/v1\/routing$/,
+  /^\/v1\/routing\/[^/]+\/toggle$/,
+  /^\/v1\/jobs\/[^/]+\/replay$/,
 ];
 
 export async function POST(req: Request) {

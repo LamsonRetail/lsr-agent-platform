@@ -54,6 +54,15 @@ export async function brainSkills(qs = "?scope=shared") { return safe(() => jget
 export async function brainPolicies() { return safe(() => jget(`${P}/v1/brain/policies`), []); }
 export async function brainLinks(qs = "") { return safe(() => jget(`${P}/v1/brain/links${qs}`), []); }
 
+// --- P1: Ingress (routing + jobs/DLQ) — cần admin token ---
+async function jgetAdmin(url: string) {
+  const r = await fetch(url, { cache: "no-store", headers: gwHeaders({ Authorization: `Bearer ${ADMIN}` }) });
+  if (!r.ok) throw new Error(`${url} -> ${r.status}`);
+  return r.json();
+}
+export async function routingList() { return safe(() => jgetAdmin(`${P}/v1/routing`), []); }
+export async function jobsList(qs = "") { return safe(() => jgetAdmin(`${P}/v1/jobs${qs}`), []); }
+
 async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try { return await fn(); } catch { return fallback; }
 }

@@ -1,8 +1,12 @@
-"""Minh Anh — Lark long-connection listener (WebSocket outbound, không cần public URL).
+"""Minh Anh — CONSUMER (P1).
 
-Kết nối tới Lark bằng lark-oapi, nhận event (im.message.receive_v1...) và dispatch
-sang workflow. Mặc định DRY_RUN=true: CHỈ LOG, không gửi tin nhắn nào (an toàn cho
-tới khi được duyệt).
+Trước đây bot tự nghe Lark long-connection. Từ P1, việc NHẬN sự kiện do event_gateway
+lo (verify+dedupe+route+enqueue). Minh Anh giờ chỉ là CONSUMER: long-poll lấy job của
+AG-MINH-ANH từ platform, xử lý, trả lời qua broker Lark dùng chung (lsr_lark), rồi
+báo complete/fail. Nhờ đó Minh Anh tự có: retry/DLQ, quota, audit, kill-switch — giống
+mọi agent khác.
+
+DRY_RUN=true (mặc định): chỉ log, không gửi tin/tạo task.
 """
 
 from __future__ import annotations
@@ -10,102 +14,97 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
+import urllib.request
+import urllib.error
 
-import lark_oapi as lark
-from lark_oapi.api.im.v1 import P2ImMessageReceiveV1
-
-APP_ID = os.environ["MINH_ANH_LARK_APP_ID"]
-APP_SECRET = os.environ["MINH_ANH_LARK_APP_SECRET"]
+PLATFORM = os.environ.get("LSR_PLATFORM_URL", "http://platform_api:8090").rstrip("/")
+AGENT_ID = os.environ.get("LSR_AGENT_ID", "AG-MINH-ANH")
+TOKEN = os.environ.get("LSR_AGENT_TOKEN", "")
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() != "false"
-# LarkSuite quốc tế (open.larksuite.com). Đổi sang lark.FEISHU_DOMAIN nếu dùng Feishu.
-DOMAIN = os.environ.get("LARK_DOMAIN_CONST", "LARK")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("minh-anh")
 
+RECORDING_TYPES = {"audio", "media", "file"}
+CONFIRM_WORDS = {"confirm", "chốt", "duyệt"}
 
-def on_message(data: P2ImMessageReceiveV1) -> None:
-    """Nhận tin nhắn gửi cho Minh Anh."""
 
+def _api(method: str, path: str, payload: dict | None = None, timeout: int = 40):
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(PLATFORM + path, data=data, method=method, headers={
+        "Content-Type": "application/json", "Authorization": f"Bearer {TOKEN}"})
     try:
-        msg = data.event.message
-        content = msg.content or ""
-        text = ""
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            b = r.read().decode()
+            return json.loads(b) if b else {}
+    except urllib.error.HTTPError as e:
+        log.warning("API %s %s → %s %s", method, path, e.code, e.read().decode()[:160])
+        raise
+    except Exception as e:
+        log.warning("API %s %s lỗi: %s", method, path, e)
+        raise
+
+
+def _reply(job: dict, text: str) -> None:
+    """Trả lời về đúng nơi phát sinh job (reply_to) qua broker Lark dùng chung."""
+    reply_to = job.get("reply_to") or {}
+    chat_id = reply_to.get("chat_id")
+    if DRY_RUN:
+        log.info("DRY_RUN: (không gửi) reply → chat=%s: %s", chat_id, text[:120])
+        return
+    if reply_to.get("channel") == "lark" and chat_id:
+        _api("POST", "/v1/lark/send", {"to": chat_id, "to_type": "chat_id", "text": text})
+
+
+def handle(job: dict) -> None:
+    """Xử lý 1 job. Ném exception nếu lỗi để consumer báo fail (→ retry/DLQ)."""
+    payload = job.get("payload") or {}
+    text = (payload.get("text") or "")
+    mtype = payload.get("message_type", "text")
+    chat = payload.get("chat_id", "?")
+    log.info("▶ job#%s chat=%s type=%s text=%r", job.get("id"), chat, mtype, text[:120])
+
+    if mtype in RECORDING_TYPES:
+        log.info("🎙️ Recording → cần transcript + biên bản (Minh Anh phụ trách).")
+        # TODO(runtime thật): download media → transcribe → draft minutes → ask confirm.
+        _reply(job, "Đã nhận recording, sẽ lên biên bản và gửi lại để xác nhận.")
+    elif mtype == "text" and text.strip().lower() in CONFIRM_WORDS:
+        log.info("✅ Owner confirm → tạo task + lưu meeting-notes.")
+        # TODO(runtime thật): on_confirm(minutes) — tạo task + index.
+        _reply(job, "Đã chốt biên bản và tạo task.")
+    else:
+        log.info("Bỏ qua (không phải recording/không phải lệnh confirm).")
+
+
+def loop() -> None:
+    if not TOKEN:
+        log.error("Thiếu LSR_AGENT_TOKEN cho %s — consumer không xác thực được.", AGENT_ID)
+    log.info("Minh Anh consumer khởi động (agent=%s, DRY_RUN=%s) → %s", AGENT_ID, DRY_RUN, PLATFORM)
+    while True:
         try:
-            text = json.loads(content).get("text", "")
+            jobs = _api("GET", "/v1/self/jobs?wait=25&max=1")
+        except urllib.error.HTTPError as e:
+            if e.code == 403:                     # kill-switch: agent bị deactivate
+                log.info("Agent deactivated — nghỉ 30s rồi thử lại.")
+                time.sleep(30); continue
+            time.sleep(5); continue
         except Exception:
-            text = content
-        mtype = getattr(msg, "message_type", "?")
-        chat = getattr(msg, "chat_id", "?")
-        log.info("📩 message | chat=%s | type=%s | text=%r", chat, mtype, text[:120])
-
-        # Bot CHỈ nhận event từ chat/meeting nó được add vào (tenant permission) →
-        # gate tự nhiên: ở đây chỉ định tuyến theo loại nội dung.
-        RECORDING_TYPES = {"audio", "media", "file"}
-        if mtype in RECORDING_TYPES:
-            log.info("🎙️  Recording trong chat %s → cần TRANSCRIPT + PROCESS (Minh Anh phụ trách).", chat)
-            if DRY_RUN:
-                log.info("DRY_RUN: bỏ qua transcript. Bật thật: DRY_RUN=false.")
-                return
-            # TODO(runtime thật): download media (Lark im file) → TranscribeClient
-            #   (Whisper) → draft_minutes → LLM trích key_points → ask_confirm.
-        elif mtype == "text" and text.strip().lower() in {"confirm", "chốt", "duyệt"}:
-            log.info("✅ Owner confirm biên bản ở chat %s → tạo task + lưu meeting-notes.", chat)
-            if DRY_RUN:
-                log.info("DRY_RUN: bỏ qua on_confirm.")
-                return
-            # TODO(runtime thật): MinhAnhBot.on_confirm(minutes) — tạo task + index.
-        else:
-            log.info("Bỏ qua (không phải recording/không phải lệnh confirm).")
-    except Exception as exc:  # không để lỗi làm rớt listener
-        log.exception("Lỗi xử lý message: %s", exc)
-
-
-def on_bot_added(data) -> None:
-    """Minh Anh được THÊM vào một chat/cuộc họp → sẽ phụ trách biên bản chat đó."""
-
-    try:
-        chat = getattr(getattr(data, "event", None), "chat_id", "?")
-        log.info("➕ Minh Anh được thêm vào chat/meeting %s → sẽ phụ trách biên bản.", chat)
-        if DRY_RUN:
-            log.info("DRY_RUN: không gửi lời chào.")
-            return
-        # TODO(runtime thật): gửi lời chào + hướng dẫn share recording để viết biên bản.
-    except Exception as exc:
-        log.exception("Lỗi xử lý bot_added: %s", exc)
-
-
-def on_bot_removed(data) -> None:
-    try:
-        chat = getattr(getattr(data, "event", None), "chat_id", "?")
-        log.info("➖ Minh Anh bị gỡ khỏi chat %s → ngừng phụ trách.", chat)
-    except Exception as exc:
-        log.exception("Lỗi xử lý bot_removed: %s", exc)
-
-
-def main() -> None:
-    builder = lark.EventDispatcherHandler.builder("", "").register_p2_im_message_receive_v1(on_message)
-    # Sự kiện bot được thêm/gỡ khỏi chat/meeting (nếu SDK hỗ trợ trong phiên bản này).
-    for name, fn in (
-        ("register_p2_im_chat_member_bot_added_v1", on_bot_added),
-        ("register_p2_im_chat_member_bot_deleted_v1", on_bot_removed),
-    ):
-        reg = getattr(builder, name, None)
-        if reg:
-            builder = reg(fn)
-        else:
-            log.warning("SDK chưa có %s — bỏ qua (message vẫn nhận bình thường).", name)
-    handler = builder.build()
-    domain = lark.LARK_DOMAIN if DOMAIN.upper() == "LARK" else lark.FEISHU_DOMAIN
-    client = lark.ws.Client(
-        APP_ID, APP_SECRET,
-        event_handler=handler,
-        domain=domain,
-        log_level=lark.LogLevel.INFO,
-    )
-    log.info("Minh Anh listener khởi động (DRY_RUN=%s, domain=%s)...", DRY_RUN, DOMAIN)
-    client.start()  # blocking, tự reconnect
+            time.sleep(5); continue
+        if not jobs:
+            continue                              # long-poll hết hạn, vòng lại
+        for job in jobs:
+            jid = job.get("id")
+            try:
+                handle(job)
+                _api("POST", f"/v1/self/jobs/{jid}/complete", {"result": {"ok": True}})
+            except Exception as exc:
+                log.exception("job#%s lỗi → báo fail", jid)
+                try:
+                    _api("POST", f"/v1/self/jobs/{jid}/fail", {"error": str(exc)[:400]})
+                except Exception:
+                    pass
 
 
 if __name__ == "__main__":
-    main()
+    loop()

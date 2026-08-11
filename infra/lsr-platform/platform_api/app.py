@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 import psycopg
 import requests
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
-from fastapi.responses import PlainTextResponse, Response
+from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from psycopg.rows import dict_row
 from psycopg.types.json import Json
 
@@ -641,14 +641,97 @@ def _ensure_schema() -> None:
             ON CONFLICT (skill_id) DO NOTHING
             """
         )
+        # ================= P1: Ingress hợp nhất (routing + queue) =================
+        # Bảng định tuyến: 1 dòng = 1 binding nguồn→agent. Thêm agent = thêm 1 dòng.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS routing_binding (
+                id         bigserial PRIMARY KEY,
+                channel    text NOT NULL,          -- lark | web | a2a | cron | webhook
+                app_id     text,                   -- Lark app_id (nếu có)
+                chat_id    text,                   -- Lark chat_id / khoá kênh
+                agent_id   text NOT NULL REFERENCES agents(agent_id),
+                active     boolean DEFAULT true,
+                created_by text,
+                created_at timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_routing_lookup "
+                     "ON routing_binding(channel, app_id, chat_id) WHERE active")
+        # Hàng đợi job — 1 sự kiện = 1 job. Consume bằng FOR UPDATE SKIP LOCKED.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS jobs (
+                id          bigserial PRIMARY KEY,
+                agent_id    text,                  -- NULL = chưa route được (unrouted)
+                channel     text,
+                session_id  text,                  -- gom nhiều lượt cùng hội thoại
+                reply_to    jsonb,                 -- nơi trả lời (chat_id/email/req_id...)
+                payload     jsonb,
+                status      text DEFAULT 'queued', -- queued|running|done|failed|dlq|rejected|unrouted
+                priority    int DEFAULT 5,
+                attempts    int DEFAULT 0,
+                max_attempts int DEFAULT 5,
+                run_after   timestamptz DEFAULT now(),
+                locked_by   text,
+                locked_at   timestamptz,
+                last_error  text,
+                created_at  timestamptz DEFAULT now(),
+                updated_at  timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_claim "
+                     "ON jobs(agent_id, status, run_after)")
+        # Sự kiện trong 1 job — dùng cho streaming (SSE) và trace từng bước.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS job_events (
+                id       bigserial PRIMARY KEY,
+                job_id   bigint NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+                seq      int,
+                kind     text,                    -- token|message|status|error|done
+                data     jsonb,
+                created_at timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_job_events_job ON job_events(job_id, seq)")
+        # Chống trùng sự kiện (Lark retry cùng event_id). Dọn theo TTL định kỳ.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS event_dedupe (
+                event_id text PRIMARY KEY,
+                seen_at  timestamptz DEFAULT now()
+            )
+            """
+        )
         conn.commit()
     _READY = True
+
+
+def _reaper_loop() -> None:
+    """Nền: định kỳ thu hồi job 'running' quá hạn khoá + dọn event_dedupe cũ."""
+    while True:
+        time.sleep(30)
+        try:
+            with _db() as conn:
+                _reap_stale(conn)
+                conn.execute("DELETE FROM event_dedupe WHERE seen_at < now() - interval '2 days'")
+                conn.commit()
+        except Exception:
+            pass
 
 
 @app.on_event("startup")
 def _startup() -> None:
     try:
         _ensure_schema()
+    except Exception:
+        pass
+    try:
+        threading.Thread(target=_reaper_loop, daemon=True).start()
     except Exception:
         pass
 
@@ -1582,6 +1665,372 @@ def lark_chats(authorization: str = Header(default="")) -> dict:
                           for c in items]}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)[:160])
+
+
+# ==================== P1: Ingress hợp nhất — routing + job queue ====================
+# Mọi kênh (Lark, web chat, cron, webhook, A2A) đổ về đây. Thêm agent = thêm 1 dòng
+# routing_binding; consumer (managed/tự host) lấy job qua /v1/self/jobs.
+
+GATEWAY_INGEST_TOKEN = os.environ.get("GATEWAY_INGEST_TOKEN", "") or ADMIN_TOKEN
+_STALE_LOCK_SECS = int(os.environ.get("JOB_STALE_LOCK_SECS", "120"))
+
+
+def _require_ingest(authorization: str) -> None:
+    """Cho phép gateway nội bộ (hoặc admin) đẩy sự kiện vào queue."""
+    tok = authorization[7:] if authorization.startswith("Bearer ") else ""
+    if not GATEWAY_INGEST_TOKEN or tok != GATEWAY_INGEST_TOKEN:
+        raise HTTPException(status_code=401, detail="ingest token required")
+
+
+def _agent_status(conn, agent_id: str) -> str | None:
+    row = conn.execute("SELECT status FROM agents WHERE agent_id=%s", (agent_id,)).fetchone()
+    return row["status"] if row else None
+
+
+def _route(conn, channel: str, app_id: str | None, chat_id: str | None) -> str | None:
+    """Tra routing_binding → agent_id. Ưu tiên khớp cụ thể (chat_id) rồi tới app_id."""
+    row = conn.execute(
+        """
+        SELECT agent_id FROM routing_binding
+        WHERE active AND channel=%s
+          AND (chat_id=%s OR chat_id IS NULL)
+          AND (app_id=%s OR app_id IS NULL)
+        ORDER BY (chat_id IS NOT NULL) DESC, (app_id IS NOT NULL) DESC, id ASC
+        LIMIT 1
+        """,
+        (channel, chat_id, app_id),
+    ).fetchone()
+    return row["agent_id"] if row else None
+
+
+def _backoff_secs(attempts: int) -> int:
+    return min(30 * (2 ** max(0, attempts - 1)), 3600)
+
+
+def _reap_stale(conn) -> int:
+    """Job 'running' quá hạn khoá (consumer chết) → retry backoff hoặc DLQ."""
+    rows = conn.execute(
+        """
+        UPDATE jobs SET
+          status = CASE WHEN attempts >= max_attempts THEN 'dlq' ELSE 'queued' END,
+          run_after = now() + make_interval(secs => %s),
+          locked_by = NULL, locked_at = NULL,
+          last_error = coalesce(last_error,'') || ' [reaped stale lock]',
+          updated_at = now()
+        WHERE status='running' AND locked_at < now() - make_interval(secs => %s)
+        RETURNING id
+        """,
+        (30, _STALE_LOCK_SECS),
+    ).fetchall()
+    return len(rows)
+
+
+def _ingest(conn, *, channel: str, payload: dict, event_id: str | None = None,
+            app_id: str | None = None, chat_id: str | None = None,
+            session_id: str | None = None, reply_to: dict | None = None,
+            agent_id: str | None = None) -> dict:
+    """dedupe → route → enqueue. Trả {job_id|None, status, dedupe?}."""
+    if event_id:
+        r = conn.execute(
+            "INSERT INTO event_dedupe(event_id) VALUES (%s) ON CONFLICT DO NOTHING RETURNING event_id",
+            (event_id,)).fetchone()
+        if not r:
+            return {"job_id": None, "status": "duplicate", "dedupe": True}
+    if not agent_id:
+        agent_id = _route(conn, channel, app_id, chat_id)
+    status = "queued"
+    if not agent_id:
+        status = "unrouted"
+    elif _agent_status(conn, agent_id) == "deactivated":
+        status = "rejected"     # kill-switch: nhận nhưng không cho chạy
+    row = conn.execute(
+        """
+        INSERT INTO jobs(agent_id, channel, session_id, reply_to, payload, status)
+        VALUES (%s,%s,%s,%s,%s,%s) RETURNING id
+        """,
+        (agent_id, channel, session_id, Json(reply_to or {}), Json(payload or {}), status),
+    ).fetchone()
+    return {"job_id": row["id"], "agent_id": agent_id, "status": status}
+
+
+@app.post("/v1/ingest")
+def ingest_event(body: dict, authorization: str = Header(default="")) -> dict:
+    """Cổng nội bộ cho gateway đẩy sự kiện đã verify. ACK nhanh (chỉ ghi DB)."""
+    _require_ingest(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        res = _ingest(
+            conn,
+            channel=body.get("channel") or "webhook",
+            payload=body.get("payload") or {},
+            event_id=body.get("event_id"),
+            app_id=body.get("app_id"),
+            chat_id=body.get("chat_id"),
+            session_id=body.get("session_id"),
+            reply_to=body.get("reply_to"),
+            agent_id=body.get("agent_id"),
+        )
+        conn.commit()
+    return res
+
+
+# -------- Worker API (agent lấy & báo kết quả job) --------
+
+@app.get("/v1/self/jobs")
+def self_jobs(authorization: str = Header(default=""), wait: int = 0, max: int = 1) -> list[dict]:
+    """Long-poll lấy job cho agent gọi. wait giây (0=không chờ), max job/lần."""
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    wait = min(max_wait_cap(wait), 30)
+    deadline = time.time() + wait
+    while True:
+        with _db() as conn:
+            if _agent_status(conn, agent_id) == "deactivated":
+                raise HTTPException(status_code=403, detail="agent deactivated")
+            _reap_stale(conn)
+            claimed = []
+            for _ in range(max):
+                row = conn.execute(
+                    """
+                    UPDATE jobs SET status='running', locked_by=%s, locked_at=now(),
+                                    attempts=attempts+1, updated_at=now()
+                    WHERE id = (
+                        SELECT id FROM jobs
+                        WHERE agent_id=%s AND status='queued' AND run_after<=now()
+                        ORDER BY priority ASC, id ASC
+                        FOR UPDATE SKIP LOCKED LIMIT 1
+                    )
+                    RETURNING id, channel, session_id, reply_to, payload, attempts, max_attempts
+                    """,
+                    (f"{agent_id}:{os.getpid()}", agent_id),
+                ).fetchone()
+                if not row:
+                    break
+                claimed.append(dict(row))
+            conn.commit()
+        if claimed or time.time() >= deadline:
+            return claimed
+        time.sleep(1.0)
+
+
+def max_wait_cap(wait: int) -> int:
+    try:
+        return max(0, int(wait))
+    except Exception:
+        return 0
+
+
+@app.post("/v1/self/jobs/{job_id}/event")
+def self_job_event(job_id: int, body: dict, authorization: str = Header(default="")) -> dict:
+    """Ghi 1 sự kiện tiến trình của job (để SSE stream về client)."""
+    agent_id = _require_self(authorization)
+    with _db() as conn:
+        owner = conn.execute("SELECT agent_id FROM jobs WHERE id=%s", (job_id,)).fetchone()
+        if not owner or owner["agent_id"] != agent_id:
+            raise HTTPException(status_code=404, detail="job không thuộc agent")
+        conn.execute(
+            "INSERT INTO job_events(job_id, seq, kind, data) VALUES (%s,%s,%s,%s)",
+            (job_id, body.get("seq"), body.get("kind") or "message", Json(body.get("data") or {})))
+        conn.commit()
+    return {"ok": True}
+
+
+@app.post("/v1/self/jobs/{job_id}/complete")
+def self_job_complete(job_id: int, body: dict, authorization: str = Header(default="")) -> dict:
+    agent_id = _require_self(authorization)
+    with _db() as conn:
+        n = conn.execute(
+            "UPDATE jobs SET status='done', updated_at=now(), last_error=NULL "
+            "WHERE id=%s AND agent_id=%s AND status='running' RETURNING id",
+            (job_id, agent_id)).fetchone()
+        if not n:
+            raise HTTPException(status_code=409, detail="job không ở trạng thái running của agent")
+        conn.execute("INSERT INTO job_events(job_id, kind, data) VALUES (%s,'done',%s)",
+                     (job_id, Json(body.get("result") or {})))
+        conn.commit()
+    return {"ok": True}
+
+
+@app.post("/v1/self/jobs/{job_id}/fail")
+def self_job_fail(job_id: int, body: dict, authorization: str = Header(default="")) -> dict:
+    """Báo job lỗi → retry với backoff, quá max_attempts → DLQ."""
+    agent_id = _require_self(authorization)
+    err = str(body.get("error") or "")[:500]
+    with _db() as conn:
+        row = conn.execute(
+            "SELECT attempts, max_attempts FROM jobs WHERE id=%s AND agent_id=%s AND status='running'",
+            (job_id, agent_id)).fetchone()
+        if not row:
+            raise HTTPException(status_code=409, detail="job không ở trạng thái running của agent")
+        to_dlq = row["attempts"] >= row["max_attempts"]
+        conn.execute(
+            """
+            UPDATE jobs SET status=%s, last_error=%s,
+                            run_after = now() + make_interval(secs => %s), updated_at=now()
+            WHERE id=%s
+            """,
+            ("dlq" if to_dlq else "queued", err, 0 if to_dlq else _backoff_secs(row["attempts"]), job_id))
+        conn.execute("INSERT INTO job_events(job_id, kind, data) VALUES (%s,'error',%s)",
+                     (job_id, Json({"error": err, "dlq": to_dlq})))
+        conn.commit()
+    return {"ok": True, "status": "dlq" if to_dlq else "queued"}
+
+
+# -------- Admin: routing + jobs/DLQ --------
+
+@app.get("/v1/routing")
+def routing_list(authorization: str = Header(default="")) -> list[dict]:
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT id, channel, app_id, chat_id, agent_id, active, created_by, created_at "
+            "FROM routing_binding ORDER BY id DESC").fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/v1/routing")
+def routing_add(body: dict, authorization: str = Header(default="")) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    agent_id = body.get("agent_id")
+    channel = body.get("channel") or "lark"
+    if not agent_id:
+        raise HTTPException(status_code=400, detail="thiếu agent_id")
+    with _db() as conn:
+        if not conn.execute("SELECT 1 FROM agents WHERE agent_id=%s", (agent_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="agent không tồn tại")
+        row = conn.execute(
+            "INSERT INTO routing_binding(channel, app_id, chat_id, agent_id, created_by) "
+            "VALUES (%s,%s,%s,%s,%s) RETURNING id",
+            (channel, body.get("app_id"), body.get("chat_id"), agent_id,
+             body.get("created_by") or "admin")).fetchone()
+        _audit(conn, body.get("created_by") or "admin", "routing_add", "routing",
+               str(row["id"]), {"channel": channel, "agent_id": agent_id})
+        conn.commit()
+    return {"id": row["id"], "ok": True}
+
+
+@app.post("/v1/routing/{binding_id}/toggle")
+def routing_toggle(binding_id: int, authorization: str = Header(default="")) -> dict:
+    _require_admin(authorization)
+    with _db() as conn:
+        row = conn.execute(
+            "UPDATE routing_binding SET active = NOT active WHERE id=%s RETURNING active",
+            (binding_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="binding không tồn tại")
+        conn.commit()
+    return {"id": binding_id, "active": row["active"]}
+
+
+@app.get("/v1/jobs")
+def jobs_list(authorization: str = Header(default=""), status: str | None = None,
+              agent_id: str | None = None, limit: int = 50) -> list[dict]:
+    _require_admin(authorization)
+    _ensure_schema()
+    q = ("SELECT id, agent_id, channel, session_id, status, attempts, max_attempts, "
+         "priority, run_after, last_error, created_at, updated_at FROM jobs")
+    where, args = [], []
+    if status:
+        where.append("status=%s"); args.append(status)
+    if agent_id:
+        where.append("agent_id=%s"); args.append(agent_id)
+    if where:
+        q += " WHERE " + " AND ".join(where)
+    q += " ORDER BY id DESC LIMIT %s"; args.append(min(limit, 500))
+    with _db() as conn:
+        rows = conn.execute(q, tuple(args)).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/v1/jobs/{job_id}/replay")
+def job_replay(job_id: int, authorization: str = Header(default="")) -> dict:
+    """Đưa job dlq/failed về queued, reset attempts. Dùng cho tab DLQ."""
+    _require_admin(authorization)
+    with _db() as conn:
+        row = conn.execute(
+            "UPDATE jobs SET status='queued', attempts=0, run_after=now(), "
+            "locked_by=NULL, locked_at=NULL, updated_at=now() "
+            "WHERE id=%s AND status IN ('dlq','failed','rejected','unrouted') RETURNING id",
+            (job_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=409, detail="job không ở trạng thái replay được")
+        _audit(conn, "admin", "job_replay", "job", str(job_id), {})
+        conn.commit()
+    return {"id": job_id, "ok": True}
+
+
+# -------- Chat API (UC1): FE riêng chỉ là skin — vẫn đi qua ingress chung --------
+# Mọi tin nhắn web → enqueue như kênh Lark, nên tự có telemetry/audit/quota/kill-switch.
+# FE KHÔNG bao giờ gọi thẳng agent_runner.
+
+def _chat_auth(authorization: str, token_qs: str | None, agent_id: str) -> None:
+    """Cho phép: agent token của CHÍNH agent đó, hoặc admin token."""
+    auth = authorization
+    if token_qs and not auth:
+        auth = f"Bearer {token_qs}"
+    if ADMIN_TOKEN and auth == f"Bearer {ADMIN_TOKEN}":
+        return
+    if _agent_from_token(auth) == agent_id:
+        return
+    raise HTTPException(status_code=401, detail="cần agent token của agent này hoặc admin token")
+
+
+@app.post("/v1/chat/{agent_id}/messages")
+def chat_message(agent_id: str, body: dict, authorization: str = Header(default="")) -> dict:
+    """Gửi 1 tin nhắn web tới agent → enqueue job channel=web. Trả job_id + session_id."""
+    _chat_auth(authorization, None, agent_id)
+    _ensure_schema()
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="thiếu text")
+    session_id = body.get("session_id") or ("web-" + secrets.token_hex(8))
+    with _db() as conn:
+        if not conn.execute("SELECT 1 FROM agents WHERE agent_id=%s", (agent_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="agent không tồn tại")
+        res = _ingest(
+            conn, channel="web", agent_id=agent_id, session_id=session_id,
+            payload={"text": text, "user_ref": body.get("user_ref")},
+            reply_to={"channel": "web", "session_id": session_id},
+        )
+        conn.commit()
+    if res["status"] == "rejected":
+        raise HTTPException(status_code=403, detail="agent deactivated")
+    return {"job_id": res["job_id"], "session_id": session_id, "status": res["status"]}
+
+
+@app.get("/v1/chat/{agent_id}/stream")
+def chat_stream(agent_id: str, session_id: str, authorization: str = Header(default=""),
+                token: str | None = None, after: int = 0) -> StreamingResponse:
+    """SSE: đẩy job_events của session (token|message|error|done) về client."""
+    _chat_auth(authorization, token, agent_id)
+    _ensure_schema()
+
+    def gen():
+        last = after
+        deadline = time.time() + 120
+        yield "retry: 3000\n\n"
+        while time.time() < deadline:
+            with _db() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT e.id, e.kind, e.data FROM job_events e
+                    JOIN jobs j ON j.id = e.job_id
+                    WHERE j.agent_id=%s AND j.session_id=%s AND e.id > %s
+                    ORDER BY e.id ASC LIMIT 100
+                    """,
+                    (agent_id, session_id, last)).fetchall()
+            for r in rows:
+                last = r["id"]
+                yield f"event: {r['kind']}\ndata: {json.dumps(r['data'], ensure_ascii=False)}\n\n"
+                if r["kind"] == "done":
+                    return
+            time.sleep(1.0)
+        yield "event: timeout\ndata: {}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 def _audit(conn, actor: str, action: str, target_type: str, target_id: str,
