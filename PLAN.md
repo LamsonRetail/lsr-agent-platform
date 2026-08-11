@@ -9,11 +9,202 @@ kết nối vào để tự tạo agent của mình**, tự yêu cầu thêm ski
 > là **một subsystem** của platform. Chi tiết liên quan:
 > [MASTER_DATA.md](MASTER_DATA.md) · [AGENT_INTEGRATION.md](AGENT_INTEGRATION.md).
 
-> ⚠️ **Auth model (đã chốt): agent xác thực bằng Claude Agent SDK đăng nhập
-> subscription riêng (OAuth — `claude login` / `setup-token`), KHÔNG dùng
-> `ANTHROPIC_API_KEY`.** Hệ quả: bỏ mô hình "LLM gateway virtual-key" làm control
-> point. Thay bằng **Claude Code plugin + Telemetry SDK** (nắm request/token) và
-> **kill switch qua Lark + dừng process + thu hồi đăng ký**. Xem §2, §5.
+> ⚠️ **Auth model (cập nhật 2026-08-11 — kiến trúc v3): subscription ladder.**
+> Mỗi agent xác thực theo bậc thang: **① subscription RIÊNG của agent** (OAuth —
+> `claude setup-token`) → **② pool subscription chung** (tự chuyển khi hết hạn mức,
+> cooldown 5h) → **③ API key qua litellm** (chỉ khi mọi subscription cooldown; chọn
+> model theo `model_fallback`, đo chi phí thật). Secrets chỉ nằm trên VM — DB giữ
+> tham chiếu. Control point vẫn là **plugin/telemetry + kill switch**; thêm
+> **Model Auth Broker** cấp lease. Xem [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+---
+
+## 0. Plan hiện hành — Kiến trúc v3 (2026-08-11)
+
+> Kiến trúc đầy đủ: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Phần dưới đây là
+> lộ trình 7 phase đang chờ thực thi. Các mục §1–§9 phía sau là nền tảng đã xây
+> (giữ làm ngữ cảnh). Trạng thái: ✓ đang chạy · ➕ mới.
+
+Đã kiểm tra 7 use case và vá kiến trúc: (1) FE chat riêng qua Chat API chung,
+(2) skill mới có metering, (3) sub riêng từng agent, (4) tự chuyển account khi hết
+token, (5) context stateless + fallback API được chọn model, (6) platform agents +
+human-in-the-loop, (7) agent-agent qua Directory/A2A.
+
+### P1 — Ingress hợp nhất: Event Gateway + Router + Queue + Chat API *(UC1, nền UC7)*
+
+**Các bước:**
+1. Schema: `routing_binding`(app_id, chat_id, channel, agent_id, active) ·
+   `jobs`(id, agent_id, channel, payload, status, priority, attempts, run_after, locked_by, locked_at) ·
+   `job_events`(job_id, seq, kind, data — cho streaming) · `event_dedupe`(event_id PK, seen_at, TTL).
+2. Service `event_gateway` (FastAPI, compose): webhook Lark per-app (verify+decrypt bằng
+   key trong secrets VM) → dedupe → tra routing → INSERT jobs → ACK <1s. App chưa có
+   webhook: adapter long-connection đẩy vào cùng hàm ingest.
+3. Chat API: `POST /v1/chat/{agent_id}/messages` + `GET /v1/chat/{agent_id}/stream` (SSE đọc job_events).
+4. Worker API: managed poll nội bộ; tự host dùng `GET /v1/self/jobs?wait=25` (SKIP LOCKED)
+   + `POST /v1/self/jobs/{id}/complete|fail`.
+5. Retry: attempts+1, run_after = now()+2^attempts×30s, quá 5 → DLQ; console tab Jobs/DLQ + Replay.
+6. Di trú `minh_anh_bot` thành consumer đầu tiên.
+
+**Đầu ra:** service event_gateway · 4 bảng · Chat API/SSE · Worker API · tab Routing+Jobs/DLQ · docs INGRESS.md.
+
+**Test case:**
+| # | Kịch bản | Kỳ vọng |
+|---|---|---|
+| 1.1 | Nhắn Lark vào chat đã binding | ACK <1s; agent nhận job ≤2s; trace channel=lark |
+| 1.2 | Lark retry cùng event_id ×3 | chỉ 1 job (dedupe) |
+| 1.3 | Chat chưa binding | job "unrouted" + alert, không mất |
+| 1.4 | 2 chat → 2 agent, đồng thời | đúng agent nhận đúng job |
+| 1.5 | Kill container giữa job | lock hết hạn → retry → DLQ sau 5 lần → Replay OK |
+| 1.6 | FE riêng gửi Chat API, nhận SSE | reply stream; trace/quota như Lark; không có đường gọi thẳng runtime |
+| 1.7 | Agent mới + 1 dòng routing | nhận sự kiện ngay, không sửa gateway |
+| 1.8 | Deactive rồi nhắn | job rejected, không consume |
+
+### P2 — Model Auth Broker: sub riêng · pool · fallback API *(UC3·4·5-ladder)*
+
+**Các bước:**
+1. Schema: `model_credentials`(id, kind=subscription|api_key, owner_email, secret_ref,
+   status=active|cooldown|disabled, cooldown_until, priority, note) + `agents.auth_mode`(own|pool|api),
+   `agents.credential_id`.
+2. Secrets: mỗi credential = file `/opt/lsr-platform/secrets/model/<id>.env`; DB chỉ giữ ref;
+   script `add-model-credential.sh` chạy trên VM.
+3. Broker: `POST /v1/self/model-auth/lease` (ladder own→pool→api trả base_url litellm +
+   model theo `agent_versions.model_fallback`) · `POST /v1/self/model-auth/report`
+   (limit/429 → cooldown tới hết cửa sổ 5h + audit).
+4. agent_runner: lease lúc start; wrapper bắt limit → report → re-lease → retry job (job còn trong queue).
+5. litellm: model list + spend log; đường API bắt buộc qua litellm.
+6. Console tab Model Auth: pool/cooldown/agent-đang-dùng-gì; alert pool cạn.
+
+**Đầu ra:** bảng credentials + ladder API · script VM · runner re-lease tự động · litellm spend · tab Model Auth · docs MODEL_AUTH.md.
+
+**Test case:**
+| # | Kịch bản | Kỳ vọng |
+|---|---|---|
+| 2.1 | auth_mode=own chạy job | lease đúng sub riêng (audit credential_id) |
+| 2.2 | Disable credential riêng | tự rơi xuống pool, job vẫn xong |
+| 2.3 | Giả lập 429 account A | A cooldown; lease account B; retry OK |
+| 2.4 | Mọi sub cooldown | dùng api_key litellm; model=model_fallback; spend ghi nhận |
+| 2.5 | Hết cooldown | account về pool, ưu tiên lại sub |
+| 2.6 | Pool cạn + không API | fail lỗi rõ + alert Lark ngay |
+| 2.7 | Grep secret trong DB/API/log | không lộ token ngoài file VM |
+| 2.8 | Đổi account giữa hội thoại | ngữ cảnh giữ nguyên (state ở platform) |
+
+### P3 — Agent Versions + Builder + eval gate *(UC2-skill, kiểm soát hiệu quả)*
+
+**Các bước:**
+1. `agent_versions`(agent_id, version, instruction_block, skills, model, model_fallback,
+   tool_grants, publication=draft|dev|stg|prod, created_by, created_at) — thay con trỏ prompt_version.
+2. Runner đọc version theo môi trường khi nhận job — đổi version không rebuild.
+3. Publish → sync `skills` vào brain_skills + Directory.
+4. Console Builder: sửa instruction/model/skill → draft → Publish (admin, X-Actor).
+5. Eval gate: publish prod phải pass regression golden (harness sẵn có); fail → chặn + diff.
+6. Rollback = trỏ lại version trước, có audit.
+
+**Đầu ra:** bảng + API CRUD/publish/rollback · hot-reload version · tab Builder · gate nối regression_runs · migration từ prompt_version.
+
+**Test case:**
+| # | Kịch bản | Kỳ vọng |
+|---|---|---|
+| 3.1 | Sửa instruction | tạo draft; agent chạy không đổi |
+| 3.2 | Publish dev | chỉ dev đổi; prod nguyên |
+| 3.3 | Publish prod khi golden fail | chặn + hiện case fail + audit |
+| 3.4 | Publish prod khi pass | áp dụng ở job kế; audit ai-publish-gì |
+| 3.5 | Rollback 1 click | version trước chạy lại ngay |
+| 3.6 | Version khai skill mới | hiện ở brain_skills + Directory |
+
+### P4 — Context Compiler + Session Memory + RAG *(UC5-context)*
+
+**Các bước:**
+1. `sessions`(session_id, agent_id, channel, user_ref, rolling_summary, last_turns, updated_at)
+   + `user_facts`(agent_id, user_ref, fact, source, updated_at); retention nối retention_config.
+2. Context Compiler (lib chung + mẫu cho tự host): prompt = instruction(version) + rolling_summary
+   + N lượt cuối + user_facts + RAG top-k — mỗi call LLM độc lập.
+3. Sau reply: nén summary bằng model rẻ (haiku qua ladder); extract facts có nguồn.
+4. RAG: pgvector cho brain_items + `GET /v1/self/brain/search?q=` (kèm source_url).
+5. Auto-sync Lark Doc được đánh dấu → brain draft chờ duyệt.
+
+**Đầu ra:** 2 bảng · lib compiler + docs · pgvector + search API · cron sync Doc · purge nối retention.
+
+**Test case:**
+| # | Kịch bản | Kỳ vọng |
+|---|---|---|
+| 4.1 | 2 câu nối nhau 1 session | câu 2 hiểu ngữ cảnh dù 2 call độc lập |
+| 4.2 | Restart runner giữa hội thoại | session tiếp tục đúng |
+| 4.3 | Hỏi khớp tri thức brain | trả lời kèm source_url |
+| 4.4 | Hội thoại 50 lượt | prompt không phình; token/call ổn định |
+| 4.5 | Fact ở session cũ, mở session mới | agent vẫn biết (user_facts) |
+| 4.6 | TTL ngắn → chờ purge | xoá đúng hạn + audit |
+
+### P5 — Connector Registry + usage metering *(UC2-log·chi phí)*
+
+**Các bước:**
+1. `connectors`(id, kind, config_ref, status) + `connector_grants`(agent_id, connector_id, scope,
+   granted_by) + `tool_usage`(agent_id, connector, tool, job_id, latency_ms, ok, error, tokens_est, created_at).
+2. Chuẩn adapter (mẫu lsr_lark): auth·rate-limit·error-map·audit·metering; kiểm grant tại API —
+   thu quyền chặn ngay.
+3. Migrate Lark + BigQuery vào registry; skeleton Web/Search, Social, Sapo/Misa.
+4. Metering: hooks + runner ghi từng tool call; bq_sink export thêm tool_usage.
+5. Console tab Connectors: grant + biểu đồ usage.
+
+**Đầu ra:** registry + grants + tool_usage · CONNECTOR.md · 2 migrate + 3 skeleton · console.
+
+**Test case:**
+| # | Kịch bản | Kỳ vọng |
+|---|---|---|
+| 5.1 | Gọi connector chưa grant | 403 + audit + error-map rõ |
+| 5.2 | Cấp grant → gọi lại | chạy ngay, không restart |
+| 5.3 | Thu grant giữa chừng | call kế bị chặn ngay |
+| 5.4 | Skill/tool mới (UC2) | mỗi call có dòng tool_usage — thấy tần suất/lỗi/chi phí theo skill |
+| 5.5 | Thêm connector mock | chỉ đăng ký adapter, không sửa core/agent |
+| 5.6 | Connector bị rate-limit ngoài | retry backoff; agent không sập; usage ghi lỗi |
+
+### P6 — Agent Directory + A2A *(UC7)*
+
+**Các bước:**
+1. `GET /v1/self/directory`: agent active + skills + domains + status.
+2. `a2a_grants`(caller_id, target_id, scope, granted_by) — mặc định deny.
+3. `POST /v1/self/a2a/{target}` {task, payload, timeout} → enqueue channel=a2a + reply_to;
+   caller poll `GET /v1/self/a2a/{req_id}`.
+4. hop_count ≤3, TTL, cấm self-call; caller-pays trong mart.
+5. Audit 2 chiều (a2a_call / a2a_serve, khớp req_id).
+
+**Đầu ra:** Directory API · grants + console · A2A qua queue · A2A.md kèm mẫu code tự host.
+
+**Test case:**
+| # | Kịch bản | Kỳ vọng |
+|---|---|---|
+| 6.1 | AG-A đọc directory | thấy AG-B + skill; không thấy agent deactive |
+| 6.2 | A gọi B (có grant) | nhận kết quả; trace/audit 2 phía khớp req_id |
+| 6.3 | A gọi C (không grant) | 403 + audit denied |
+| 6.4 | Vòng A→B→A | hop 3 chặn, không treo queue |
+| 6.5 | Target deactive | lỗi "target inactive" ngay, không enqueue |
+| 6.6 | Chi phí lượt A2A | tính cho caller trong mart |
+
+### P7 — Platform agents (AG-OPS · AG-EVAL) + HITL + Mart *(UC6)*
+
+**Các bước:**
+1. HITL: `pending_actions`(id, proposed_by, action, params, risk=low|high, status, approver,
+   expires_at) + card Lark Duyệt/Từ chối (action → gateway → thực thi). Low tự chạy + log;
+   high phải duyệt; proposer ≠ approver.
+2. AG-OPS: đọc health/cost/DLQ/pool qua admin-tool API — alert kèm chẩn đoán, đề xuất pause
+   agent lỗi, xoay credential, replay DLQ, điều phối tải (priority/phân vùng).
+3. AG-EVAL: golden định kỳ trên prod + sample chấm chất lượng thật (LLM judge);
+   điểm giảm → đề xuất rollback (HITL).
+4. Mart: BigQuery scheduled queries — dim(agent, version, kênh, tool, credential, ngày) +
+   fact(runs, tokens, cost ước + cost API thật, lỗi, điểm eval) → dashboard KPI + alert ngưỡng.
+5. Web chat console (nếu còn thời lượng) chạy trên Chat API P1.
+
+**Đầu ra:** pending_actions + card HITL · AG-OPS/AG-EVAL đăng ký như agent thường · mart + KPI dashboard · runbook.
+
+**Test case:**
+| # | Kịch bản | Kỳ vọng |
+|---|---|---|
+| 7.1 | DLQ vượt ngưỡng | AG-OPS alert ≤5 phút kèm chẩn đoán |
+| 7.2 | Đề xuất deactive (high) | card Lark → Duyệt thì thực thi; Từ chối thì thôi; audit đủ |
+| 7.3 | Action quá hạn | expire + nhắc 1 lần |
+| 7.4 | Điểm prod giảm sau publish | AG-EVAL cảnh báo + đề xuất rollback |
+| 7.5 | Đối chiếu mart 1 tuần với dữ liệu thô | lệch ≤1% |
+| 7.6 | Platform agent tự duyệt việc mình | bị chặn + audit attempt |
+| 7.7 | Pool còn 1 account | cảnh báo sớm trước khi rơi xuống API |
 
 ---
 
