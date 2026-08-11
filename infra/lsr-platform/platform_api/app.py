@@ -359,6 +359,25 @@ def _ensure_schema() -> None:
             """
         )
         conn.execute("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS delivered_lark boolean DEFAULT false")
+        # --- Lark dùng chung: cache token + danh tính (mọi agent xài chung 1 nguồn) ---
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lark_token_cache (
+                app_id     text PRIMARY KEY,
+                token      text,
+                expire_at  timestamptz
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lark_identity_cache (
+                email      text PRIMARY KEY,   -- lower-case; khớp cả email lẫn enterprise_email
+                open_id    text,
+                updated_at timestamptz DEFAULT now()
+            )
+            """
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS agent_golive_checklist (
@@ -689,6 +708,7 @@ _BOOTSTRAP_DIR = pathlib.Path(__file__).parent / "bootstrap"
 # Đều là TEMPLATE (không chứa token) — an toàn phục vụ công khai. Installer tự hỏi token.
 _BOOTSTRAP_ALLOW = {
     "lsr_adopt.py", "lsr_trace.py", "onboard.sh",
+    "lsr_lark.py",                      # lib Lark dùng chung (remote, drop-in)
     "lsr-telemetry-plugin.zip",         # plugin đóng gói (cài không cần GitHub)
     "lsr-install.command", "lsr-install.bat",  # installer click-and-run (Mac/Windows)
 }
@@ -1232,27 +1252,86 @@ _LARK_TOKEN: dict = {"value": "", "exp": 0.0}
 
 
 def _lark_token() -> str:
-    """tenant_access_token (cache tới khi gần hết hạn)."""
+    """tenant_access_token dùng chung — cache 2 tầng: L1 in-memory, L2 Postgres.
+
+    Cache L2 (bảng lark_token_cache) để MỌI service/agent trong platform xài chung
+    một token, không mỗi nơi tự fetch (đồng bộ + tiết kiệm call, sống qua restart).
+    """
 
     import time as _t
-    if _LARK_TOKEN["value"] and _t.time() < _LARK_TOKEN["exp"]:
+    now = _t.time()
+    if _LARK_TOKEN["value"] and now < _LARK_TOKEN["exp"]:
         return _LARK_TOKEN["value"]
     if not (LARK_APP_ID and LARK_APP_SECRET):
         return ""
+    # L2: token còn hạn do service khác vừa lấy?
+    try:
+        with _db() as conn:
+            row = conn.execute(
+                "SELECT token, extract(epoch from expire_at) AS exp "
+                "FROM lark_token_cache WHERE app_id=%s", (LARK_APP_ID,)).fetchone()
+        if row and row["token"] and row["exp"] and now < float(row["exp"]):
+            _LARK_TOKEN["value"], _LARK_TOKEN["exp"] = row["token"], float(row["exp"])
+            return _LARK_TOKEN["value"]
+    except Exception:
+        pass
     r = requests.post(
         f"{LARK_DOMAIN}/open-apis/auth/v3/tenant_access_token/internal",
         json={"app_id": LARK_APP_ID, "app_secret": LARK_APP_SECRET}, timeout=10)
     d = r.json()
     if d.get("code") != 0:
         return ""
+    exp = now + int(d.get("expire", 7200)) - 120
     _LARK_TOKEN["value"] = d["tenant_access_token"]
-    _LARK_TOKEN["exp"] = _t.time() + int(d.get("expire", 7200)) - 120
+    _LARK_TOKEN["exp"] = exp
+    try:
+        with _db() as conn:
+            conn.execute(
+                "INSERT INTO lark_token_cache (app_id, token, expire_at) "
+                "VALUES (%s,%s,to_timestamp(%s)) ON CONFLICT (app_id) DO UPDATE "
+                "SET token=EXCLUDED.token, expire_at=EXCLUDED.expire_at",
+                (LARK_APP_ID, _LARK_TOKEN["value"], exp))
+            conn.commit()
+    except Exception:
+        pass
     return _LARK_TOKEN["value"]
 
 
-def _lark_open_id(email: str, token: str) -> str:
-    """Tra open_id từ email công ty (cần scope contact:user.id:readonly)."""
+def _identity_cache_get(email: str) -> str | None:
+    try:
+        with _db() as conn:
+            row = conn.execute(
+                "SELECT open_id FROM lark_identity_cache WHERE email=%s",
+                ((email or "").lower(),)).fetchone()
+        return row["open_id"] if row and row["open_id"] else None
+    except Exception:
+        return None
 
+
+def _identity_cache_put(email: str, open_id: str) -> None:
+    if not (email and open_id):
+        return
+    try:
+        with _db() as conn:
+            conn.execute(
+                "INSERT INTO lark_identity_cache (email, open_id, updated_at) "
+                "VALUES (%s,%s,now()) ON CONFLICT (email) DO UPDATE "
+                "SET open_id=EXCLUDED.open_id, updated_at=now()",
+                ((email or "").lower(), open_id))
+            conn.commit()
+    except Exception:
+        pass
+
+
+def _lark_open_id(email: str, token: str) -> str:
+    """Tra open_id từ email công ty (cần scope contact:user.id:readonly).
+
+    Ưu tiên cache danh tính dùng chung (Postgres) → mọi agent tra 1 lần, dùng lại.
+    """
+
+    cached = _identity_cache_get(email)
+    if cached:
+        return cached
     r = requests.post(
         f"{LARK_DOMAIN}/open-apis/contact/v3/users/batch_get_id?user_id_type=open_id",
         headers={"Authorization": f"Bearer {token}"},
@@ -1260,6 +1339,7 @@ def _lark_open_id(email: str, token: str) -> str:
     try:
         for u in (r.json().get("data") or {}).get("user_list") or []:
             if u.get("user_id"):
+                _identity_cache_put(email, u["user_id"])
                 return u["user_id"]
     except Exception:
         pass
@@ -1275,6 +1355,10 @@ def _lark_open_id_by_enterprise_email(email: str, token: str) -> str:
     key = (email or "").lower()
     if key in _ENT_EMAIL_CACHE:
         return _ENT_EMAIL_CACHE[key]
+    db_hit = _identity_cache_get(key)   # cache dùng chung (Postgres)
+    if db_hit:
+        _ENT_EMAIL_CACHE[key] = db_hit
+        return db_hit
     h = {"Authorization": f"Bearer {token}"}
 
     def _scan_dept(dept_id: str) -> str:
@@ -1291,6 +1375,7 @@ def _lark_open_id_by_enterprise_email(email: str, token: str) -> str:
                     em = (u.get(f) or "").lower()
                     if em:
                         _ENT_EMAIL_CACHE[em] = u.get("open_id", "")
+                        _identity_cache_put(em, u.get("open_id", ""))  # write-through DB
             if key in _ENT_EMAIL_CACHE:
                 return _ENT_EMAIL_CACHE[key]
             if not d.get("has_more"):
@@ -1387,6 +1472,116 @@ def _sync_lark_status(conn, agent_id: str, activate: bool) -> list[dict]:
             "VALUES (%s,%s,%s,%s,%s)", (agent_id, action, cid, ok, detail))
         results.append({"chat_id": cid, "action": action, "ok": ok, "detail": detail})
     return results
+
+
+def _lark_send_to(receive_id: str, id_type: str, *, text: str = "",
+                  markdown: str = "") -> tuple[bool, str]:
+    """Gửi 1 tin tới receive_id (open_id|email|chat_id). Trả (ok, detail)."""
+
+    token = _lark_token()
+    if not token:
+        return False, "no lark token (thiếu LARK_APP_ID/SECRET)"
+    if markdown:
+        msg_type = "interactive"
+        content = json.dumps({
+            "config": {"wide_screen_mode": True},
+            "elements": [{"tag": "markdown", "content": markdown}],
+        }, ensure_ascii=False)
+    else:
+        msg_type, content = "text", json.dumps({"text": text}, ensure_ascii=False)
+    try:
+        r = requests.post(
+            f"{LARK_DOMAIN}/open-apis/im/v1/messages?receive_id_type={id_type}",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"receive_id": receive_id, "msg_type": msg_type, "content": content},
+            timeout=10)
+        d = r.json()
+        return d.get("code") == 0, str(d.get("msg"))[:160]
+    except Exception as exc:
+        return False, str(exc)[:160]
+
+
+# ==================== Lark broker dùng chung (agent token) ====================
+# Mọi agent gọi Lark QUA ĐÂY: không cầm app_secret, không tự resolve open_id, không
+# tự cache token. Đồng bộ nhờ cache token + danh tính dùng chung ở Postgres.
+
+@app.post("/v1/lark/resolve")
+def lark_resolve(body: dict, authorization: str = Header(default="")) -> dict:
+    """email → open_id (dùng cache danh tính chung)."""
+
+    _require_self(authorization)
+    _ensure_schema()
+    email = (body.get("email") or "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="thiếu email")
+    token = _lark_token()
+    if not token:
+        raise HTTPException(status_code=503, detail="Lark chưa cấu hình (LARK_APP_ID/SECRET)")
+    open_id = _lark_open_id(email, token)
+    return {"email": email, "open_id": open_id or None,
+            "cached": bool(_identity_cache_get(email))}
+
+
+@app.post("/v1/lark/send")
+def lark_send(body: dict, authorization: str = Header(default="")) -> dict:
+    """Gửi tin Lark thay cho agent. body: {to, to_type?, text?|markdown?}.
+
+    to_type: email (mặc định) | open_id | chat_id. Với email sẽ tự resolve→open_id;
+    nếu chưa tra được và có LARK_NOTIFY_CHAT_ID thì rơi về nhóm chung (không mất tin).
+    """
+
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    to = (body.get("to") or "").strip()
+    to_type = (body.get("to_type") or "email").strip()
+    text = body.get("text") or ""
+    markdown = body.get("markdown") or ""
+    if not to or not (text or markdown):
+        raise HTTPException(status_code=400, detail="cần 'to' và 'text' hoặc 'markdown'")
+
+    if to_type == "email":
+        token = _lark_token()
+        open_id = _lark_open_id(to, token) if token else ""
+        if open_id:
+            receive_id, id_type = open_id, "open_id"
+        elif LARK_NOTIFY_CHAT_ID:
+            receive_id, id_type = LARK_NOTIFY_CHAT_ID, "chat_id"
+            if text:
+                text = f"@{to}: {text}"
+            if markdown:
+                markdown = f"**@{to}**\n{markdown}"
+        else:
+            raise HTTPException(status_code=422,
+                                detail="chưa resolve được email→open_id và không có nhóm fallback")
+    else:
+        receive_id, id_type = to, to_type
+
+    ok, detail = _lark_send_to(receive_id, id_type, text=text, markdown=markdown)
+    with _db() as conn:
+        _audit(conn, agent_id, "lark_send", "lark", f"{id_type}:{receive_id[:24]}",
+               {"ok": ok, "detail": detail, "via": to_type})
+        conn.commit()
+    if not ok:
+        raise HTTPException(status_code=502, detail=f"Lark từ chối: {detail}")
+    return {"ok": True, "receive_id_type": id_type, "detail": detail}
+
+
+@app.get("/v1/lark/chats")
+def lark_chats(authorization: str = Header(default="")) -> dict:
+    """Liệt kê các nhóm mà BOT platform đang tham gia (để agent biết chat_id gửi vào)."""
+
+    _require_self(authorization)
+    token = _lark_token()
+    if not token:
+        raise HTTPException(status_code=503, detail="Lark chưa cấu hình")
+    try:
+        r = requests.get(f"{LARK_DOMAIN}/open-apis/im/v1/chats?page_size=100",
+                         headers={"Authorization": f"Bearer {token}"}, timeout=10)
+        items = (r.json().get("data") or {}).get("items") or []
+        return {"chats": [{"chat_id": c.get("chat_id"), "name": c.get("name")}
+                          for c in items]}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)[:160])
 
 
 def _audit(conn, actor: str, action: str, target_type: str, target_id: str,

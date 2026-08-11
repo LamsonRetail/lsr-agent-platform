@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lsr-lark"
+version = "0.1.0"
+description = "Thư viện Lark dùng chung cho các agent LSR — remote (broker) + direct."
+requires-python = ">=3.10"
+# remote client chỉ cần stdlib; direct cần requests (dịch vụ lõi thường đã có).
+dependencies = []
+
+[project.optional-dependencies]
+direct = ["requests>=2.28"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["lsr_lark*"]
