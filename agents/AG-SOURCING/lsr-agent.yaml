@@ -15,8 +15,15 @@ agent:
 lark:
   connect_mode: bot
   bot:
-    app: platform-shared        # dùng bot dùng chung của platform (admin đã cài sẵn vào tenant)
-    chat_ids: []                # điền khi add bot vào nhóm Lark của team Sourcing
+    app: nihao-sourcing              # Lark custom app riêng của team Sourcing
+    app_id: cli_aaf6ce7c8d38deed     # identifier công khai; app_secret CHỈ nằm trong .env
+    secret_env: LARK_APP_SECRET      # tên biến môi trường chứa secret (không ghi giá trị vào repo)
+    domain: https://open.larksuite.com
+    chat_ids:                        # nhóm bot đã tham gia (lấy bằng `python3 lark_link.py`)
+      - oc_96886011764769b30cb8fc541944df91   # TEAM S (Supplier & Sampling Development)
+      - oc_d3079f5e1bf44f8605a4f222cce4f86c   # SOURCING MM
+      # oc_e521377bc4d63c0516f825bb79eab59f   # "Sharing ai thích học cái mới" — nhóm sinh hoạt,
+      #                                         không phải nhóm việc → chưa bật ingress
     event_webhook: https://collector.lsr.internal/lark/events
 
 runtime:
