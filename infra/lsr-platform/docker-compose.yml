@@ -77,6 +77,32 @@ services:
       LARK_DOMAIN_CONST: LARK
     restart: unless-stopped
 
+  # Long-connection cho app Lark nihao-sourcing (team Sourcing — AG-SOURCING).
+  event_gateway_sourcing:
+    build: ./event_gateway
+    depends_on: [platform_api]
+    environment:
+      PLATFORM_URL: http://platform_api:8090
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
+      LARK_APP_ID: ${SOURCING_LARK_APP_ID:-}
+      LARK_APP_SECRET: ${SOURCING_LARK_APP_SECRET:-}
+      LARK_DOMAIN_CONST: LARK
+    restart: unless-stopped
+
+  # Long-connection cho app Lark của Data Support (squad Data — AG-DATA-SUPPORT).
+  event_gateway_data:
+    build: ./event_gateway
+    depends_on: [platform_api]
+    environment:
+      PLATFORM_URL: http://platform_api:8090
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
+      LARK_APP_ID: ${DATA_LARK_APP_ID:-}
+      LARK_APP_SECRET: ${DATA_LARK_APP_SECRET:-}
+      LARK_DOMAIN_CONST: LARK
+    restart: unless-stopped
+
   # Bot admin Telegram: kênh AG-OPS/AG-EVAL ↔ admin (cảnh báo + nút duyệt việc).
   telegram_bot:
     build: ./telegram_bot
@@ -161,7 +187,9 @@ services:
       MINH_ANH_LARK_APP_SECRET: ${MINH_ANH_LARK_APP_SECRET:-}
       # App Lark phụ (theo routing_binding.app_id) — trả lời job bằng ĐÚNG bot đã nhận tin.
       # Secret chỉ nằm trong .env trên VM; thêm app mới = thêm cặp env + ghép vào JSON này.
-      LARK_EXTRA_APPS: '{"${SAWADEE_LARK_APP_ID:-}": "${SAWADEE_LARK_APP_SECRET:-}"}'
+      LARK_EXTRA_APPS: '{"${SAWADEE_LARK_APP_ID:-}": "${SAWADEE_LARK_APP_SECRET:-}",
+                         "${SOURCING_LARK_APP_ID:-}": "${SOURCING_LARK_APP_SECRET:-}",
+                         "${DATA_LARK_APP_ID:-}": "${DATA_LARK_APP_SECRET:-}"}'
       LARK_NOTIFY_CHAT_ID: ${LARK_NOTIFY_CHAT_ID:-}
       LARK_DOMAIN: ${LARK_DOMAIN:-https://open.larksuite.com}
       AGENT_RUNNER_IMAGE: ${AGENT_RUNNER_IMAGE:-lsr-agent-runner:latest}
