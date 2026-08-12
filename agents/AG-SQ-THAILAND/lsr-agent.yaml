@@ -1,0 +1,45 @@
+apiVersion: lsr/v1
+agent:
+  id: AG-SQ-THAILAND
+  name: Trợ lý Squad Thái Lan
+  version: 0.1.0
+  owner: thint@hapas.vn     # OWNER thật của agent — auth dùng subscription của người này
+  squad: SQ-THAILAND
+  is_squad_agent: true      # squad agent chính của SQ-THAILAND (kênh dữ liệu của squad)
+  connect_mode: bot         # bot | user
+  description: >
+    Trợ lý chung của squad Thái Lan: (1) tổng hợp tài liệu/số liệu của squad về một kho
+    tri thức duy nhất, có trích dẫn nguồn Lark; (2) mọi thành viên hỏi đáp qua Lark /
+    Telegram / web chat; (3) tham gia cuộc họp, dựng biên bản từ recording, xin xác nhận
+    chủ trì rồi mới chốt và đề xuất đầu việc.
+
+lark:
+  connect_mode: bot
+  bot:
+    app: platform-shared
+    chat_ids: []            # admin điền chat_id nhóm squad Thái Lan khi gán ingress
+    event_webhook: https://collector.lsr.internal/lark/events
+
+runtime:
+  sdk: claude-agent-sdk
+  auth: subscription        # BẮT BUỘC: đăng nhập subscription của OWNER (claude login /
+                            # setup-token). KHÔNG dùng khoá LLM, KHÔNG dùng auth chung platform.
+  model: claude-sonnet-5
+
+prompt:                     # con trỏ version prompt — rollback = đổi con trỏ (git-backed)
+  path: system_prompt.md
+  version: 0.1.0
+  ref: main
+
+skills:                     # MCP tự do — chỉ khai báo + log
+  - {name: resource-index, type: builtin}
+  - {name: brain, type: builtin}
+  - {name: transcribe, type: http}
+
+telemetry:
+  enabled: true             # BẮT BUỘC (control point) — agent không gửi trace = không golive
+  collector: https://collector.lsr.internal
+
+tests:
+  suite: tests/agent_tests.yaml
+schedule: []

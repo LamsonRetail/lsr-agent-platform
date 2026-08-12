@@ -1,0 +1,95 @@
+"""Kho dữ liệu chung của squad — đưa tài liệu vào brain (chờ duyệt) & tra cứu có nguồn.
+
+Nguyên tắc (USECASE luồng 1):
+  • Vào kho phải có ``source_url`` (link Lark đối chứng) — không có thì hỏi lại.
+  • Nội dung nhạy cảm → từ chối, không đề xuất.
+  • Trả lời chỉ dựa trên tri thức ĐÃ DUYỆT và luôn trích dẫn nguồn; không có thì nói
+    "chưa có", không đoán.
+  • Chỉ index/đề xuất — việc duyệt do reviewer làm trên console.
+
+Chủ file: **Thái** (xem TEAM.md). Chỉ stdlib.
+"""
+
+from __future__ import annotations
+
+import re
+
+SAVE_WORDS = ("lưu", "luu", "ghi vào kho", "vào kho", "cất", "index", "thêm vào kho")
+SENSITIVE_WORDS = ("lương", "luong", "bảng lương", "giá vốn", "gia von", "cmnd", "cccd",
+                   "căn cước", "số điện thoại khách", "sdt khách", "thông tin cá nhân",
+                   "tài khoản ngân hàng", "mật khẩu", "password")
+_URL = re.compile(r"https?://\S+")
+
+NO_DATA = ("Chưa có thông tin đã được duyệt trong kho của squad Thái Lan cho câu này nên "
+           "tôi không đoán. Anh/chị gửi link Lark đối chứng để tôi đưa vào kho nhé.")
+
+
+def is_save_request(text: str) -> bool:
+    low = text.lower()
+    return any(w in low for w in SAVE_WORDS)
+
+
+def is_sensitive(text: str) -> bool:
+    low = text.lower()
+    return any(w in low for w in SENSITIVE_WORDS)
+
+
+def extract_source_url(text: str) -> str | None:
+    m = _URL.search(text)
+    return m.group(0).rstrip(").,;") if m else None
+
+
+def title_from(text: str, source_url: str | None) -> str:
+    body = text
+    for w in SAVE_WORDS:
+        body = re.sub(w, "", body, flags=re.IGNORECASE)
+    if source_url:
+        body = body.replace(source_url, "")
+    body = body.strip(" :—-·\t")
+    return (body[:120] or "Tài liệu squad Thái Lan").strip()
+
+
+def save(api, text: str) -> str:
+    """Đề xuất một mục tri thức vào brain của agent. `api` = hàm gọi API của consumer."""
+    if is_sensitive(text):
+        return ("Nội dung này thuộc nhóm **nhạy cảm** (lương/giá vốn/thông tin cá nhân) nên "
+                "tôi không đưa vào kho chung. Nếu cần, anh/chị gửi qua kênh có kiểm soát "
+                "quyền truy cập.")
+
+    source_url = extract_source_url(text)
+    if not source_url:
+        return ("Cần **nguồn đối chứng** trước đã: anh/chị gửi kèm link Lark (doc/sheet/tin "
+                "nhắn) của thông tin này. Không có link thì tôi không đưa vào kho — để tránh "
+                "tri thức không kiểm chứng được.")
+
+    title = title_from(text, source_url)
+    api("POST", "/v1/self/brain/items", {
+        "title": title,
+        "content": text[:4000],
+        "source_url": source_url,
+        "tags": ["squad-thailand"],
+        "status": "pending_review",
+    })
+    return (f"Đã đưa vào kho squad Thái Lan: **{title}**\nNguồn: {source_url}\n"
+            "Trạng thái: **chờ duyệt** — reviewer chuyên môn duyệt xong thì cả squad tra được.")
+
+
+def save_minutes(api, title: str, body: str, source_url: str = "") -> None:
+    """Lưu biên bản ĐÃ CHỐT vào kho (gọi sau khi chủ trì confirm)."""
+    api("POST", "/v1/self/brain/items", {
+        "title": title,
+        "content": body[:8000],
+        "source_url": source_url,
+        "tags": ["squad-thailand", "meeting-notes"],
+        "status": "pending_review",
+    })
+
+
+def answer_from_knowledge(ctx: dict) -> str | None:
+    """Trả lời từ tri thức đã duyệt trong ngữ cảnh platform — luôn kèm nguồn."""
+    hits = ctx.get("knowledge") or []
+    if not hits:
+        return None
+    h = hits[0]
+    src = h.get("source_url") or "kho tri thức nội bộ (chưa có link đối chứng)"
+    return f"{h.get('title')}: {(h.get('content') or '')[:400]}\n\n(nguồn: {src})"
