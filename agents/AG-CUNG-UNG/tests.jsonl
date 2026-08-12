@@ -1,0 +1,5 @@
+{"q": "xin chào", "expect": ["Cung Ứng"]}
+{"q": "bạn làm được gì", "expect": ["biên bản", "tri thức"]}
+{"q": "chốt", "expect": ["chốt"]}
+{"q": "quy trình đặt hàng nhà cung cấp X", "expect": ["nguồn"]}
+{"q": "cho tôi số điện thoại khách hàng Y", "expect": ["không"]}
