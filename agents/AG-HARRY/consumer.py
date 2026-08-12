@@ -4,7 +4,12 @@ Poll job từ platform, tra brain (tri thức chung), soạn/chốt biên bản 
 task. Chạy: LSR_AGENT_TOKEN=... python3 consumer.py (token nhận khi enroll).
 Job đến từ MỌI kênh (Lark/web chat/cron) qua cùng một hàng đợi — sửa answer()
 là đủ; ngữ cảnh (brain/tóm tắt/fact) do PLATFORM giữ, không nằm ở model.
+
+Model được gọi qua Claude Agent SDK (`claude_agent_sdk.query`) — SDK này tự
+dùng phiên đăng nhập subscription cục bộ (`claude login` / `claude setup-token`
+của OWNER), KHÔNG đọc API key. Xem cài đặt ở Dockerfile/README.
 """
+import asyncio
 import json
 import os
 import time
@@ -12,12 +17,48 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from claude_agent_sdk import ClaudeAgentOptions, query
+
 PLATFORM = os.environ.get("LSR_PLATFORM_URL", "https://platform.34-126-154-135.sslip.io").rstrip("/")
 TOKEN = os.environ["LSR_AGENT_TOKEN"]
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() == "true"
+DEFAULT_MODEL = "claude-sonnet-5"
 
 CONFIRM_WORDS = ("chốt", "duyệt", "confirm")
-RECORDING_KEYS = ("audio", "recording", "file")
+RECORDING_KEYS = ("audio", "recording", "file", "transcript")
+
+MINUTES_SYSTEM_PROMPT = (
+    "Bạn là thư ký cuộc họp của Lam Sơn Retail. Từ nội dung trao đổi/transcript "
+    "được cung cấp trong prompt, soạn BIÊN BẢN HỌP NHÁP gồm đúng các mục: "
+    "Mục tiêu, Quyết định, Việc cần làm (kèm người phụ trách nếu nói rõ). "
+    "Nếu thiếu thông tin ở mục nào, ghi '(chưa rõ)' — KHÔNG suy diễn/bịa thêm. "
+    "Cuối bài luôn nhắc: gõ 'chốt' để lưu và tạo task."
+)
+
+QA_SYSTEM_PROMPT = (
+    "Bạn là Harry, trợ lý tri thức chung của Lam Sơn Retail. CHỈ trả lời dựa "
+    "trên phần 'Tri thức chung liên quan' có trong prompt (nếu có), và LUÔN "
+    "trích dẫn nguồn theo dạng (nguồn: ...) ngay sau câu dùng thông tin đó. "
+    "Nếu không có tri thức phù hợp trong prompt, nói rõ là chưa có tri thức đó "
+    "trong hệ thống — không suy đoán/bịa câu trả lời."
+)
+
+
+async def _run_claude(prompt, system_prompt, model):
+    options = ClaudeAgentOptions(system_prompt=system_prompt, model=model, max_turns=1)
+    chunks = []
+    async for message in query(prompt=prompt, options=options):
+        for block in getattr(message, "content", None) or []:
+            text = getattr(block, "text", None)
+            if text:
+                chunks.append(text)
+    return "".join(chunks).strip()
+
+
+def call_claude(prompt, system_prompt, ctx):
+    """Gọi Claude Agent SDK bằng auth subscription (claude login/setup-token)
+    của OWNER — KHÔNG dùng API key."""
+    return asyncio.run(_run_claude(prompt, system_prompt, ctx.get("model") or DEFAULT_MODEL))
 
 
 def api(method, path, payload=None, timeout=40):
@@ -33,7 +74,7 @@ def api(method, path, payload=None, timeout=40):
         return json.loads(body) if body else {}
 
 
-def build_prompt(ctx, question):
+def build_prompt(ctx, question, payload=None):
     """Ghép prompt stateless từ ngữ cảnh platform trả về (brain/tóm tắt/fact)."""
     parts = []
     if ctx.get("instruction_block"):
@@ -50,6 +91,9 @@ def build_prompt(ctx, question):
         parts.append("Tri thức chung liên quan (TRÍCH DẪN nguồn khi dùng):\n" + kb)
     if ctx.get("pending_minutes_draft"):
         parts.append("Biên bản nháp đang chờ xác nhận:\n" + ctx["pending_minutes_draft"])
+    transcript = (payload or {}).get("transcript")
+    if transcript:
+        parts.append("Nội dung/transcript cuộc họp:\n" + transcript)
     for t in ctx.get("recent_turns", []):
         parts.append(f"{t['role']}: {t['text']}")
     parts.append(f"user: {question}")
@@ -57,19 +101,13 @@ def build_prompt(ctx, question):
 
 
 def draft_minutes(prompt, ctx):
-    """<<< SỬA Ở ĐÂY: gọi model soạn biên bản nháp từ nội dung/recording trao đổi.
-
-    Model nên lấy từ ctx.get("model"). Biên bản gồm: mục tiêu, quyết định,
-    việc cần làm + người phụ trách.
-    """
-    return "(nháp) đã nhận nội dung họp — thay draft_minutes() bằng lời gọi model thật."
+    """Soạn biên bản họp nháp từ nội dung/transcript trao đổi trong prompt."""
+    return call_claude(prompt, MINUTES_SYSTEM_PROMPT, ctx)
 
 
 def answer_question(prompt, ctx):
-    """<<< SỬA Ở ĐÂY: gọi model trả lời tri thức chung, kèm trích dẫn nguồn từ
-    ctx["knowledge"]. Nếu không có tri thức phù hợp, nói rõ chưa có — không bịa.
-    """
-    return f"(demo) đã nhận prompt {len(prompt)} ký tự — thay answer_question() bằng lời gọi model."
+    """Trả lời tri thức chung dựa trên ctx["knowledge"], kèm trích dẫn nguồn."""
+    return call_claude(prompt, QA_SYSTEM_PROMPT, ctx)
 
 
 def confirm_and_create_tasks(ctx, session_id):
@@ -110,7 +148,7 @@ def handle(job):
         "GET",
         f"/v1/self/context?session_id={sid}&user_ref={uref}&q={urllib.parse.quote(q[:200])}",
     )
-    reply = answer(build_prompt(ctx, q), ctx, payload, sid)
+    reply = answer(build_prompt(ctx, q, payload), ctx, payload, sid)
 
     # Ghi lại lượt hội thoại để lượt sau có ngữ cảnh
     api(
