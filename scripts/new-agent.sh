@@ -56,12 +56,16 @@ cat > "$DIR/tests.jsonl" <<EOF
 EOF
 
 cat > "$DIR/consumer.py" <<'EOF'
-"""Consumer mẫu — poll job từ platform, xử lý, trả kết quả.
+"""Consumer mẫu — poll job từ platform, dựng ngữ cảnh, trả lời, ghi nhớ.
 
 Chạy: LSR_AGENT_TOKEN=... python3 consumer.py   (token nhận khi enroll)
-Job đến từ MỌI kênh (Lark/web chat/cron) qua cùng một queue — sửa handle() là đủ.
+Job đến từ MỌI kênh (Lark/web chat/cron) qua cùng một queue — sửa answer() là đủ.
+
+Ngữ cảnh do PLATFORM giữ (không nằm ở model): mỗi lượt gọi /v1/self/context để lấy
+instruction (version đang publish) + tóm tắt + N lượt gần nhất + fact người dùng +
+tri thức liên quan (có nguồn). Nhờ vậy đổi model/credential hay restart đều không mất mạch.
 """
-import json, os, time, urllib.request, urllib.error
+import json, os, time, urllib.parse, urllib.request, urllib.error
 
 PLATFORM = os.environ.get("LSR_PLATFORM_URL", "https://platform.34-126-154-135.sslip.io").rstrip("/")
 TOKEN = os.environ["LSR_AGENT_TOKEN"]
@@ -74,10 +78,53 @@ def api(method, path, payload=None, timeout=40):
         b = r.read().decode()
         return json.loads(b) if b else {}
 
-def handle(job) -> str:
-    """<<< SỬA Ở ĐÂY: nhận câu hỏi, trả câu trả lời >>>"""
-    q = (job.get("payload") or {}).get("text", "")
-    return f"(demo) bạn hỏi: {q}"
+def build_prompt(ctx, question):
+    """Ghép prompt stateless từ ngữ cảnh platform trả về."""
+    parts = []
+    if ctx.get("instruction_block"):
+        parts.append(ctx["instruction_block"])
+    if ctx.get("rolling_summary"):
+        parts.append("Tóm tắt hội thoại trước:\n" + ctx["rolling_summary"])
+    if ctx.get("user_facts"):
+        parts.append("Đã biết về người dùng:\n- " + "\n- ".join(ctx["user_facts"]))
+    if ctx.get("knowledge"):
+        kb = "\n".join(f"- {h['title']}: {h['content'][:300]} (nguồn: {h.get('source_url') or 'nội bộ'})"
+                       for h in ctx["knowledge"])
+        parts.append("Tri thức liên quan (TRÍCH DẪN nguồn khi dùng):\n" + kb)
+    for t in ctx.get("recent_turns", []):
+        parts.append(f"{t['role']}: {t['text']}")
+    parts.append(f"user: {question}")
+    return "\n\n".join(parts)
+
+def answer(prompt, ctx):
+    """<<< SỬA Ở ĐÂY: gọi model của bạn với `prompt` và trả câu trả lời >>>
+
+    Gợi ý: dùng Claude Agent SDK / claude CLI. Model nên lấy từ ctx.get("model").
+    """
+    return f"(demo) đã nhận prompt {len(prompt)} ký tự — thay hàm answer() bằng lời gọi model."
+
+def handle(job):
+    payload = job.get("payload") or {}
+    q = payload.get("text", "")
+    sid = job.get("session_id") or f"job-{job['id']}"
+    uref = payload.get("sender_open_id") or payload.get("user_ref") or ""
+
+    ctx = api("GET", f"/v1/self/context?session_id={sid}&user_ref={uref}"
+                     f"&q={urllib.parse.quote(q[:200])}")
+    reply = answer(build_prompt(ctx, q), ctx)
+
+    # Ghi lại lượt hội thoại để lượt sau có ngữ cảnh
+    api("POST", "/v1/self/session/turn",
+        {"session_id": sid, "role": "user", "text": q, "user_ref": uref,
+         "channel": job.get("channel")})
+    r = api("POST", "/v1/self/session/turn",
+            {"session_id": sid, "role": "assistant", "text": reply})
+    # Khi platform báo cần nén: tự tóm tắt các lượt bị cắt rồi gửi lên
+    if r.get("needs_summary"):
+        old = " ".join(f"{t['role']}: {t['text']}" for t in r.get("dropped_turns", []))
+        summary = (ctx.get("rolling_summary", "") + " " + old)[-2000:]   # <<< nên nén bằng model
+        api("POST", "/v1/self/session/summary", {"session_id": sid, "summary": summary})
+    return reply
 
 def main():
     print("consumer chạy — chờ job...")
@@ -91,14 +138,14 @@ def main():
         for job in jobs or []:
             jid = job["id"]
             try:
-                answer = handle(job)
+                reply = handle(job)
                 # đẩy câu trả lời (web chat đọc qua SSE; Lark trả qua /v1/lark/send)
                 api("POST", f"/v1/self/jobs/{jid}/event",
-                    {"kind": "message", "data": {"text": answer}})
+                    {"kind": "message", "data": {"text": reply}})
                 rt = job.get("reply_to") or {}
                 if rt.get("channel") == "lark" and rt.get("chat_id"):
                     api("POST", "/v1/lark/send",
-                        {"to": rt["chat_id"], "to_type": "chat_id", "text": answer})
+                        {"to": rt["chat_id"], "to_type": "chat_id", "text": reply})
                 api("POST", f"/v1/self/jobs/{jid}/complete", {"result": {"ok": True}})
                 print(f"✓ job#{jid}")
             except Exception as exc:

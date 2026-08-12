@@ -774,6 +774,55 @@ def _ensure_schema() -> None:
         )
         # Gate eval: gắn regression run với version cụ thể (không mượn kết quả version khác).
         conn.execute("ALTER TABLE regression_runs ADD COLUMN IF NOT EXISTS agent_version int")
+        # ================= P4: Session memory + RAG =================
+        # State hội thoại nằm ở ĐÂY (không ở model) → mỗi call LLM stateless,
+        # đổi credential/model/restart runner giữa chừng vẫn giữ nguyên ngữ cảnh.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sessions (
+                session_id      text PRIMARY KEY,
+                agent_id        text NOT NULL REFERENCES agents(agent_id) ON DELETE CASCADE,
+                channel         text,
+                user_ref        text,              -- open_id/email/user id trên kênh
+                rolling_summary text DEFAULT '',   -- tóm tắt các lượt cũ (agent nén)
+                turns           jsonb DEFAULT '[]'::jsonb,  -- N lượt gần nhất
+                pending_summary jsonb DEFAULT '[]'::jsonb,  -- lượt đã cắt, CHỜ agent nén
+                n_turns         int DEFAULT 0,     -- tổng số lượt từ đầu hội thoại
+                created_at      timestamptz DEFAULT now(),
+                updated_at      timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent_id, updated_at DESC)")
+        conn.execute("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pending_summary jsonb DEFAULT '[]'::jsonb")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_facts (
+                id         bigserial PRIMARY KEY,
+                agent_id   text NOT NULL REFERENCES agents(agent_id) ON DELETE CASCADE,
+                user_ref   text NOT NULL,
+                fact       text NOT NULL,
+                source     text,                   -- session_id / ghi chú nguồn
+                created_at timestamptz DEFAULT now(),
+                updated_at timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_user_fact "
+                     "ON user_facts(agent_id, user_ref, md5(fact))")
+        # RAG lexical hybrid: full-text + trigram + bỏ dấu (không cần dịch vụ embedding ngoài).
+        for ext in ("pg_trgm", "unaccent"):
+            try:
+                conn.execute(f"CREATE EXTENSION IF NOT EXISTS {ext}")
+            except Exception:
+                pass
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_brain_fts ON brain_items "
+                         "USING GIN (to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(content,'')))")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_brain_trgm ON brain_items "
+                         "USING GIN (lower(coalesce(title,'')) gin_trgm_ops)")
+        except Exception:
+            pass
         # Migrate 1 lần: agent cũ có prompt_version/prompt_ref → sinh version v1 (P3.8.1)
         conn.execute(
             """
@@ -793,13 +842,17 @@ def _ensure_schema() -> None:
 
 
 def _reaper_loop() -> None:
-    """Nền: định kỳ thu hồi job 'running' quá hạn khoá + dọn event_dedupe cũ."""
+    """Nền: thu hồi job 'running' quá hạn khoá + dọn event_dedupe + purge theo retention."""
+    ticks = 0
     while True:
         time.sleep(30)
+        ticks += 1
         try:
             with _db() as conn:
                 _reap_stale(conn)
                 conn.execute("DELETE FROM event_dedupe WHERE seen_at < now() - interval '2 days'")
+                if ticks % 120 == 0:          # ~mỗi giờ: dọn dữ liệu quá TTL
+                    _run_purge(conn)
                 conn.commit()
         except Exception:
             pass
@@ -2520,6 +2573,200 @@ def self_version(authorization: str = Header(default=""), env: str = "prod") -> 
     return d
 
 
+# ==================== P4: Context Compiler + Session Memory + RAG ====================
+# Nguyên tắc: STATE Ở PLATFORM, KHÔNG Ở MODEL. Mỗi lượt agent gọi /v1/self/context để
+# lấy đủ ngữ cảnh (instruction version + tóm tắt + N lượt cuối + fact người dùng + tri thức),
+# nên mỗi call LLM là độc lập — đổi credential/model/restart runner không mất mạch hội thoại.
+
+CTX_LAST_TURNS = int(os.environ.get("CTX_LAST_TURNS", "8"))      # số lượt giữ nguyên văn
+CTX_COMPACT_AT = int(os.environ.get("CTX_COMPACT_AT", "12"))     # quá ngưỡng → nén bớt
+CTX_RAG_K = int(os.environ.get("CTX_RAG_K", "4"))
+
+
+def _rag_search(conn, agent_id: str, q: str, k: int = 4) -> list[dict]:
+    """Tìm tri thức liên quan: full-text + trigram + bỏ dấu.
+
+    Phạm vi: brain shared (đã duyệt) + brain riêng của chính agent. Trả kèm source_url
+    để agent TRÍCH DẪN nguồn thay vì bịa.
+    """
+    if not (q or "").strip():
+        return []
+    rows = conn.execute(
+        """
+        WITH q AS (SELECT unaccent(%s) AS raw)
+        SELECT item_id, kind, title, content, domain, source_url, scope,
+               ts_rank(to_tsvector('simple', unaccent(coalesce(title,'') || ' ' || coalesce(content,''))),
+                       plainto_tsquery('simple', (SELECT raw FROM q))) AS rank,
+               similarity(lower(unaccent(coalesce(title,''))), lower((SELECT raw FROM q))) AS sim
+        FROM brain_items
+        WHERE status = 'approved'
+          AND (scope = 'shared' OR agent_id = %s)
+          AND (
+            to_tsvector('simple', unaccent(coalesce(title,'') || ' ' || coalesce(content,'')))
+              @@ plainto_tsquery('simple', (SELECT raw FROM q))
+            OR similarity(lower(unaccent(coalesce(title,''))), lower((SELECT raw FROM q))) > 0.2
+          )
+        ORDER BY (ts_rank(to_tsvector('simple', unaccent(coalesce(title,'') || ' ' || coalesce(content,''))),
+                          plainto_tsquery('simple', (SELECT raw FROM q))) * 2
+                  + similarity(lower(unaccent(coalesce(title,''))), lower((SELECT raw FROM q)))) DESC
+        LIMIT %s
+        """,
+        (q, agent_id, max(1, min(k, 20)))).fetchall()
+    return [{"item_id": r["item_id"], "kind": r["kind"], "title": r["title"],
+             "content": (r["content"] or "")[:1200], "domain": r["domain"],
+             "source_url": r["source_url"], "scope": r["scope"],
+             "score": round(float(r["rank"]) * 2 + float(r["sim"] or 0), 4)} for r in rows]
+
+
+@app.get("/v1/self/brain/search")
+def self_brain_search(q: str, authorization: str = Header(default=""), k: int = 5) -> dict:
+    """RAG: tìm tri thức liên quan (shared + của chính agent), kèm nguồn để trích dẫn."""
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        hits = _rag_search(conn, agent_id, q, k)
+    return {"q": q, "hits": hits, "n": len(hits)}
+
+
+def _get_session(conn, agent_id: str, session_id: str) -> dict | None:
+    return conn.execute(
+        "SELECT * FROM sessions WHERE session_id=%s AND agent_id=%s",
+        (session_id, agent_id)).fetchone()
+
+
+@app.get("/v1/self/context")
+def self_context(authorization: str = Header(default=""), session_id: str = "",
+                 q: str = "", user_ref: str = "", env: str = "prod", k: int = 0) -> dict:
+    """Trả TOÀN BỘ ngữ cảnh để agent dựng 1 prompt stateless cho lượt này.
+
+    Gồm: instruction (version đang publish) + rolling_summary + N lượt gần nhất
+    + fact đã biết về người dùng + tri thức liên quan (RAG có nguồn).
+    """
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        if _agent_status(conn, agent_id) == "deactivated":
+            raise HTTPException(status_code=403, detail="agent deactivated")
+        ver = _resolve_version(conn, agent_id, env if env in _ENVS else "prod")
+        sess = _get_session(conn, agent_id, session_id) if session_id else None
+        uref = user_ref or (sess or {}).get("user_ref") or ""
+        facts = []
+        if uref:
+            facts = [r["fact"] for r in conn.execute(
+                "SELECT fact FROM user_facts WHERE agent_id=%s AND user_ref=%s "
+                "ORDER BY updated_at DESC LIMIT 30", (agent_id, uref)).fetchall()]
+        turns = (sess or {}).get("turns") or []
+        hits = _rag_search(conn, agent_id, q, k or CTX_RAG_K)
+    return {
+        "agent_id": agent_id,
+        "version": (ver or {}).get("version"),
+        "instruction_block": (ver or {}).get("instruction_block"),
+        "model": (ver or {}).get("model"),
+        "session_id": session_id or None,
+        "user_ref": uref or None,
+        "rolling_summary": (sess or {}).get("rolling_summary") or "",
+        "recent_turns": turns[-CTX_LAST_TURNS:],
+        # Lượt cũ đã cắt nhưng CHƯA được nén — agent nên nén rồi POST /session/summary.
+        "pending_summary": (sess or {}).get("pending_summary") or [],
+        "n_turns": (sess or {}).get("n_turns") or 0,
+        "user_facts": facts,
+        "knowledge": hits,
+        "hint": "Ghép prompt: instruction + rolling_summary + recent_turns + user_facts + knowledge. "
+                "Trích dẫn source_url khi dùng knowledge. Sau khi trả lời: POST /v1/self/session/turn.",
+    }
+
+
+@app.post("/v1/self/session/turn")
+def self_session_turn(body: dict, authorization: str = Header(default="")) -> dict:
+    """Ghi 1 lượt vào session. Quá ngưỡng thì cắt bớt lượt cũ (giữ summary + N lượt cuối)."""
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    sid = (body.get("session_id") or "").strip()
+    role = (body.get("role") or "user").strip()
+    text = (body.get("text") or "").strip()
+    if not sid or not text:
+        raise HTTPException(status_code=400, detail="cần session_id và text")
+    turn = {"role": role, "text": text[:4000]}
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO sessions(session_id, agent_id, channel, user_ref, turns, n_turns)
+            VALUES (%s,%s,%s,%s,%s,1)
+            ON CONFLICT (session_id) DO UPDATE SET
+              turns = sessions.turns || EXCLUDED.turns,
+              n_turns = sessions.n_turns + 1,
+              user_ref = coalesce(EXCLUDED.user_ref, sessions.user_ref),
+              updated_at = now()
+            """,
+            (sid, agent_id, body.get("channel"), body.get("user_ref"), Json([turn])))
+        row = conn.execute("SELECT turns, agent_id, pending_summary FROM sessions "
+                           "WHERE session_id=%s", (sid,)).fetchone()
+        if row["agent_id"] != agent_id:
+            raise HTTPException(status_code=403, detail="session thuộc agent khác")
+        turns = row["turns"] or []
+        pending = list(row["pending_summary"] or [])
+        if len(turns) > CTX_COMPACT_AT:
+            # Cắt lượt cũ khỏi cửa sổ nguyên văn → CHUYỂN VÀO pending_summary (không mất).
+            # Platform không gọi model; agent nén rồi POST /session/summary để xoá pending.
+            pending += turns[:-CTX_LAST_TURNS]
+            conn.execute(
+                "UPDATE sessions SET turns=%s, pending_summary=%s, updated_at=now() "
+                "WHERE session_id=%s",
+                (Json(turns[-CTX_LAST_TURNS:]), Json(pending[-200:]), sid))
+        conn.commit()
+    # needs_summary giữ TRUE cho tới khi agent gửi summary → agent crash không làm mất lượt cũ.
+    return {"ok": True, "session_id": sid, "n_kept": min(len(turns), CTX_LAST_TURNS),
+            "needs_summary": bool(pending), "dropped_turns": pending}
+
+
+@app.post("/v1/self/session/summary")
+def self_session_summary(body: dict, authorization: str = Header(default="")) -> dict:
+    """Agent gửi bản nén (rolling summary) sau khi tự tóm tắt các lượt bị cắt."""
+    agent_id = _require_self(authorization)
+    sid = (body.get("session_id") or "").strip()
+    summary = (body.get("summary") or "").strip()
+    if not sid or not summary:
+        raise HTTPException(status_code=400, detail="cần session_id và summary")
+    with _db() as conn:
+        # Nhận summary → xoá hàng chờ nén (lượt cũ đã được gói vào summary).
+        n = conn.execute(
+            "UPDATE sessions SET rolling_summary=%s, pending_summary='[]'::jsonb, updated_at=now() "
+            "WHERE session_id=%s AND agent_id=%s RETURNING session_id",
+            (summary[:8000], sid, agent_id)).fetchone()
+        if not n:
+            raise HTTPException(status_code=404, detail="session không thuộc agent")
+        conn.commit()
+    return {"ok": True, "session_id": sid}
+
+
+@app.post("/v1/self/facts")
+def self_facts_add(body: dict, authorization: str = Header(default="")) -> dict:
+    """Lưu fact bền về người dùng (sống qua session khác). Trùng thì bỏ qua."""
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    uref = (body.get("user_ref") or "").strip()
+    fact = (body.get("fact") or "").strip()
+    if not uref or not fact:
+        raise HTTPException(status_code=400, detail="cần user_ref và fact")
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO user_facts(agent_id, user_ref, fact, source) VALUES (%s,%s,%s,%s) "
+            "ON CONFLICT (agent_id, user_ref, md5(fact)) DO UPDATE SET updated_at=now()",
+            (agent_id, uref, fact[:1000], body.get("source")))
+        conn.commit()
+    return {"ok": True}
+
+
+@app.get("/v1/self/facts")
+def self_facts_list(user_ref: str, authorization: str = Header(default="")) -> list[dict]:
+    agent_id = _require_self(authorization)
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT fact, source, updated_at FROM user_facts WHERE agent_id=%s AND user_ref=%s "
+            "ORDER BY updated_at DESC", (agent_id, user_ref)).fetchall()
+    return [dict(r) for r in rows]
+
+
 def _audit(conn, actor: str, action: str, target_type: str, target_id: str,
            detail: dict | None = None) -> None:
     """Ghi audit log — best-effort, không làm hỏng request nếu lỗi."""
@@ -4015,6 +4262,54 @@ def set_retention(body: dict, authorization: str = Header(default=""),
                {"ttl_days": body.get("ttl_days"), "enabled": body.get("enabled")})
         conn.commit()
     return {"scope": scope, "ok": True}
+
+
+# P4: purge THẬT theo retention_config (chỉ scope bật enabled). Chạy nền + gọi tay được.
+_PURGE_TARGETS = {
+    # scope        -> (bảng, cột thời gian)
+    "traces":        ("agent_traces", "received_at"),
+    "audit":         ("audit_log", "at"),
+    "notifications": ("notifications", "created_at"),
+    "sessions":      ("sessions", "updated_at"),
+    "user_facts":    ("user_facts", "updated_at"),
+    "jobs":          ("jobs", "updated_at"),
+}
+
+
+def _run_purge(conn) -> list[dict]:
+    """Xoá dữ liệu quá TTL cho các scope đã bật. Trả danh sách đã dọn."""
+    done = []
+    rows = conn.execute(
+        "SELECT scope, ttl_days FROM retention_config WHERE enabled=true AND ttl_days > 0"
+    ).fetchall()
+    for r in rows:
+        tgt = _PURGE_TARGETS.get(r["scope"])
+        if not tgt:
+            continue
+        table, tcol = tgt
+        try:
+            n = conn.execute(
+                f"DELETE FROM {table} WHERE {tcol} < now() - make_interval(days => %s)",
+                (int(r["ttl_days"]),)).rowcount
+        except Exception as exc:
+            done.append({"scope": r["scope"], "error": str(exc)[:120]})
+            continue
+        if n:
+            _audit(conn, "system", "retention_purge", "retention", r["scope"],
+                   {"deleted": n, "ttl_days": r["ttl_days"]})
+        done.append({"scope": r["scope"], "deleted": n, "ttl_days": r["ttl_days"]})
+    return done
+
+
+@app.post("/v1/retention/purge")
+def retention_purge(authorization: str = Header(default="")) -> dict:
+    """Chạy dọn ngay theo cấu hình (admin). Job nền cũng gọi hàm này mỗi giờ."""
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        res = _run_purge(conn)
+        conn.commit()
+    return {"purged": res}
 
 
 # ============================ Shared Brain — đồ thị 3D ============================

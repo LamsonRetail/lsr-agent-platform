@@ -69,7 +69,7 @@
 | P2.5 | Cooldown hết hạn | Account tự về pool; ưu tiên lại subscription (rẻ hơn API) | ✅ 08-11 |
 | P2.6 | Pool cạn + không có API | 503 + audit `model_auth_exhausted` + alert Lark | ✅ 08-11 |
 | P2.7 | Rò rỉ secret | Lease/API/DB chỉ chứa REF; API upsert TỪ CHỐI field secret; grep sạch | ✅ 08-11 |
-| P2.8 | Đổi account giữa hội thoại | Người dùng không nhận ra (job giữ trong queue; NGỮ CẢNH đầy đủ cần P4) | ✅ một nửa — phần context ⏳ P4 |
+| P2.8 | Đổi account giữa hội thoại | Người dùng không nhận ra; ngữ cảnh giữ nguyên | ✅ 08-12 (khoá nốt bởi P4.6.1) |
 | P2.9 | Runner lease end-to-end trên VM | Container lease→đọc /secrets/<ref>→chạy; limit→re-lease | ⏳ chờ agent managed đầu tiên deploy thật |
 
 ## 6. Stable release — workflow team (✅ 08-12, gate local 4/4)
@@ -170,17 +170,77 @@
 | P3.8.1 | Agent cũ có `prompt_version`/`prompt_ref` | Chạy migrate | Sinh version v1 tương ứng, không mất dữ liệu cũ |
 | P3.8.2 | Agent chưa có version nào | Chạy job bình thường | Vẫn chạy như trước P3 (không bắt buộc version) |
 
-## 8. P4 — Context Compiler + Session Memory + RAG (⏳ kế hoạch)
+## 8. P4 — Context Compiler + Session Memory + RAG (✅ 08-12, 28/28 pass)
 
-| ID | Kịch bản | Kỳ vọng |
-|----|----------|---------|
-| P4.1 | 2 câu nối nhau trong 1 session | Câu 2 hiểu ngữ cảnh câu 1 dù là 2 call LLM độc lập |
-| P4.2 | Restart runner giữa hội thoại | Session tiếp tục đúng — state ở Postgres |
-| P4.3 | Câu hỏi khớp tri thức brain | Trả lời kèm trích dẫn source_url Lark |
-| P4.4 | Hội thoại 50 lượt | Prompt không phình (rolling summary); token/call ổn định |
-| P4.5 | Fact ở session cũ, mở session mới | Agent vẫn biết (user_facts per user) |
-| P4.6 | Đặt TTL rồi chờ purge | Session cũ xoá đúng hạn + audit |
-| P4.7 | (nốt P2.8) Đổi credential giữa hội thoại | Ngữ cảnh giữ nguyên 100% |
+> Lần chạy đầu bắt được **1 lỗ hổng thật** (P4.1.8): lượt hội thoại bị cắt chỉ trả về
+> **một lần** — agent crash đúng lúc đó là mất luôn. Đã vá bằng `pending_summary` (giữ tới khi nén xong).
+
+> Nguyên tắc kiểm: **state ở platform, không ở model**. Mỗi call LLM stateless nhưng vẫn đủ ngữ cảnh.
+> RAG dùng **lexical hybrid** (full-text + trigram + bỏ dấu) — không phụ thuộc dịch vụ embedding ngoài.
+
+### 8.1 Tính năng: session memory (lượt hội thoại)
+
+| ID | Tiền đề | Thao tác | Kỳ vọng |
+|----|---------|----------|---------|
+| P4.1.1 | Session mới | `POST /v1/self/session/turn` (user) | Tạo session, `n_turns=1`, lưu đúng nội dung |
+| P4.1.2 | Đã có 1 lượt | Ghi tiếp lượt assistant | `n_turns=2`, thứ tự lượt giữ nguyên |
+| P4.1.3 | — | Ghi turn thiếu `session_id` hoặc `text` | 400, không tạo rác |
+| P4.1.4 | Session của agent A | Agent B ghi vào cùng session_id | 403 — không ghi đè hội thoại của agent khác |
+| P4.1.5 | Hội thoại dài (> ngưỡng nén) | Ghi thêm lượt | Cửa sổ giữ đúng N lượt cuối; trả `needs_summary=true` + `dropped_turns` để agent tự nén |
+| P4.1.6 | Có `dropped_turns` | `POST /v1/self/session/summary` | `rolling_summary` được lưu; hàng chờ nén (`pending_summary`) được xoá |
+| P4.1.7 | Agent khác gửi summary cho session không thuộc mình | — | 404/403 |
+| P4.1.8 | Đã cắt lượt nhưng agent **crash trước khi nén** | Ghi lượt tiếp theo / gọi context | `needs_summary` vẫn `true` và `pending_summary` vẫn giữ lượt cũ — **không mất hội thoại** (lỗ hổng bắt được ở lần chạy đầu) |
+
+### 8.2 Tính năng: Context Compiler (`GET /v1/self/context`)
+
+| ID | Tiền đề | Thao tác | Kỳ vọng |
+|----|---------|----------|---------|
+| P4.2.1 | Có version prod + session 2 lượt | Gọi `/v1/self/context?session_id=` | Trả **đủ 5 phần**: instruction (version prod), rolling_summary, recent_turns, user_facts, knowledge |
+| P4.2.2 | Câu 1 nói "tôi ở kho HN", câu 2 hỏi tiếp | Gọi context ở lượt 2 | `recent_turns` chứa câu 1 → câu 2 hiểu ngữ cảnh dù 2 call LLM độc lập |
+| P4.2.3 | "Restart runner" (mô phỏng: gọi context từ tiến trình khác) | Gọi lại context | Trả y hệt — state ở Postgres, không ở tiến trình |
+| P4.2.4 | Session chưa tồn tại | Gọi context với session_id lạ | Không lỗi 500; trả rỗng hợp lệ để agent vẫn chạy |
+| P4.2.5 | Agent bị deactivate | Gọi context | 403 (đồng bộ kill-switch) |
+| P4.2.6 | Agent A ↔ session của B | Gọi context bằng token A với session của B | Không trả nội dung của B |
+| P4.2.7 | Hội thoại 50 lượt | Gọi context | `recent_turns` ≤ N (không phình); có rolling_summary |
+
+### 8.3 Tính năng: user facts (nhớ xuyên session)
+
+| ID | Tiền đề | Thao tác | Kỳ vọng |
+|----|---------|----------|---------|
+| P4.3.1 | — | `POST /v1/self/facts` {user_ref, fact} | Lưu fact; `GET /v1/self/facts` trả về |
+| P4.3.2 | Đã có fact y hệt | Lưu lại lần 2 | **Không nhân bản** (dedupe), chỉ cập nhật thời gian |
+| P4.3.3 | Fact ở session cũ | Mở **session MỚI** rồi gọi context với cùng `user_ref` | `user_facts` vẫn có → agent vẫn biết |
+| P4.3.4 | Fact của user X | Gọi context với `user_ref` của user Y | Không rò fact của X |
+| P4.3.5 | Fact của agent A | Agent B gọi facts cùng user_ref | Không thấy fact của A (scope theo agent) |
+
+### 8.4 Tính năng: RAG search có trích dẫn
+
+| ID | Tiền đề | Thao tác | Kỳ vọng |
+|----|---------|----------|---------|
+| P4.4.1 | Brain có item "Quy trình nhập kho" (approved) | `GET /v1/self/brain/search?q=nhập kho` | Trả item đó kèm `source_url` để trích dẫn |
+| P4.4.2 | Truy vấn **không dấu** ("nhap kho") | Search | Vẫn khớp (unaccent) |
+| P4.4.3 | Truy vấn sai chính tả nhẹ ("nhap khoo") | Search | Vẫn khớp nhờ trigram |
+| P4.4.4 | Item ở trạng thái pending (chưa duyệt) | Search | **Không** trả về (chỉ dùng tri thức đã duyệt) |
+| P4.4.5 | Item brain riêng của agent A | Agent B search | Không thấy item của A; A vẫn thấy shared + của mình |
+| P4.4.6 | Truy vấn không liên quan | Search | Trả rỗng, không lỗi |
+| P4.4.7 | Có nhiều item khớp | Search k=2 | Trả đúng ≤2, sắp theo điểm liên quan |
+| P4.4.8 | Câu hỏi khớp tri thức | Gọi `/v1/self/context?q=` | Phần `knowledge` có item + `source_url` (nền để agent trích dẫn thay vì bịa) |
+
+### 8.5 Tính năng: retention purge (dọn dữ liệu quá hạn)
+
+| ID | Tiền đề | Thao tác | Kỳ vọng |
+|----|---------|----------|---------|
+| P4.5.1 | `retention_config` scope=sessions, ttl nhỏ, enabled | `POST /v1/retention/purge` | Session cũ bị xoá đúng hạn; session mới còn nguyên |
+| P4.5.2 | scope **disabled** | Purge | **Không** xoá gì (an toàn mặc định) |
+| P4.5.3 | Có xoá | Purge | `audit_log` ghi `retention_purge` + số dòng |
+| P4.5.4 | — | Purge bằng token thường | 401 |
+
+### 8.6 Tính năng: giữ ngữ cảnh khi đổi credential/model (khoá nốt P2.8)
+
+| ID | Tiền đề | Thao tác | Kỳ vọng |
+|----|---------|----------|---------|
+| P4.6.1 | Hội thoại đang chạy | Đổi credential (mô phỏng cooldown → account khác) rồi gọi lại context | Ngữ cảnh **giữ nguyên 100%** (state ở Postgres, không ở model/tiến trình) |
+| P4.6.2 | Đổi version prod giữa hội thoại | Gọi context | Instruction đổi theo version mới nhưng **lịch sử hội thoại không mất** |
 
 ## 9. P5 — Connector Registry + metering (⏳ kế hoạch)
 
@@ -218,4 +278,4 @@
 
 ---
 
-**Tổng:** 14 CORE + 6 Brain + 6 Lark + 8 P1 + 9 P2 + 8 Stable + 33 P3 = **84 case đã có** (71 ✅ nghiệm thu, 13 ⏳ chờ điều kiện ngoài/UI thủ công) · P4–P7 = **26 case kế hoạch**. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.
+**Tổng:** 14 CORE + 6 Brain + 6 Lark + 8 P1 + 9 P2 + 8 Stable + 33 P3 + 30 P4 = **114 case đã có** (100 ✅ nghiệm thu, 14 ⏳ chờ điều kiện ngoài/UI thủ công) · P5–P7 = **18 case kế hoạch**. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.
