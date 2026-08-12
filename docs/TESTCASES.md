@@ -313,16 +313,52 @@
 | P7.4 | Điểm eval prod tụt ≥10% sau publish | AG-EVAL quét định kỳ | Đề xuất `rollback_version` qua HITL ("điểm eval tụt 1.00 → 0.00") | ✅ 08-12 |
 | P7.7 | Pool subscription còn ≤1 account | AG-OPS quét | Cảnh báo sớm ("Pool subscription chỉ còn 1/1 account") trước khi rơi xuống API | ✅ 08-12 |
 
-## 12. P8 + P9 — Tài khoản/RBAC + Agent no-code (⏳ kế hoạch)
+## 12. P8 — Tài khoản console + RBAC (✅ 08-12, 17/17 pass)
 
-Chi tiết: [PLAN_RBAC_NOCODE.md](PLAN_RBAC_NOCODE.md) — 17 case P8 (đăng nhập, phân quyền
-theo platform & theo agent, tab Accounts) + 16 case P9 (wizard no-code, runtime no-code,
-publish có phê duyệt). Điểm cốt lõi cần test: **quyền phải bị chặn ở API, không chỉ ẩn nút UI**,
-và `audit_log.actor` phải là **email người thật** thay cho hằng số `web-admin` hiện nay.
+> Bắt 1 bug thật: người ĐÃ đăng nhập nhưng thiếu quyền trên agent bị trả **401** thay vì 403
+> → middleware sẽ đá họ ra trang login. Đã tách bạch 401 (chưa đăng nhập) / 403 (không đủ quyền).
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| P8.1.1/1.5 | Đăng nhập tài khoản mới | Có phiên + **bắt đổi mật khẩu tạm** | ✅ |
+| P8.1.2 | Sai mật khẩu 5 lần | Khoá 15' — mật khẩu đúng cũng bị chặn (429) | ✅ |
+| P8.1.3 | Tài khoản bị khoá | Không đăng nhập được | ✅ |
+| P8.1.4 | Đăng xuất | Phiên hết hiệu lực ngay | ✅ |
+| P8.2.1 | **user gọi thẳng API sửa** | **403 TỪ API** (không chỉ ẩn nút) | ✅ |
+| P8.2.2 | user xem config/dashboard | 200 | ✅ |
+| P8.2.3 | moderator sửa agent trong phạm vi | Tạo draft OK | ✅ |
+| P8.2.4 | moderator sửa agent ngoài phạm vi | 403 (không phải 401) | ✅ |
+| P8.2.5 | moderator publish dev | Chạy ngay | ✅ |
+| P8.2.6 | moderator publish **prod** | Tạo việc chờ duyệt, **prod chưa đổi** | ✅ |
+| P8.2.7 | Admin duyệt | Prod đổi; audit có **cả người đề xuất và người duyệt** | ✅ |
+| P8.2.9 | user toàn platform + moderator 1 agent | Sửa được đúng agent đó, agent khác 403 | ✅ |
+| P8.3.1 | Thao tác bất kỳ | `audit.actor` = **email người thật** (hết `web-admin`) | ✅ |
+| P8.3.2 | Thu quyền giữa chừng | Request kế tiếp 403 ngay, không cần đăng xuất | ✅ |
+| P8.4.3 | moderator gọi API accounts | 403 | ✅ |
+| P8.4.4 | Khoá tài khoản đang có phiên | Phiên vô hiệu **ngay** + không đăng nhập lại được | ✅ |
+| P8.4.x | Admin reset mật khẩu | Sinh mật khẩu tạm mới, thu hồi phiên cũ | ✅ |
+| P8.web | Trình duyệt chưa đăng nhập | Mọi trang **307 về /login**; cookie httpOnly+Secure | ✅ |
+
+## 13. P9 — Agent no-code trên console (✅ 08-12, 14/14 pass)
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| P9.1.1 | Tạo agent qua wizard (đủ điều kiện) | Agent runtime=nocode + version v1 draft; người tạo tự thành moderator của agent | ✅ |
+| P9.1.2 | Thiếu use case / chỉ 1 test case | **422 — không tạo** (gate như đường code) | ✅ |
+| P9.1.3 | agent_id trùng | 409, không đè agent cũ | ✅ |
+| P9.1.4 | `user` tạo agent | 403 | ✅ |
+| P9.2.1 | Nhắn cho agent vừa tạo | **Runtime tự trả lời — không cần viết code, không cần Docker** | ✅ |
+| P9.2.3 | Câu hỏi khớp tri thức | Trả lời **kèm trích dẫn nguồn**, không bịa | ✅ |
+| P9.2.4 | Hội thoại | Có ghi session (lượt sau nhớ ngữ cảnh) | ✅ |
+| P9.3.1 | Moderator publish prod | Tạo việc chờ duyệt; prod chưa đổi | ✅ |
+| P9.3.3 | Admin duyệt khi golden **chưa** pass | **Vẫn bị eval gate chặn** | ✅ |
+| P9.3.2 | Golden pass + admin duyệt | Prod = version mới | ✅ |
+| P9.4.4 | Deactivate agent no-code | Job `rejected`, runtime bỏ qua (kill-switch vẫn hiệu lực) | ✅ |
+| P9.4.2 | Xuất repo (USECASE/TESTCASES ra file) | — | ⏳ chưa làm (spec đã lưu DB, API sẵn) |
 
 ---
 
-**Tổng: 148 case — 141 ✅ đã nghiệm thu (95%).**
+**Tổng: 179 case — 172 ✅ đã nghiệm thu (96%).**
 
 **7 case còn lại, chia 2 nhóm:**
 - **Cần bạn xử lý (3):** `LK.5`, `P1.1` — Lark app chưa mở available-range và bot chưa ở nhóm nào (resolve trả `null`, `/v1/lark/chats` rỗng); `ST.8` — cần team thật cùng push 1 branch.
