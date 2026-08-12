@@ -313,6 +313,13 @@
 | P7.4 | Điểm eval prod tụt ≥10% sau publish | AG-EVAL quét định kỳ | Đề xuất `rollback_version` qua HITL ("điểm eval tụt 1.00 → 0.00") | ✅ 08-12 |
 | P7.7 | Pool subscription còn ≤1 account | AG-OPS quét | Cảnh báo sớm ("Pool subscription chỉ còn 1/1 account") trước khi rơi xuống API | ✅ 08-12 |
 
+## 12. P8 + P9 — Tài khoản/RBAC + Agent no-code (⏳ kế hoạch)
+
+Chi tiết: [PLAN_RBAC_NOCODE.md](PLAN_RBAC_NOCODE.md) — 17 case P8 (đăng nhập, phân quyền
+theo platform & theo agent, tab Accounts) + 16 case P9 (wizard no-code, runtime no-code,
+publish có phê duyệt). Điểm cốt lõi cần test: **quyền phải bị chặn ở API, không chỉ ẩn nút UI**,
+và `audit_log.actor` phải là **email người thật** thay cho hằng số `web-admin` hiện nay.
+
 ---
 
 **Tổng: 148 case — 141 ✅ đã nghiệm thu (95%).**
