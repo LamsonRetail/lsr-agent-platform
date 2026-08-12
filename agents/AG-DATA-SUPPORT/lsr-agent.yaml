@@ -14,7 +14,8 @@ agent:
 lark:
   connect_mode: bot
   bot:
-    app: platform-shared
+    app: custom                 # app Lark riêng của Data Support (app_id/secret admin cấu hình
+                                 # ở /opt/lsr-platform/.env trên VPS — KHÔNG nằm trong repo)
     chat_ids: []                # điền khi add bot vào nhóm Data squad
     event_webhook: https://collector.lsr.internal/lark/events
 
