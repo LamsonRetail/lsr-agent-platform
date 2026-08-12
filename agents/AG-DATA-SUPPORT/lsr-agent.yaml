@@ -16,7 +16,7 @@ lark:
   bot:
     app: custom                 # app Lark riêng của Data Support (app_id/secret admin cấu hình
                                  # ở /opt/lsr-platform/.env trên VPS — KHÔNG nằm trong repo)
-    chat_ids: []                # điền khi add bot vào nhóm Data squad
+    chat_ids: ["oc_e521377bc4d63c0516f825bb79eab59f"]   # nhóm Lark Data squad đã add bot
     event_webhook: https://collector.lsr.internal/lark/events
 
 runtime:
