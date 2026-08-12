@@ -8,9 +8,10 @@ agent:
   is_squad_agent: false
   connect_mode: bot        # bot | user
   description: >
-    Trợ lý Dữ liệu & Họp chung của Lam Sơn Retail: tổng hợp tri thức/dữ liệu
-    vào một nơi mọi người có thể tra và tương tác, tham gia các cuộc họp
-    (nhận recording/nội dung trao đổi), tự soạn biên bản họp và tạo task.
+    Trợ lý Dữ liệu & Họp chung cho squad Finance & Accounting (SQ-FA) của Lam
+    Sơn Retail: tổng hợp tri thức/quy trình FA vào một nơi ai cũng tra được,
+    tham gia các cuộc họp (nhận recording/nội dung trao đổi), tự soạn biên bản
+    họp và lưu vào brain riêng của agent.
 
 lark:
   connect_mode: bot

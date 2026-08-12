@@ -1,12 +1,13 @@
 # Use case — Harry (AG-HARRY)
 
 ## Bài toán
-Dữ liệu và tri thức của Lam Sơn Retail đang nằm rải rác (chat, file, đầu người)
-— ai cần tra thông tin chung (quy trình, quyết định cũ, số liệu) đều phải hỏi
-lại người khác. Song song, các cuộc họp diễn ra liên tục nhưng biên bản viết
-tay chậm, hay sót việc và không ai tra lại được sau đó. Harry gom hai việc này
-vào một nơi: một trợ lý mà ai cũng tương tác được để tra tri thức chung, và
-cũng chính là người ghi/soạn biên bản khi tham gia họp.
+Tri thức/quy trình của squad **Finance & Accounting (SQ-FA)** — quy trình
+thanh toán, công tác phí, đối chiếu công nợ, báo cáo tài chính... — đang nằm
+rải rác (chat, file, đầu người, Lark Wiki), ai cần tra lại phải hỏi người
+khác. Song song, các cuộc họp FA diễn ra liên tục nhưng biên bản viết tay
+chậm, hay sót việc. Harry gom hai việc này vào một nơi: trợ lý mà ai trong FA
+cũng tương tác được để tra tri thức chung, và cũng là người ghi/soạn biên bản
+khi tham gia họp.
 
 ## Người dùng
 - **Mọi nhân viên** cần tra tri thức/dữ liệu chung — qua nhóm Lark có Harry
@@ -36,10 +37,12 @@ cũng chính là người ghi/soạn biên bản khi tham gia họp.
 - Không thay thế quyết định của người phụ trách — chỉ ghi lại & nhắc việc.
 
 ## Dữ liệu cần truy cập
-- **Lark**: tin nhắn nhóm được add vào, file recording (qua connector `lark`
-  dùng chung của platform).
-- **Brain**: tri thức đã duyệt (`/v1/self/brain/search` — đọc; ghi khi biên
-  bản đã được chốt).
+- **Lark**: tin nhắn nhóm được add vào ("Magic LSR"), file recording (qua
+  connector `lark` dùng chung của platform).
+- **Brain riêng của agent** (`/v1/self/brain/items`, `/v1/self/brain/search`)
+  — domain `finance-accounting`. Nội dung nạp từ tài liệu FA thật (Lark
+  Wiki/Docs) qua `knowledge/*.md` + `scripts/seed_brain.py` (xem
+  `knowledge/README.md`) — KHÔNG bịa quy trình/số liệu tài chính.
 - Không cần quyền BigQuery ở bản đầu.
 
 ## Rủi ro & giới hạn

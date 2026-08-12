@@ -111,15 +111,28 @@ def answer_question(prompt, ctx):
 
 
 def confirm_and_create_tasks(ctx, session_id):
-    """Chốt biên bản: lưu vào brain (tri thức chung) + tạo task cho từng việc."""
+    """Chốt biên bản: lưu vào brain riêng của agent (POST /v1/self/brain/items).
+
+    Tạo task cho từng việc cần làm CHƯA nối ở đây — nền tảng chưa có endpoint
+    task chung (`/v1/self/tasks` không tồn tại trong platform_api); việc này
+    cần đi qua MCP skill `lark-task` đã khai trong lsr-agent.yaml (skill tự do,
+    chạy qua Claude Agent SDK), không phải REST call thuần trong consumer.py.
+    """
     draft = ctx.get("pending_minutes_draft")
     if not draft:
         return "Chưa có biên bản nháp nào để chốt — gửi nội dung/recording họp trước."
 
     if not DRY_RUN:
-        api("POST", "/v1/self/brain/save", {"title": f"Biên bản họp {session_id}", "content": draft})
-        api("POST", "/v1/self/tasks", {"session_id": session_id, "source": "meeting_minutes", "content": draft})
-    return "Đã lưu biên bản vào tri thức chung và tạo task cho các việc cần làm."
+        api("POST", "/v1/self/brain/items", {
+            "kind": "knowledge",
+            "title": f"Biên bản họp {session_id}",
+            "content": draft,
+            "domain": "finance-accounting",
+            "tags": ["meeting-minutes", "SQ-FA"],
+            "source_ref": session_id,
+            "status": "approved",
+        })
+    return "Đã lưu biên bản vào tri thức chung. Tạo task Lark cho từng việc cần làm: TODO (nối skill lark-task)."
 
 
 def is_recording_payload(payload):
