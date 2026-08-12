@@ -835,6 +835,8 @@ def _ensure_schema() -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_cred_pick "
                      "ON model_credentials(kind, status, priority)")
+        # Token `claude setup-token` sống ~1 năm → theo dõi hạn để cảnh báo trước khi chết.
+        conn.execute("ALTER TABLE model_credentials ADD COLUMN IF NOT EXISTS expires_at timestamptz")
         # ================= P3: Agent versions (no-code + canary + rollback) =================
         # Mỗi agent có nhiều version; mỗi môi trường (dev/stg/prod) chỉ 1 version "sống".
         conn.execute(
@@ -2852,7 +2854,9 @@ DEFAULT_FALLBACK_MODEL = os.environ.get("LSR_DEFAULT_FALLBACK_MODEL", "claude-so
 COOLDOWN_SECS = int(os.environ.get("MODEL_COOLDOWN_SECS", str(5 * 3600)))  # cửa sổ 5h
 
 # "Dùng được" = active, hoặc cooldown đã hết hạn (tự hồi phục khi lease).
-_USABLE = ("(status='active' OR (status='cooldown' AND cooldown_until < now()))")
+# "Dùng được" = active (hoặc cooldown đã hết) VÀ chưa quá hạn token.
+_USABLE = ("(status='active' OR (status='cooldown' AND cooldown_until < now())) "
+           "AND (expires_at IS NULL OR expires_at > now())")
 
 
 def _pick_credential(conn, kind: str, exclude_id: str | None = None) -> dict | None:
@@ -2956,14 +2960,19 @@ def cred_upsert(body: dict, authorization: str = Header(default="")) -> dict:
     with _db() as conn:
         conn.execute(
             """
-            INSERT INTO model_credentials(id, kind, label, owner_email, secret_ref, priority, note)
-            VALUES (%s,%s,%s,%s,%s,%s,%s)
+            INSERT INTO model_credentials(id, kind, label, owner_email, secret_ref, priority,
+                                          note, expires_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,
+                    CASE WHEN %s IS NOT NULL THEN now() + make_interval(days => %s) END)
             ON CONFLICT (id) DO UPDATE SET kind=EXCLUDED.kind, label=EXCLUDED.label,
               owner_email=EXCLUDED.owner_email, secret_ref=EXCLUDED.secret_ref,
-              priority=EXCLUDED.priority, note=EXCLUDED.note, updated_at=now()
+              priority=EXCLUDED.priority, note=EXCLUDED.note,
+              expires_at=coalesce(EXCLUDED.expires_at, model_credentials.expires_at),
+              updated_at=now()
             """,
             (cid, kind, body.get("label"), body.get("owner_email"), ref,
-             int(body.get("priority", 100)), body.get("note")))
+             int(body.get("priority", 100)), body.get("note"),
+             body.get("expires_days"), body.get("expires_days")))
         _audit(conn, "admin", "cred_upsert", "credential", cid, {"kind": kind})
         conn.commit()
     return {"id": cid, "ok": True}
@@ -2996,7 +3005,10 @@ def cred_list(authorization: str = Header(default="")) -> dict:
     with _db() as conn:
         creds = conn.execute(
             "SELECT id, kind, label, owner_email, status, cooldown_until, priority, note, "
-            "secret_ref FROM model_credentials ORDER BY kind, priority, id").fetchall()
+            "secret_ref, expires_at, "
+            "CASE WHEN expires_at IS NULL THEN NULL "
+            "     ELSE floor(extract(epoch from (expires_at - now()))/86400)::int END AS days_left "
+            "FROM model_credentials ORDER BY kind, priority, id").fetchall()
         agents = conn.execute(
             "SELECT agent_id, auth_mode, credential_id, model_fallback FROM agents "
             "WHERE auth_mode IS NOT NULL ORDER BY agent_id").fetchall()
@@ -4249,12 +4261,18 @@ def ops_snapshot(authorization: str = Header(default="")) -> dict:
             "GROUP BY connector_id ORDER BY n DESC LIMIT 5").fetchall()
         pending = conn.execute(
             "SELECT count(*) n FROM pending_actions WHERE status='pending'").fetchone()["n"]
+        expiring = conn.execute(
+            "SELECT id, kind, owner_email, "
+            "floor(extract(epoch from (expires_at - now()))/86400)::int AS days_left "
+            "FROM model_credentials WHERE expires_at IS NOT NULL AND status <> 'disabled' "
+            "  AND expires_at < now() + interval '30 days' ORDER BY expires_at").fetchall()
     return {
         "jobs": {r["status"]: r["n"] for r in jobs},
         "dlq_by_agent": [dict(r) for r in dlq_by_agent],
         "credential_pool": [dict(r) for r in pool],
         "silent_agents": [dict(r) for r in silent],
         "connector_errors_24h": [dict(r) for r in errs],
+        "credentials_expiring": [dict(r) for r in expiring],
         "pending_actions": pending,
     }
 

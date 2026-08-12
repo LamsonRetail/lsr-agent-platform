@@ -51,6 +51,12 @@ jobs:
           rm -rf infra/lsr-platform/agent_runner/plugin
           cp -r plugins/lsr-telemetry infra/lsr-platform/agent_runner/plugin
 
+      - name: Chuẩn bị script vận hành cho VM (chạy trực tiếp trên máy chủ)
+        run: |
+          mkdir -p infra/lsr-platform/scripts
+          cp scripts/add-model-credential.sh infra/lsr-platform/scripts/
+          chmod +x infra/lsr-platform/scripts/*.sh
+
       - name: Rsync infra → VM (giữ nguyên .env, volume)
         run: |
           rsync -az \

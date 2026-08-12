@@ -76,6 +76,22 @@ def diagnose(snap: dict) -> list[tuple]:
         out.append(("alert", {"message": f"Agent im lặng >24h: {names}"}, "low",
                     f"{len(silent)} agent không có telemetry"))
 
+    # Token subscription (claude setup-token) sống ~1 năm — cảnh báo trước khi chết,
+    # vì hết hạn giữa đêm là mọi agent dùng credential đó đứng máy.
+    for c in (snap.get("credentials_expiring") or []):
+        d = int(c.get("days_left", 0))
+        if d < 0:
+            out.append(("alert", {"message": f"🔴 Token `{c['id']}` ({c.get('owner_email') or '?'}) "
+                                             f"ĐÃ HẾT HẠN {abs(d)} ngày — thay ngay: "
+                                             f"claude setup-token rồi add-model-credential.sh"},
+                        "low", "credential hết hạn"))
+        elif d <= 30:
+            urgency = "🔴" if d <= 3 else "🟠" if d <= 7 else "🟡"
+            out.append(("alert", {"message": f"{urgency} Token `{c['id']}` "
+                                             f"({c.get('owner_email') or '?'}) còn **{d} ngày** là hết hạn. "
+                                             f"Gia hạn: chạy `claude setup-token` rồi nạp lại vào pool."},
+                        "low", f"credential còn {d} ngày"))
+
     errs = snap.get("connector_errors_24h") or []
     for e in errs:
         if int(e.get("n", 0)) >= ERR_TH:
