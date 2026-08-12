@@ -62,6 +62,12 @@ async function jgetAdmin(url: string) {
 }
 export async function routingList() { return safe(() => jgetAdmin(`${P}/v1/routing`), []); }
 export async function jobsList(qs = "") { return safe(() => jgetAdmin(`${P}/v1/jobs${qs}`), []); }
+// P3: Agent versions (Builder)
+export async function agentVersions(id: string) { return safe(() => jgetAdmin(`${P}/v1/agents/${id}/versions`), []); }
+export async function versionResolve(id: string, env = "prod") {
+  return safe(() => jgetAdmin(`${P}/v1/agents/${id}/versions/resolve?env=${env}`),
+    { agent_id: id, env, version: null, config: null });
+}
 // P2: Model Auth pool
 export async function modelCredentials() {
   return safe(() => jgetAdmin(`${P}/v1/model-auth/credentials`),

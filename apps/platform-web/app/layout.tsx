@@ -15,6 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="brand">LSR Agent Platform <span>· web</span></div>
           <nav className="nav">
             <Link href="/">Platform</Link>
+            <Link href="/builder">Builder</Link>
             <Link href="/jobs">Ingress</Link>
             <Link href="/model-auth">Model Auth</Link>
             <Link href="/cost">Chi phí</Link>

@@ -24,6 +24,10 @@ const ALLOWED = [
   /^\/v1\/jobs\/[^/]+\/replay$/,
   // P2: model auth — credential status (secret KHÔNG bao giờ qua đây; chỉ trạng thái)
   /^\/v1\/model-auth\/credentials\/[^/]+\/status$/,
+  // P3: agent versions — tạo draft / publish / rollback
+  /^\/v1\/agents\/[^/]+\/versions$/,
+  /^\/v1\/agents\/[^/]+\/versions\/[0-9]+\/publish$/,
+  /^\/v1\/agents\/[^/]+\/rollback$/,
 ];
 
 export async function POST(req: Request) {

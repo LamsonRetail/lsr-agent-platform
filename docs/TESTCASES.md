@@ -85,16 +85,90 @@
 | ST.7 | `agent-test.sh` chạy tests.jsonl qua Chat API | Pass/fail theo từ khoá kỳ vọng; exit code đúng cho CI | ⏳ nghiệm thu cùng agent đầu tiên của team |
 | ST.8 | 2–3 người cùng branch | Push chung branch `agent/<team>-<ID>`, PR duy nhất, không conflict core | ⏳ nghiệm thu với team đầu tiên |
 
-## 7. P3 — Agent Versions + Builder + eval gate (⏳ kế hoạch)
+## 7. P3 — Agent Versions + Builder + eval gate (✅ 08-12, 25/25 pass)
 
-| ID | Kịch bản | Kỳ vọng |
-|----|----------|---------|
-| P3.1 | Sửa instruction qua Builder | Tạo draft; agent đang chạy KHÔNG đổi hành vi |
-| P3.2 | Publish lên dev | Chỉ job môi trường dev dùng bản mới; prod giữ nguyên |
-| P3.3 | Publish prod khi golden fail | Bị chặn + hiển thị case fail; audit ghi lần thử |
-| P3.4 | Publish prod khi golden pass | Áp dụng ở job kế tiếp, không rebuild; audit ai-publish-gì |
-| P3.5 | Rollback 1 click | Version trước hoạt động lại ở job kế tiếp |
-| P3.6 | Version khai skill mới | Skill xuất hiện ở brain_skills + Directory |
+> Bộ test chi tiết theo 8 nhóm tính năng. Lần chạy đầu bắt được **1 bug thật** (P3.2.7):
+> publish version lên env thứ 2 làm mất version ở env cũ → đã sửa bằng bảng `agent_publications`.
+
+### 7.1 Tính năng: tạo & quản lý version (CRUD)
+
+| ID | Tiền đề | Thao tác | Kỳ vọng |
+|----|---------|----------|---------|
+| P3.1.1 | Agent đã đăng ký, chưa có version | `POST /v1/agents/{id}/versions` với instruction_block | Tạo version **v1**, `publication=draft`, trả version number; audit `version_create` |
+| P3.1.2 | Đã có v1 | Tạo tiếp | Tự tăng **v2** (không ghi đè v1); v1 giữ nguyên nội dung |
+| P3.1.3 | — | Tạo version thiếu `instruction_block` | 400, không tạo bản rác |
+| P3.1.4 | Có v1, v2 | `GET /v1/agents/{id}/versions` | Liệt kê đủ, mới nhất trước, kèm publication + created_by + created_at |
+| P3.1.5 | — | Tạo version cho agent không tồn tại | 404 |
+| P3.1.6 | Không có quyền admin | Tạo/publish bằng token thường | 401/403 — không đổi gì |
+| P3.1.7 | v1 có `skills`, `model`, `model_fallback`, `tool_grants` | Đọc lại v1 | Giữ đúng mọi trường đã lưu (không mất field) |
+
+### 7.2 Tính năng: publication theo môi trường (dev/stg/prod)
+
+| ID | Tiền đề | Thao tác | Kỳ vọng |
+|----|---------|----------|---------|
+| P3.2.1 | v1 draft | Publish v1 → **dev** | v1.publication=dev; `GET /v1/agents/{id}/versions/resolve?env=dev` → v1 |
+| P3.2.2 | v1@dev, v2 draft | Publish v2 → dev | v2 thành dev, **v1 tự về draft** (mỗi env chỉ 1 version sống) |
+| P3.2.3 | v2@dev, prod chưa có | `resolve?env=prod` | Trả rỗng/null — dev KHÔNG rò sang prod |
+| P3.2.4 | v1@prod, v2@dev | `resolve?env=prod` | Vẫn là **v1** (đổi dev không ảnh hưởng prod) |
+| P3.2.5 | — | Publish với env lạ (`foo`) | 400 — chỉ chấp nhận draft/dev/stg/prod |
+| P3.2.6 | v1@prod | Publish lại chính v1 vào prod | Idempotent, không lỗi, không nhân bản |
+| P3.2.7 | v3@prod | Publish **chính v3** thêm vào stg (promote/song song) | v3 sống ở **cả prod và stg**; prod KHÔNG bị rỗng đi (bug đã bắt được ở lần chạy đầu) |
+
+### 7.3 Tính năng: eval gate trước khi publish prod
+
+| ID | Tiền đề | Thao tác | Kỳ vọng |
+|----|---------|----------|---------|
+| P3.3.1 | v2 chưa chạy regression | Publish v2 → **prod** | **Bị chặn 422**, message nêu rõ "chưa có regression pass cho version này"; v2 vẫn draft |
+| P3.3.2 | v2 có regression **fail** (score < threshold) | Publish v2 → prod | Bị chặn + trả **danh sách case fail** (case_id + lý do); audit ghi lần thử bị chặn |
+| P3.3.3 | v2 có regression **pass** | Publish v2 → prod | Publish thành công; audit `version_publish` kèm run_id + score |
+| P3.3.4 | v2 pass, nhưng run gắn với **version khác** (v1) | Publish v2 → prod | Bị chặn — gate soi đúng version, không mượn kết quả cũ |
+| P3.3.5 | Publish → **dev/stg** (không phải prod) | Publish v2 → dev khi chưa eval | Cho phép (gate chỉ áp cho prod) — để team test nhanh |
+| P3.3.6 | Không có golden case nào active | Publish v2 → prod | Bị chặn kèm hướng dẫn tạo golden case (không "pass ngầm") |
+| P3.3.7 | Admin cần phát hành khẩn | Publish prod với `force=true` + lý do | Cho phép nhưng **audit ghi force + lý do + ai làm** (đường thoát có dấu vết) |
+
+### 7.4 Tính năng: runtime đọc version (không rebuild)
+
+| ID | Tiền đề | Thao tác | Kỳ vọng |
+|----|---------|----------|---------|
+| P3.4.1 | v1@prod, agent đang chạy | `GET /v1/self/version` (agent token) | Trả instruction/model/skills của **v1** |
+| P3.4.2 | Đổi sang v2@prod (không restart container) | Agent gọi lại `/v1/self/version` | Trả **v2** ngay ở lần lấy job kế tiếp |
+| P3.4.3 | Agent A hỏi version của agent B | `/v1/self/version` bằng token A | Chỉ trả version của **A** (không rò chéo agent) |
+| P3.4.4 | Prod chưa publish gì | Agent gọi `/v1/self/version` | Trả fallback rỗng + không lỗi 500 (agent vẫn chạy được) |
+| P3.4.5 | Agent bị deactivate | Gọi `/v1/self/version` | 403 (đồng bộ kill-switch) |
+
+### 7.5 Tính năng: rollback
+
+| ID | Tiền đề | Thao tác | Kỳ vọng |
+|----|---------|----------|---------|
+| P3.5.1 | v1 từng @prod, nay v2@prod | `POST .../rollback {env:prod}` | prod trở lại **v1**; v2 về draft; **không tạo version mới** |
+| P3.5.2 | Chỉ mới có 1 version từng publish | Rollback | 409 kèm message "không có version trước" |
+| P3.5.3 | Sau rollback | `resolve?env=prod` + `/v1/self/version` | Đều trả v1 ở lần gọi kế tiếp |
+| P3.5.4 | — | Rollback | Audit `version_rollback` (ai, từ v2 → v1, lúc nào) |
+
+### 7.6 Tính năng: skills khai báo trong version
+
+| ID | Tiền đề | Thao tác | Kỳ vọng |
+|----|---------|----------|---------|
+| P3.6.1 | v2 khai skill mới chưa từng có | Publish v2 | Skill xuất hiện trong `brain_skills` (scope agent), không phải sửa core |
+| P3.6.2 | Publish 2 lần cùng skill | Publish lại | Không nhân bản skill (idempotent) |
+| P3.6.3 | v2 bỏ 1 skill so với v1 | Publish v2 | Skill cũ không bị xoá khỏi brain (giữ lịch sử), version chỉ khai cái đang dùng |
+
+### 7.7 Tính năng: Builder trên console
+
+| ID | Tiền đề | Thao tác | Kỳ vọng |
+|----|---------|----------|---------|
+| P3.7.1 | Vào `/builder` | Chọn agent | Hiện instruction hiện tại + danh sách version + publication từng env |
+| P3.7.2 | Sửa instruction → Lưu nháp | — | Tạo draft mới; **agent đang chạy không đổi hành vi** (P3.1.1 + P3.4) |
+| P3.7.3 | Bấm Publish dev / prod | — | Gọi đúng API; prod fail gate thì hiện **case fail ngay trên UI** |
+| P3.7.4 | Bấm Rollback | — | Prod về version trước, bảng cập nhật |
+| P3.7.5 | Trang chỉ dùng token server-side | Xem HTML/JS trả về client | Không lộ `PLATFORM_ADMIN_TOKEN` |
+
+### 7.8 Tương thích ngược & di trú
+
+| ID | Tiền đề | Thao tác | Kỳ vọng |
+|----|---------|----------|---------|
+| P3.8.1 | Agent cũ có `prompt_version`/`prompt_ref` | Chạy migrate | Sinh version v1 tương ứng, không mất dữ liệu cũ |
+| P3.8.2 | Agent chưa có version nào | Chạy job bình thường | Vẫn chạy như trước P3 (không bắt buộc version) |
 
 ## 8. P4 — Context Compiler + Session Memory + RAG (⏳ kế hoạch)
 
@@ -144,4 +218,4 @@
 
 ---
 
-**Tổng:** 14 CORE + 6 Brain + 6 Lark + 8 P1 + 9 P2 + 8 Stable = **51 case đã có** (46 ✅, 5 ⏳ chờ điều kiện ngoài/nghiệm thu với team đầu tiên) · P3–P7 = **32 case kế hoạch**. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.
+**Tổng:** 14 CORE + 6 Brain + 6 Lark + 8 P1 + 9 P2 + 8 Stable + 33 P3 = **84 case đã có** (71 ✅ nghiệm thu, 13 ⏳ chờ điều kiện ngoài/UI thủ công) · P4–P7 = **26 case kế hoạch**. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.

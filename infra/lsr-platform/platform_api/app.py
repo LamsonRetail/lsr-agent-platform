@@ -735,6 +735,59 @@ def _ensure_schema() -> None:
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_cred_pick "
                      "ON model_credentials(kind, status, priority)")
+        # ================= P3: Agent versions (no-code + canary + rollback) =================
+        # Mỗi agent có nhiều version; mỗi môi trường (dev/stg/prod) chỉ 1 version "sống".
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_versions (
+                agent_id          text NOT NULL REFERENCES agents(agent_id) ON DELETE CASCADE,
+                version           int  NOT NULL,
+                instruction_block text,
+                skills            jsonb DEFAULT '[]'::jsonb,
+                model             text,
+                model_fallback    text,
+                tool_grants       jsonb DEFAULT '{}'::jsonb,
+                publication       text DEFAULT 'draft',   -- draft|dev|stg|prod
+                note              text,
+                created_by        text,
+                created_at        timestamptz DEFAULT now(),
+                published_at      timestamptz,
+                PRIMARY KEY (agent_id, version)
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_ver_pub "
+                     "ON agent_versions(agent_id, publication)")
+        # Publication tách bảng: MỘT version có thể sống ở NHIỀU env cùng lúc
+        # (vd v2 đang ở cả stg và prod). Mỗi env chỉ trỏ 1 version → PK (agent_id, env).
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_publications (
+                agent_id     text NOT NULL REFERENCES agents(agent_id) ON DELETE CASCADE,
+                env          text NOT NULL,          -- dev|stg|prod
+                version      int  NOT NULL,
+                published_by text,
+                published_at timestamptz DEFAULT now(),
+                PRIMARY KEY (agent_id, env)
+            )
+            """
+        )
+        # Gate eval: gắn regression run với version cụ thể (không mượn kết quả version khác).
+        conn.execute("ALTER TABLE regression_runs ADD COLUMN IF NOT EXISTS agent_version int")
+        # Migrate 1 lần: agent cũ có prompt_version/prompt_ref → sinh version v1 (P3.8.1)
+        conn.execute(
+            """
+            INSERT INTO agent_versions(agent_id, version, instruction_block, skills,
+                                       publication, note, created_by)
+            SELECT a.agent_id, 1,
+                   coalesce(a.prompt_ref, 'migrate: prompt_version=' || coalesce(a.prompt_version,'?')),
+                   to_jsonb(coalesce(a.skills, '{}')), 'draft',
+                   'migrate từ prompt_version/prompt_ref', 'migration'
+            FROM agents a
+            WHERE (a.prompt_version IS NOT NULL OR a.prompt_ref IS NOT NULL)
+              AND NOT EXISTS (SELECT 1 FROM agent_versions v WHERE v.agent_id=a.agent_id)
+            """
+        )
         conn.commit()
     _READY = True
 
@@ -2234,6 +2287,239 @@ def cred_list(authorization: str = Header(default="")) -> dict:
             "pool_subscription_usable": n_sub, "pool_api_usable": n_api}
 
 
+# ==================== P3: Agent Versions + Builder + eval gate ====================
+# Đổi hành vi agent KHÔNG cần deploy code: sửa instruction/model/skills → tạo version
+# → publish theo môi trường. Publish PROD phải pass regression trên golden set.
+
+_ENVS = ("draft", "dev", "stg", "prod")
+
+
+def _version_row(conn, agent_id: str, version: int) -> dict | None:
+    return conn.execute(
+        "SELECT * FROM agent_versions WHERE agent_id=%s AND version=%s",
+        (agent_id, version)).fetchone()
+
+
+def _resolve_version(conn, agent_id: str, env: str = "prod") -> dict | None:
+    """Version đang 'sống' ở một môi trường (mỗi env trỏ tối đa 1 version).
+
+    Đọc từ agent_publications → một version có thể ở nhiều env cùng lúc
+    (vd promote stg→prod không làm mất bản ở stg).
+    """
+    return conn.execute(
+        "SELECT v.agent_id, v.version, v.instruction_block, v.skills, v.model, "
+        "       v.model_fallback, v.tool_grants, p.env AS publication, p.published_at "
+        "FROM agent_publications p JOIN agent_versions v "
+        "  ON v.agent_id=p.agent_id AND v.version=p.version "
+        "WHERE p.agent_id=%s AND p.env=%s", (agent_id, env)).fetchone()
+
+
+def _pub_envs(conn, agent_id: str) -> dict:
+    """{version: [env,...]} — để hiển thị 1 version đang sống ở những env nào."""
+    out: dict = {}
+    for r in conn.execute("SELECT env, version FROM agent_publications WHERE agent_id=%s",
+                          (agent_id,)).fetchall():
+        out.setdefault(r["version"], []).append(r["env"])
+    return out
+
+
+@app.post("/v1/agents/{agent_id}/versions")
+def version_create(agent_id: str, body: dict, authorization: str = Header(default=""),
+                   x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    """Tạo version mới (luôn ở trạng thái draft). Không bao giờ ghi đè version cũ."""
+    _require_admin(authorization)
+    _ensure_schema()
+    instruction = (body.get("instruction_block") or "").strip()
+    if not instruction:
+        raise HTTPException(status_code=400, detail="thiếu instruction_block")
+    with _db() as conn:
+        if not conn.execute("SELECT 1 FROM agents WHERE agent_id=%s", (agent_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="agent không tồn tại")
+        nxt = (conn.execute("SELECT coalesce(max(version),0)+1 AS v FROM agent_versions "
+                            "WHERE agent_id=%s", (agent_id,)).fetchone())["v"]
+        conn.execute(
+            """
+            INSERT INTO agent_versions(agent_id, version, instruction_block, skills, model,
+                                       model_fallback, tool_grants, publication, note, created_by)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,'draft',%s,%s)
+            """,
+            (agent_id, nxt, instruction, Json(body.get("skills") or []), body.get("model"),
+             body.get("model_fallback"), Json(body.get("tool_grants") or {}),
+             body.get("note"), x_actor or body.get("created_by") or "admin"))
+        _audit(conn, x_actor or "admin", "version_create", "agent_version",
+               f"{agent_id}:v{nxt}", {"agent_id": agent_id, "version": nxt})
+        conn.commit()
+    return {"agent_id": agent_id, "version": nxt, "publication": "draft"}
+
+
+@app.get("/v1/agents/{agent_id}/versions")
+def version_list(agent_id: str, authorization: str = Header(default="")) -> list[dict]:
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT agent_id, version, instruction_block, skills, model, model_fallback, "
+            "tool_grants, publication, note, created_by, created_at, published_at "
+            "FROM agent_versions WHERE agent_id=%s ORDER BY version DESC",
+            (agent_id,)).fetchall()
+        envs = _pub_envs(conn, agent_id)
+    return [{**dict(r), "envs": envs.get(r["version"], [])} for r in rows]
+
+
+@app.get("/v1/agents/{agent_id}/versions/resolve")
+def version_resolve(agent_id: str, env: str = "prod",
+                    authorization: str = Header(default="")) -> dict:
+    """Version đang chạy ở một môi trường (rỗng nếu chưa publish gì)."""
+    _require_admin(authorization)
+    _ensure_schema()
+    if env not in _ENVS:
+        raise HTTPException(status_code=400, detail=f"env phải thuộc {_ENVS}")
+    with _db() as conn:
+        row = _resolve_version(conn, agent_id, env)
+    return {"agent_id": agent_id, "env": env, "version": (row or {}).get("version"),
+            "config": dict(row) if row else None}
+
+
+def _eval_gate(conn, agent_id: str, version: int) -> dict:
+    """Kiểm điều kiện publish PROD: phải có regression PASS gắn ĐÚNG version này."""
+    n_cases = conn.execute("SELECT count(*) c FROM golden_cases WHERE active=true").fetchone()["c"]
+    if not n_cases:
+        return {"ok": False, "reason": "chưa có golden case active — tạo golden case trước "
+                                       "(POST /v1/golden-cases) rồi chạy regression cho version này"}
+    run = conn.execute(
+        "SELECT run_id, score, passed, threshold, n_pass, n_total, detail FROM regression_runs "
+        "WHERE target_id=%s AND agent_version=%s ORDER BY at DESC LIMIT 1",
+        (agent_id, version)).fetchone()
+    if not run:
+        return {"ok": False, "reason": f"chưa có regression run cho version v{version} — "
+                                       f"chạy POST /v1/regression/run với agent_version={version}"}
+    if not run["passed"]:
+        failed = [d for d in (run["detail"] or []) if not d.get("ok")]
+        return {"ok": False, "reason": f"regression FAIL (score={run['score']} < "
+                                       f"threshold={run['threshold']})",
+                "run_id": run["run_id"], "failed_cases": failed}
+    return {"ok": True, "run_id": run["run_id"], "score": float(run["score"])}
+
+
+@app.post("/v1/agents/{agent_id}/versions/{version}/publish")
+def version_publish(agent_id: str, version: int, body: dict,
+                    authorization: str = Header(default=""),
+                    x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    """Publish version vào môi trường. PROD phải qua eval gate (trừ khi force + lý do)."""
+    _require_admin(authorization)
+    _ensure_schema()
+    env = (body.get("env") or "dev").strip()
+    if env not in ("dev", "stg", "prod"):
+        raise HTTPException(status_code=400, detail="env phải là dev|stg|prod")
+    force = bool(body.get("force"))
+    actor = x_actor or body.get("published_by") or "admin"
+    with _db() as conn:
+        v = _version_row(conn, agent_id, version)
+        if not v:
+            raise HTTPException(status_code=404, detail="version không tồn tại")
+        gate = {"ok": True, "skipped": True}
+        if env == "prod":
+            gate = _eval_gate(conn, agent_id, version)
+            if not gate["ok"] and not force:
+                _audit(conn, actor, "version_publish_blocked", "agent_version",
+                       f"{agent_id}:v{version}", {"env": env, "reason": gate.get("reason")})
+                conn.commit()
+                raise HTTPException(status_code=422, detail={
+                    "error": "eval gate chặn publish prod", **gate})
+            if not gate["ok"] and force:
+                if not (body.get("reason") or "").strip():
+                    raise HTTPException(status_code=400,
+                                        detail="force=true bắt buộc kèm 'reason' (ghi vào audit)")
+        # Mỗi env trỏ đúng 1 version (upsert). Version có thể sống ở nhiều env cùng lúc.
+        conn.execute(
+            "INSERT INTO agent_publications(agent_id, env, version, published_by) "
+            "VALUES (%s,%s,%s,%s) ON CONFLICT (agent_id, env) DO UPDATE "
+            "SET version=EXCLUDED.version, published_by=EXCLUDED.published_by, published_at=now()",
+            (agent_id, env, version, actor))
+        # Cột publication giữ để hiển thị nhanh: env "cao" nhất mà version đang phục vụ.
+        conn.execute(
+            """
+            UPDATE agent_versions v SET publication = coalesce((
+                SELECT p.env FROM agent_publications p
+                WHERE p.agent_id=v.agent_id AND p.version=v.version
+                ORDER BY CASE p.env WHEN 'prod' THEN 1 WHEN 'stg' THEN 2 ELSE 3 END LIMIT 1
+            ), 'draft'), published_at = CASE WHEN v.version=%s THEN now() ELSE v.published_at END
+            WHERE v.agent_id=%s
+            """,
+            (version, agent_id))
+        # Skill khai trong version → brain_skills (scope agent), idempotent.
+        for s in (v["skills"] or []):
+            name = s if isinstance(s, str) else (s or {}).get("name")
+            if not name:
+                continue
+            conn.execute(
+                "INSERT INTO brain_skills(skill_id, name, kind, scope, agent_id, status) "
+                "VALUES (%s,%s,'mcp','agent',%s,'active') ON CONFLICT (skill_id) DO NOTHING",
+                (f"sk-{agent_id}-{name}", name, agent_id))
+        _audit(conn, actor, "version_publish", "agent_version", f"{agent_id}:v{version}",
+               {"env": env, "gate": gate, "forced": force, "reason": body.get("reason")})
+        conn.commit()
+    return {"agent_id": agent_id, "version": version, "publication": env,
+            "gate": gate, "forced": force}
+
+
+@app.post("/v1/agents/{agent_id}/rollback")
+def version_rollback(agent_id: str, body: dict, authorization: str = Header(default=""),
+                     x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    """Trỏ môi trường về version ĐÃ TỪNG publish trước đó — không tạo version mới."""
+    _require_admin(authorization)
+    _ensure_schema()
+    env = (body.get("env") or "prod").strip()
+    if env not in ("dev", "stg", "prod"):
+        raise HTTPException(status_code=400, detail="env phải là dev|stg|prod")
+    with _db() as conn:
+        cur = _resolve_version(conn, agent_id, env)
+        prev = conn.execute(
+            "SELECT version FROM agent_versions WHERE agent_id=%s AND published_at IS NOT NULL "
+            "AND version <> %s ORDER BY published_at DESC LIMIT 1",
+            (agent_id, (cur or {}).get("version") or -1)).fetchone()
+        if not prev:
+            raise HTTPException(status_code=409, detail="không có version trước để rollback")
+        conn.execute(
+            "INSERT INTO agent_publications(agent_id, env, version, published_by) "
+            "VALUES (%s,%s,%s,%s) ON CONFLICT (agent_id, env) DO UPDATE "
+            "SET version=EXCLUDED.version, published_by=EXCLUDED.published_by, published_at=now()",
+            (agent_id, env, prev["version"], x_actor or "admin"))
+        conn.execute(
+            """
+            UPDATE agent_versions v SET publication = coalesce((
+                SELECT p.env FROM agent_publications p
+                WHERE p.agent_id=v.agent_id AND p.version=v.version
+                ORDER BY CASE p.env WHEN 'prod' THEN 1 WHEN 'stg' THEN 2 ELSE 3 END LIMIT 1
+            ), 'draft') WHERE v.agent_id=%s
+            """,
+            (agent_id,))
+        _audit(conn, x_actor or "admin", "version_rollback", "agent_version",
+               f"{agent_id}:v{prev['version']}",
+               {"env": env, "from": (cur or {}).get("version"), "to": prev["version"]})
+        conn.commit()
+    return {"agent_id": agent_id, "env": env, "from": (cur or {}).get("version"),
+            "to": prev["version"]}
+
+
+@app.get("/v1/self/version")
+def self_version(authorization: str = Header(default=""), env: str = "prod") -> dict:
+    """Agent tự lấy version đang publish của CHÍNH mình (không rò chéo agent)."""
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        if _agent_status(conn, agent_id) == "deactivated":
+            raise HTTPException(status_code=403, detail="agent deactivated")
+        row = _resolve_version(conn, agent_id, env if env in _ENVS else "prod")
+    if not row:
+        return {"agent_id": agent_id, "env": env, "version": None,
+                "instruction_block": None, "skills": [], "note": "chưa publish version nào"}
+    d = dict(row)
+    d["agent_id"] = agent_id
+    d["env"] = env
+    return d
+
+
 def _audit(conn, actor: str, action: str, target_type: str, target_id: str,
            detail: dict | None = None) -> None:
     """Ghi audit log — best-effort, không làm hỏng request nếu lỗi."""
@@ -3555,12 +3841,15 @@ def run_regression(body: dict, authorization: str = Header(default=""),
         conn.execute(
             """
             INSERT INTO regression_runs (run_id, target_type, target_id, skill, score,
-                                         passed, n_total, n_pass, threshold, detail, run_by)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                                         passed, n_total, n_pass, threshold, detail, run_by,
+                                         agent_version)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             """,
             (rid, body.get("target_type", "agent"), body.get("target_id"), skill,
              score, passed, len(cases), n_pass, threshold, Json(detail),
-             body.get("run_by", "admin")),
+             body.get("run_by", "admin"),
+             # P3: gắn run với version cụ thể → eval gate không mượn kết quả version khác.
+             body.get("agent_version")),
         )
         _audit(conn, x_actor or body.get("run_by", "admin"), "regression_run", "regression", rid,
                {"target_id": body.get("target_id"), "score": score, "passed": passed})
