@@ -87,13 +87,19 @@ def th_kb_index() -> str:
     kb = load_config("th_kb_files")
     if not kb:
         return NO_CONFIG.format(key="th_kb_files")
-    lines = ["**Kho tri thức thị trường Thái Lan** (tra 2 bước: chọn file ở index này rồi mới đọc):"]
+    lines = ["**Kho tri thức thị trường Thái Lan** (tra 2 bước: chọn nguồn ở index này rồi mới đọc):"]
+    lines.append("\n*Master file:*")
     for f in kb.get("master_files", []):
         lines.append(f"- `{f['path']}` ({f.get('size', '?')}) — {f.get('content', '')}")
+    src = kb.get("lark_sources", [])
+    if src:
+        lines.append(f"\n*Nguồn Lark ({len(src)} link — wiki/docx/base/sheets):*")
+        for s in src:
+            lines.append(f"- [{s.get('kind', '?')}] {s.get('title', '?')}\n  {s.get('url', '')}")
     rf = kb.get("research_folder")
     if rf:
-        lines.append(f"- `{rf['path']}` — {rf.get('count', '')}: {rf.get('content', '')}")
-    lines.append(f"Vị trí: {kb.get('location', 'Lark Drive')}")
+        lines.append(f"\n*Nghiên cứu:* `{rf['path']}` — {rf.get('count', '')}: {rf.get('content', '')}")
+    lines.append(f"\nVị trí: {kb.get('location', 'Lark')}")
     if kb.get("corrections_priority"):
         lines.append(f"Lưu ý: {kb['corrections_priority']}")
     return "\n".join(lines)
