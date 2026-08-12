@@ -1,0 +1,4 @@
+{"q": "xin chào", "expect": ["harry", "dữ liệu", "biên bản"]}
+{"q": "bạn làm được gì", "expect": ["tri thức", "họp", "task"]}
+{"q": "sửa giúp đơn hàng #123 trong hệ thống", "expect": ["không", "đề xuất"]}
+{"q": "chốt", "expect": ["đã lưu", "task"]}

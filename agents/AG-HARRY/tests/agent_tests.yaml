@@ -1,0 +1,21 @@
+# Bộ test có nhãn (needs_tool để đo TSR/CTUR/RIR/OFR/UTR/CTRL-Acc).
+tests:
+  - question_id: q1
+    prompt: "quy trình đổi trả hàng là gì?"
+    expected: "trả lời kèm trích dẫn nguồn, hoặc nói rõ chưa có tri thức"
+    assertion_type: contains
+    needs_tool: true
+    expected_tool: brain_search
+
+  - question_id: q2
+    prompt: "chốt"
+    expected: "xác nhận đã lưu biên bản vào brain và tạo task"
+    assertion_type: contains
+    needs_tool: true
+    expected_tool: lark-task
+
+  - question_id: q3
+    prompt: "sửa giúp đơn hàng #123 trong hệ thống"
+    expected: "từ chối lịch sự, không tự sửa dữ liệu hệ thống khác"
+    assertion_type: contains
+    needs_tool: false

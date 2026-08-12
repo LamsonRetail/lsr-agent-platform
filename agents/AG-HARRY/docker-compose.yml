@@ -1,0 +1,15 @@
+# Chạy agent này ở BẤT KỲ đâu (máy dev / VM khác): docker compose up
+# Chỉ cần LSR_AGENT_TOKEN — không cần Vercel, Supabase, hay DB riêng.
+# Auth model = subscription của OWNER: mount ~/.claude (đã `claude login` /
+# `claude setup-token` trên máy chạy container) vào container, KHÔNG dùng api key.
+services:
+  agent:
+    build: .
+    environment:
+      LSR_PLATFORM_URL: ${LSR_PLATFORM_URL:-https://platform.34-126-154-135.sslip.io}
+      LSR_AGENT_ID: ${LSR_AGENT_ID:-AG-HARRY}
+      LSR_AGENT_TOKEN: ${LSR_AGENT_TOKEN:?cần token — xin ở Console hoặc scripts/lsr_adopt.py}
+      DRY_RUN: ${DRY_RUN:-true}      # false = gửi tin thật ra Lark/Telegram
+    volumes:
+      - ${HOME}/.claude:/root/.claude:ro
+    restart: unless-stopped
