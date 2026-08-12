@@ -82,9 +82,30 @@ class Period:
     year_assumed: bool = False
 
 
+def unsupported_period(question: str) -> str | None:
+    """Kỳ mà Phase 1 chưa cộng được — phải chặn TRƯỚC detect_period.
+
+    "quý 3/2026" từng bị regex tháng/năm đọc thành 2026-03 rồi trả về "0 đ": sai mà nghe rất
+    chắc chắn, người đọc không có cách nào biết. Thà nói thẳng là chưa làm được.
+    """
+    folded = normalize_header(question)
+    if re.search(r"\bquy\s*[1-4]", folded):
+        return "theo quý"
+    if re.search(r"\btuan\b", folded):
+        return "theo tuần"
+    if re.search(r"\bnam\s*20\d{2}", folded) and not re.search(r"\bthang\s*\d", folded):
+        return "theo năm"
+    return None
+
+
 def detect_period(question: str, *, today: date | None = None) -> Period | None:
     """Nhận "2026-07", "tháng 7/2026", "07/2026", "tháng 7". Trả None nếu câu không nêu kỳ."""
     folded = normalize_header(question)
+
+    match = re.search(r"thang\s*(\d{1,2})\s*(?:nam)?\s*(20\d{2})", folded)
+    if match:
+        month, year = int(match.group(1)), match.group(2)
+        return Period(f"{year}-{month:02d}") if 1 <= month <= 12 else None
 
     match = re.search(r"(20\d{2})\s*-\s*(\d{1,2})", folded)
     if match:
@@ -129,7 +150,20 @@ def answer_question(question: str, store: Store, *, today: date | None = None) -
         overdue = detect_overdue_days(question)
         fn = query.outstanding_receivable if metric == "receivable" else query.outstanding_payable
         figure = fn(store, overdue_days=overdue, as_of=today)
-        return Answer(text=render(figure), figure=figure)
+        # Công nợ là số dư tại thời điểm, không cộng theo kỳ. Câu hỏi có nêu kỳ thì phải nói rõ
+        # là mình KHÔNG lọc theo kỳ đó, nếu không người đọc tưởng con số là của riêng tháng đó.
+        stated = detect_period(question, today=today) or unsupported_period(question)
+        return Answer(text=render(figure, period_ignored=bool(stated)), figure=figure)
+
+    granularity = unsupported_period(question)
+    if granularity is not None:
+        return Answer(
+            text=(
+                f"Tôi chưa cộng được số liệu {granularity} — hiện chỉ tính theo tháng. "
+                "Anh/chị hỏi theo từng tháng (ví dụ tháng 7/2026) thì tôi trả lời được."
+            ),
+            needs_clarification=True,
+        )
 
     period = detect_period(question, today=today)
     if period is None:
@@ -152,8 +186,11 @@ def answer_question(question: str, store: Store, *, today: date | None = None) -
     return Answer(text=render(figure, period=period), figure=figure)
 
 
-def render(figure: Figure, *, period: Period | None = None) -> str:
+def render(figure: Figure, *, period: Period | None = None, period_ignored: bool = False) -> str:
     lines: list[str] = []
+
+    if period_ignored:
+        lines.append("Công nợ là số dư tại thời điểm hiện tại, tôi không lọc theo kỳ anh/chị nêu.")
 
     if period is not None and period.year_assumed:
         # Người hỏi chỉ nói "tháng 7". Nêu rõ kỳ đã hiểu để họ tự phát hiện nếu sai (C10).

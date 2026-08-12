@@ -131,7 +131,9 @@ def _outstanding(
 
     if overdue_days is not None:
         today = as_of or datetime.now(timezone.utc).date()
-        label = f"{label} quá hạn trên {overdue_days} ngày"
+        # overdue_days=0 nghĩa là "quá hạn" chung chung. Viết "quá hạn trên 0 ngày" thì đúng
+        # logic nhưng đọc như máy nói.
+        label = f"{label} quá hạn" + (f" trên {overdue_days} ngày" if overdue_days else "")
 
         def overdue(record) -> bool:
             return (today - record.due_date).days > overdue_days

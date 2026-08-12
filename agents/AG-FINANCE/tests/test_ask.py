@@ -137,3 +137,43 @@ def test_dinh_dang_tien_theo_kieu_viet_nam():
     assert ask.format_vnd(Decimal("1234567")) == "1.234.567 đ"
     assert ask.format_vnd(Decimal("0")) == "0 đ"
     assert ask.format_vnd(Decimal("-2000000")) == "-2.000.000 đ"
+
+
+@pytest.mark.parametrize(
+    "question,granularity",
+    [
+        ("chi phí quý 3/2026", "theo quý"),
+        ("doanh thu quý 2/2026", "theo quý"),
+        ("doanh thu năm 2026", "theo năm"),
+        ("doanh thu tuần này", "theo tuần"),
+    ],
+)
+def test_ky_chua_ho_tro_thi_noi_thang_chu_khong_doc_thanh_thang(question, granularity, store):
+    """"quý 3/2026" từng bị đọc thành 2026-03 rồi trả "0 đ" — sai mà nghe rất chắc chắn."""
+    answer = ask.answer_question(question, store, today=TODAY)
+
+    assert answer.needs_clarification
+    assert granularity in answer.text
+    assert not re.search(r"\d{4,}", answer.text.replace("7/2026", "")), "không được trả về con số"
+
+
+def test_thang_kem_nam_thi_khong_bao_la_da_tu_hieu_ky():
+    """"tháng 7 năm 2026" đã nêu năm rõ ràng, nói "tôi hiểu kỳ là..." là thừa và gây nghi ngờ."""
+    assert ask.detect_period("doanh thu tháng 7 năm 2026") == ask.Period("2026-07")
+    assert ask.detect_period("doanh thu tháng 7", today=TODAY).year_assumed is True
+
+
+def test_cong_no_co_neu_ky_thi_noi_ro_la_khong_loc_theo_ky(store):
+    """Công nợ là số dư tại thời điểm. Im lặng bỏ kỳ làm người đọc tưởng số đó của tháng 7."""
+    text = ask_text("công nợ phải trả tháng 7/2026", store)
+
+    assert "không lọc theo kỳ" in text
+    text_no_period = ask_text("công nợ phải trả", store)
+    assert "không lọc theo kỳ" not in text_no_period
+
+
+def test_qua_han_chung_chung_khong_viet_tren_0_ngay(store):
+    text = ask_text("công nợ quá hạn", store)
+
+    assert "quá hạn:" in text
+    assert "0 ngày" not in text

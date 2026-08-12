@@ -41,6 +41,9 @@ Cột **Ai** = người chịu trách nhiệm làm case đó pass: `Hương` (da
 | C8 | Cùng hoá đơn có ở hai nguồn, số KHỚP nhau | gsheet và misa cùng INV-001 cùng số | Tổng chỉ tính hoá đơn đó MỘT lần, không cộng đôi | Hương |
 | C9 | Cùng hoá đơn có ở hai nguồn, số LỆCH nhau | gsheet và misa cùng INV-001 khác số | Loại hoá đơn đó khỏi tổng, nói rõ đã loại mấy hoá đơn và vì sao. Không tự chọn bên nào để cộng vào | Hương |
 | C10 | Câu hỏi nêu tháng không nêu năm | "doanh thu tháng 7" | Trả lời nhưng nêu rõ kỳ đã hiểu là `2026-07` để người hỏi tự phát hiện nếu sai | Hương |
+| C11 | Kỳ chưa hỗ trợ | "chi phí quý 3/2026", "doanh thu năm 2026" | Nói thẳng là chỉ tính theo tháng. KHÔNG đọc "quý 3" thành tháng 3 rồi trả `0 đ` | Hương |
+| C12 | Hỏi công nợ kèm kỳ | "công nợ phải trả tháng 7/2026" | Trả số dư hiện tại và nói rõ là không lọc theo kỳ đó, để không bị hiểu là số của riêng tháng 7 | Hương |
+| C13 | Từ khoá lọt trong từ khác | "chi phí tháng 7/2026" | Vẫn là câu hỏi số liệu. Không được khớp `hi` trong "c**hi** phí" rồi trả lời như câu chào | Hương |
 
 ## D. Biên bản họp (meeting)
 
@@ -66,7 +69,7 @@ Cột **Ai** = người chịu trách nhiệm làm case đó pass: `Hương` (da
 ## Định nghĩa "xong" cho mỗi phase
 
 - Toàn bộ nhóm **A** phải pass trước khi bất kỳ dữ liệu thật nào được nạp vào.
-- Phase 1 xong = A + B1..B3, B5..B7 + C1..C5, C8..C10 pass **với dữ liệu giả**
+- Phase 1 xong = A + B1..B3, B5..B7 + C1..C5, C8..C13 pass **với dữ liệu giả**
   (`data_hub/sources/fake.py`). Logic chuẩn hoá và truy vấn không phụ thuộc credential nên
   test được đầy đủ trước khi có quyền truy cập nguồn thật.
 - B4 đã pass ở mức **cô lập lỗi** (một nguồn chết không làm dừng nguồn còn lại, có ghi nhật

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -33,13 +34,27 @@ INTENT_OUT_OF_SCOPE = "out_of_scope"
 INTENT_MEETING = "meeting"
 INTENT_FINANCIAL = "financial"
 
-SMALLTALK = ("chào", "chao", "hello", "hi ", "làm được gì", "lam duoc gi", "giúp gì", "giup gi")
+SMALLTALK = ("chào", "chao", "hello", "hi", "làm được gì", "lam duoc gi", "giúp gì", "giup gi")
 OUT_OF_SCOPE = (
     "hạch toán", "hach toan", "bút toán", "but toan", "ghi vào misa", "ghi vao misa",
     "duyệt chi", "duyet chi", "phê duyệt", "phe duyet", "báo cáo thuế", "bao cao thue",
     "quyết toán thuế", "quyet toan thue",
 )
 MEETING = ("biên bản", "bien ban", "cuộc họp", "cuoc hop", "transcript", "chốt", "chot")
+
+
+def _words(keywords: tuple[str, ...]):
+    """Khớp theo RANH GIỚI TỪ, không phải khớp chuỗi con.
+
+    Khớp chuỗi con làm "chi phí" trúng keyword "hi" và bị coi là câu chào — người hỏi số liệu
+    nhận được lời giới thiệu bot. Từ khoá tiếng Việt ngắn rất dễ nằm lọt trong từ khác.
+    """
+    return re.compile(r"\b(?:" + "|".join(re.escape(k) for k in keywords) + r")\b")
+
+
+RE_SMALLTALK = _words(SMALLTALK)
+RE_OUT_OF_SCOPE = _words(OUT_OF_SCOPE)
+RE_MEETING = _words(MEETING)
 
 
 def api(method: str, path: str, payload=None, timeout: int = 40):
@@ -64,14 +79,14 @@ def classify(question: str, payload: dict) -> str:
 
     Phase 1 sẽ thay bằng model. Tầng keyword giữ lại làm lớp chặn thứ hai.
     """
-    low = f" {question.lower().strip()} "
+    low = question.lower().strip()
     if payload.get("message_type") in ("audio", "media", "file"):
         return INTENT_MEETING
-    if any(k in low for k in OUT_OF_SCOPE):
+    if RE_OUT_OF_SCOPE.search(low):
         return INTENT_OUT_OF_SCOPE
-    if any(k in low for k in MEETING):
+    if RE_MEETING.search(low):
         return INTENT_MEETING
-    if any(k in low for k in SMALLTALK):
+    if RE_SMALLTALK.search(low):
         return INTENT_SMALLTALK
     return INTENT_FINANCIAL
 
