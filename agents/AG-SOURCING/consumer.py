@@ -37,7 +37,10 @@ def build_prompt(ctx, question):
     if ctx.get("user_facts"):
         parts.append("Đã biết về người dùng:\n- " + "\n- ".join(ctx["user_facts"]))
     if ctx.get("knowledge"):
-        kb = "\n".join(f"- {h['title']}: {h['content'][:300]} (nguồn: {h.get('source_url') or 'nội bộ'})"
+        # 1200 = đúng mức platform đã cắt sẵn ở _rag_search (app.py:3424). Mẫu gốc để 300 làm
+        # item bị cắt giữa câu: tri thức nạp từ Lark Doc dài 273–1084 ký tự/item (brain-seed.json),
+        # cắt 300 là mất PIC/tiêu chí hoàn thành → agent trả lời thiếu mà vẫn trích nguồn.
+        kb = "\n".join(f"- {h['title']}: {h['content'][:1200]} (nguồn: {h.get('source_url') or 'nội bộ'})"
                        for h in ctx["knowledge"])
         parts.append("Tri thức liên quan (TRÍCH DẪN nguồn khi dùng):\n" + kb)
     for t in ctx.get("recent_turns", []):
@@ -90,8 +93,10 @@ def handle(job):
     q = payload.get("text", "")
     sid = job.get("session_id") or f"job-{job['id']}"
     uref = payload.get("sender_open_id") or payload.get("user_ref") or ""
+    # k=6: quy trình Sourcing E2E nạp thành 12 item nhỏ (brain-seed.json) nên 1 câu hỏi kiểu
+    # "quy trình sourcing ra sao" cần vài mảnh cùng lúc; mặc định CTX_RAG_K=4 (app.py:3392) hơi ít.
     ctx = api("GET", f"/v1/self/context?session_id={sid}&user_ref={uref}"
-                     f"&q={urllib.parse.quote(q[:200])}&env={ENV}")
+                     f"&q={urllib.parse.quote(q[:200])}&env={ENV}&k=6")
 
     pending = _pending_draft(sid, uref)
     if payload.get("kind") == "transcript":
@@ -113,7 +118,12 @@ def handle(job):
         reply = "Biên bản đang chờ chủ trì xác nhận, chưa tạo task."
     else:
         # A. Hỏi — đáp dữ liệu chung team Sourcing, dựa trên tri thức đã duyệt (ctx["knowledge"]).
-        # Brain scope theo agent (BR.5) nên tự động không lẫn dữ liệu dự án/agent khác (vd BST).
+        # CẢNH BÁO (đã kiểm bằng /v1/self/brain/search, không phải suy đoán): scope agent CHỈ
+        # chặn brain của agent KHÁC. `_rag_search` (app.py:3410) lấy `scope='shared' OR
+        # agent_id=<mình>`, nên item shared đã approved của TOÀN platform vẫn vào ctx["knowledge"]
+        # của agent này. Hiện shared chỉ có 4 item DEMO-* nên vô hại; nếu sau này ai đưa dữ liệu
+        # dự án khác (vd BST) vào shared thì thứ duy nhất chặn là refusal rule trong INSTRUCTION.md,
+        # KHÔNG phải scope. Không tự sửa được từ phía agent — đã báo maintainer.
         reply = answer(build_prompt(ctx, q), ctx)
 
     # Ghi lại lượt hội thoại để lượt sau có ngữ cảnh
