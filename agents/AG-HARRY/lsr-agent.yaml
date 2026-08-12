@@ -1,0 +1,38 @@
+apiVersion: lsr/v1
+agent:
+  id: AG-HARRY
+  name: Harry
+  version: 0.1.0
+  owner: hoalt@hapas.vn           # OWNER thật của agent — auth dùng subscription của người này
+  squad: SQ-FA
+  is_squad_agent: false
+  connect_mode: bot        # bot | user
+  description: >
+    Trợ lý Dữ liệu & Họp chung của Lam Sơn Retail: tổng hợp tri thức/dữ liệu
+    vào một nơi mọi người có thể tra và tương tác, tham gia các cuộc họp
+    (nhận recording/nội dung trao đổi), tự soạn biên bản họp và tạo task.
+
+lark:
+  connect_mode: bot
+  bot:
+    app: platform-shared
+    chat_ids: []
+    event_webhook: https://collector.lsr.internal/lark/events
+
+runtime:
+  sdk: claude-agent-sdk
+  auth: subscription        # BẮT BUỘC: đăng nhập subscription của OWNER (claude login /
+                            # setup-token). KHÔNG dùng api key, KHÔNG dùng auth chung platform.
+  model: claude-sonnet-5
+
+skills:                     # MCP tự do — chỉ khai báo + log
+  - {name: resource-index, type: builtin}
+  - {name: lark-task, type: mcp}
+
+telemetry:
+  enabled: true             # BẮT BUỘC (control point) — agent không gửi trace = không golive
+  collector: https://collector.lsr.internal
+
+tests:
+  suite: tests/agent_tests.yaml
+schedule: []
