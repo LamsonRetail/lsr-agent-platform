@@ -66,8 +66,13 @@ export default function AccountsConsole({ accounts, agents, meEmail }:
 
       <section className="card">
         <h2 style={{ marginTop: 0 }}>Tài khoản ({accounts.length})</h2>
+        <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
+          <b>Telegram</b>: để nhận cảnh báo của AG-OPS/AG-EVAL và bấm Duyệt/Từ chối ngay trong chat.
+          Cách lấy chat id: mở <b>@LSRAdminBot</b> → bấm Start → gửi <code>/id</code>. Hoặc để người dùng
+          tự nối bằng <code>/dangky &lt;email&gt; &lt;mã&gt;</code>.
+        </p>
         <table>
-          <thead><tr><th>Email</th><th>Tên</th><th>Vai trò</th><th>Trạng thái</th><th>Đăng nhập cuối</th><th></th></tr></thead>
+          <thead><tr><th>Email</th><th>Tên</th><th>Vai trò</th><th>Telegram</th><th>Trạng thái</th><th>Đăng nhập cuối</th><th></th></tr></thead>
           <tbody>
             {accounts.map((a: any) => (
               <tr key={a.email}>
@@ -87,6 +92,7 @@ export default function AccountsConsole({ accounts, agents, meEmail }:
                   ))}
                   <AddRole email={a.email} agents={agents} onDone={call} busy={busy} />
                 </td>
+                <td><TelegramCell email={a.email} chatId={a.telegram_chat_id} onSave={call} busy={busy} /></td>
                 <td>{a.status === "active" ? "✅ hoạt động" : "⏸ đã khoá"}
                   {a.must_change_pw && <div className="muted" style={{ fontSize: 11 }}>chờ đổi mật khẩu</div>}</td>
                 <td className="muted" style={{ fontSize: 12 }}>
@@ -108,6 +114,33 @@ export default function AccountsConsole({ accounts, agents, meEmail }:
         </table>
       </section>
     </div>
+  );
+}
+
+function TelegramCell({ email, chatId, onSave, busy }:
+  { email: string; chatId: string | null; onSave: Function; busy: boolean }) {
+  const [edit, setEdit] = useState(false);
+  const [v, setV] = useState(chatId || "");
+  if (!edit) {
+    return (
+      <span style={{ fontSize: 12 }}>
+        {chatId
+          ? <span className="mono" title="đã nối — nhận cảnh báo & nút duyệt việc">✅ {chatId}</span>
+          : <span className="muted">chưa nối</span>}
+        <button className="btn" style={{ padding: "0 6px", fontSize: 11, marginLeft: 6 }}
+          onClick={() => setEdit(true)}>sửa</button>
+      </span>
+    );
+  }
+  return (
+    <span style={{ display: "inline-flex", gap: 4 }}>
+      <input value={v} onChange={e => setV(e.target.value)} placeholder="chat id"
+             style={{ width: 110, fontSize: 12 }} />
+      <button className="btn" style={{ fontSize: 11 }} disabled={busy}
+        onClick={() => { onSave(`/v1/accounts/${email}/update`, { telegram_chat_id: v || null }); setEdit(false); }}>
+        Lưu</button>
+      <button className="btn" style={{ fontSize: 11 }} onClick={() => { setV(chatId || ""); setEdit(false); }}>✕</button>
+    </span>
   );
 }
 

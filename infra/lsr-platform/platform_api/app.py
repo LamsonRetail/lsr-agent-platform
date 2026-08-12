@@ -1338,6 +1338,7 @@ def accounts_list(authorization: str = Header(default="")) -> list[dict]:
     with _db() as conn:
         rows = conn.execute(
             "SELECT a.email, a.name, a.status, a.must_change_pw, a.last_login_at, a.created_at, "
+            "a.telegram_chat_id, "
             "coalesce(json_agg(json_build_object('scope_type', r.scope_type, 'scope_id', r.scope_id, "
             "  'role', r.role) ORDER BY r.scope_type) FILTER (WHERE r.id IS NOT NULL), '[]') AS roles "
             "FROM accounts a LEFT JOIN role_bindings r ON r.email=a.email "
@@ -1374,6 +1375,29 @@ def account_create(body: dict, authorization: str = Header(default="")) -> dict:
         conn.commit()
     return {"email": email, "temp_password": tmp,
             "note": "Mật khẩu tạm chỉ hiện MỘT LẦN — người dùng phải đổi khi đăng nhập."}
+
+
+@app.post("/v1/accounts/{email}/update")
+def account_update(email: str, body: dict, authorization: str = Header(default="")) -> dict:
+    """Cập nhật thông tin tài khoản: tên, Telegram chat_id (để nhận cảnh báo/duyệt việc)."""
+    _require_admin(authorization)
+    email = email.lower()
+    actor = _actor_of(authorization)
+    tg = body.get("telegram_chat_id")
+    tg = str(tg).strip() if tg not in (None, "") else None
+    with _db() as conn:
+        n = conn.execute(
+            "UPDATE accounts SET name=coalesce(%s, name), telegram_chat_id=%s "
+            "WHERE email=%s RETURNING email", (body.get("name"), tg, email)).fetchone()
+        if not n:
+            raise HTTPException(status_code=404, detail="tài khoản không tồn tại")
+        # Giữ đồng bộ với bảng kênh admin cũ (platform_admins) nếu email có ở đó.
+        conn.execute("UPDATE platform_admins SET telegram_chat_id=%s, linked_at=now() "
+                     "WHERE lower(email)=%s", (tg, email))
+        _audit(conn, actor, "account_update", "account", email,
+               {"telegram_linked": bool(tg), "name": bool(body.get("name"))})
+        conn.commit()
+    return {"ok": True, "email": email, "telegram_linked": bool(tg)}
 
 
 @app.post("/v1/accounts/{email}/roles")
@@ -3912,9 +3936,24 @@ def _notify_admins(conn, text: str, *, action_id: int | None = None,
     """
     sent = {"telegram": 0, "lark": 0, "none": 0}
     try:
+        # Nguồn chính: tài khoản console có vai trò admin (P8). Hợp nhất với bảng
+        # platform_admins cũ để không mất kênh đã nối trước đó.
         admins = conn.execute(
-            "SELECT email, name, lark_open_id, telegram_chat_id FROM platform_admins "
-            "WHERE active").fetchall()
+            """
+            SELECT email, name, lark_open_id, telegram_chat_id FROM (
+                SELECT a.email, a.name, NULL::text AS lark_open_id, a.telegram_chat_id
+                FROM accounts a JOIN role_bindings r ON r.email = a.email
+                WHERE a.status='active' AND r.role='admin' AND r.scope_type='platform'
+                UNION
+                SELECT p.email, p.name, p.lark_open_id, p.telegram_chat_id
+                FROM platform_admins p WHERE p.active
+            ) x
+            WHERE telegram_chat_id IS NOT NULL OR lark_open_id IS NOT NULL
+            """).fetchall()
+        if not admins:
+            admins = conn.execute(
+                "SELECT email, name, lark_open_id, telegram_chat_id FROM platform_admins "
+                "WHERE active").fetchall()
     except Exception:
         return sent
     buttons = None
@@ -3963,13 +4002,18 @@ def admin_link(body: dict, authorization: str = Header(default="")) -> dict:
     if not email:
         raise HTTPException(status_code=400, detail="thiếu email")
     with _db() as conn:
-        row = conn.execute("SELECT email FROM platform_admins WHERE lower(email)=%s",
-                           (email,)).fetchone()
+        row = conn.execute(
+            "SELECT email FROM platform_admins WHERE lower(email)=%s "
+            "UNION SELECT email FROM accounts WHERE lower(email)=%s", (email, email)).fetchone()
         if not row:
-            raise HTTPException(status_code=404, detail="email không nằm trong danh sách admin")
+            raise HTTPException(status_code=404,
+                                detail="email không có trong danh sách admin/tài khoản console")
         if body.get("telegram_chat_id"):
             conn.execute("UPDATE platform_admins SET telegram_chat_id=%s, linked_at=now() "
                          "WHERE lower(email)=%s", (str(body["telegram_chat_id"]), email))
+            # Đồng bộ sang tài khoản console (P8) — một nơi quản lý duy nhất.
+            conn.execute("UPDATE accounts SET telegram_chat_id=%s WHERE lower(email)=%s",
+                         (str(body["telegram_chat_id"]), email))
         if body.get("lark_open_id"):
             conn.execute("UPDATE platform_admins SET lark_open_id=%s, linked_at=now() "
                          "WHERE lower(email)=%s", (body["lark_open_id"], email))

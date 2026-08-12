@@ -40,6 +40,7 @@ const ALLOWED = [
   // P8: quản lý tài khoản + phân quyền (API tự kiểm quyền admin)
   /^\/v1\/accounts$/,
   /^\/v1\/accounts\/[^/]+\/roles$/,
+  /^\/v1\/accounts\/[^/]+\/update$/,
   /^\/v1\/accounts\/[^/]+\/status$/,
   /^\/v1\/accounts\/[^/]+\/reset-password$/,
 ];

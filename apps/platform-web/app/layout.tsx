@@ -11,34 +11,81 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const u = await me();
+  const isAdmin = u?.platform_role === "admin";
+  const canBuild = !!u?.can_create_agent;
+
+  // Menu DỌC bên trái, gom theo nhóm công việc — không phình khi thêm trang.
+  const groups: { title: string; items: [string, string, boolean][] }[] = [
+    {
+      title: "Tổng quan",
+      items: [
+        ["/", "📊 Platform", true],
+        ["/cost", "💰 Chi phí", true],
+        ["/health", "🩺 Sức khoẻ", true],
+      ],
+    },
+    {
+      title: "Agent",
+      items: [
+        ["/agents/new", "➕ Tạo agent", canBuild],
+        ["/builder", "🛠 Builder", canBuild],
+        ["/jobs", "🔀 Ingress", canBuild],
+      ],
+    },
+    {
+      title: "Tri thức",
+      items: [
+        ["/brain", "🧠 Brain Console", true],
+        ["/review", "✅ Duyệt tri thức", true],
+        ["/brain-3d", "🌐 Brain 3D", true],
+      ],
+    },
+    {
+      title: "Chất lượng",
+      items: [
+        ["/golden", "🎯 Golden", true],
+        ["/test-learn", "🧪 Test & Learn", true],
+      ],
+    },
+    {
+      title: "Quản trị",
+      items: [
+        ["/approvals", "📋 Duyệt việc", isAdmin],
+        ["/connectors", "🔌 Connectors", isAdmin],
+        ["/model-auth", "🔑 Model Auth", isAdmin],
+        ["/accounts", "👥 Tài khoản", !!u?.can_manage_accounts],
+        ["/audit", "📜 Audit", true],
+      ],
+    },
+  ];
+
   return (
     <html lang="vi">
       <body>
-        <div className="topbar">
-          <div className="brand">LSR Agent Platform <span>· web</span></div>
-          <nav className="nav">
-            <Link href="/">Platform</Link>
-            {u?.platform_role === "admin" && <Link href="/approvals">Duyệt việc</Link>}
-            {(u?.can_create_agent) && <Link href="/agents/new">+ Agent mới</Link>}
-            {(u?.can_create_agent) && <Link href="/builder">Builder</Link>}
-            {(u?.can_create_agent) && <Link href="/jobs">Ingress</Link>}
-            {u?.platform_role === "admin" && <Link href="/connectors">Connectors</Link>}
-            {u?.platform_role === "admin" && <Link href="/model-auth">Model Auth</Link>}
-            {u?.can_manage_accounts && <Link href="/accounts">Tài khoản</Link>}
-            <Link href="/cost">Chi phí</Link>
-            <Link href="/health">Sức khoẻ</Link>
-            <Link href="/test-learn">Test &amp; Learn</Link>
-            <Link href="/golden">Golden</Link>
-            <Link href="/brain">Brain Console</Link>
-            <Link href="/review">Duyệt tri thức</Link>
-            <Link href="/brain-3d">Brain 3D</Link>
-            <Link href="/audit">Audit</Link>
-          </nav>
-          <div className="spacer" />
-          {u ? <UserBadge name={u.name} email={u.email} role={u.platform_role} />
-             : <span className="muted">chưa đăng nhập</span>}
+        <div className="shell">
+          <aside className="side">
+            <div className="brand">LSR Agent Platform</div>
+            {groups.map((g) => {
+              const items = g.items.filter(([, , show]) => show);
+              if (!items.length) return null;
+              return (
+                <div className="grp" key={g.title}>
+                  <div className="grp-t">{g.title}</div>
+                  {items.map(([href, label]) => (
+                    <Link href={href} key={href}>{label}</Link>
+                  ))}
+                </div>
+              );
+            })}
+            <div className="foot">
+              {u ? <UserBadge name={u.name} email={u.email} role={u.platform_role} />
+                : <span className="muted" style={{ fontSize: 12 }}>chưa đăng nhập</span>}
+            </div>
+          </aside>
+          <div className="content">
+            <main className="wrap">{children}</main>
+          </div>
         </div>
-        <main className="wrap">{children}</main>
       </body>
     </html>
   );
