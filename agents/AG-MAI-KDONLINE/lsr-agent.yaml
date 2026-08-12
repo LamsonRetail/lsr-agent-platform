@@ -4,7 +4,7 @@ agent:
   name: MAI
   version: 0.1.0
   owner: minhnd@hapas.vn      # OWNER thật — auth dùng subscription của người này.
-                              # TODO: đổi sang email Rooky (Head of Online Business) nếu Rooky là owner.
+                              # Đã xác nhận 12/08/2026: Head of Online Business (Nguyễn Đình Minh).
   squad: SQ-KD-ONLINE
   is_squad_agent: true        # agent chính của Khối KD Online VN
   connect_mode: bot           # bot | user

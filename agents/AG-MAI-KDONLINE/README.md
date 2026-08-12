@@ -1,6 +1,6 @@
 # MAI · Trợ lý AI Khối KD Online VN (`AG-MAI-KDONLINE`)
 
-Owner: **minhnd@hapas.vn** *(TODO: đổi sang email Head of Online Business nếu owner là người đó)* ·
+Owner: **minhnd@hapas.vn** (Head of Online Business — đã xác nhận 12/08/2026) ·
 Squad: `SQ-KD-ONLINE` · connect: **bot** · Branch team: `feature/vn-agent-mai`
 
 2 brand **HAPAS + MATE MADE** · 3 ngành **Túi xách · Trang sức · Nước hoa**.
@@ -104,6 +104,6 @@ Stub trả về `status: not_implemented` + phase — **không bao giờ trả d
 |---|---|---|
 | Demo Phase 0 | Nạp file tri thức vào `kb/` | Các PM ngành + TP Digital |
 | Dòng 9 phân công | Chốt PIC People Ops Khối KD Online | Head of Online Business |
-| Manifest | Xác nhận owner email của agent | Head of Online Business |
 | Phase 1 (B8) | Chốt Ads Manager / sàn dùng API hay export CSV | TP Digital Perf. |
-| Chạy thật | Xin `LSR_ENROLL_TOKEN` + gán kênh Telegram ở Console | Admin platform |
+| Nguồn số | Base "LSR Control Tower" bật quyền nâng cao → API thấy 0 bảng. Cấp role chỉ đọc cho identity của MAI | Base admin |
+| Chạy thật | Xin `LSR_ENROLL_TOKEN` + tài khoản console (role moderator) + tên bot Telegram | Admin platform (`ntranthi`) |
