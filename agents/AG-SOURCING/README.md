@@ -48,10 +48,23 @@ python3 lark_link.py --resolve linhntt@hapas.vn      # email -> open_id
 DRY_RUN=false python3 lark_link.py --send oc_xxx "ping"   # gửi thử (cân nhắc: gửi thật vào nhóm)
 ```
 
-Còn 2 việc cần người làm (không tự động được):
-1. **Bật Event Subscription** `im.message.receive_v1` trong Lark Developer Console
-   (+ scope: `im:message`, `im:message:send_as_bot`, `im:chat:readonly`, `contact:user.id:readonly`)
-   để bot nhận được tin trong nhóm.
-2. **Admin platform gán Ingress** `channel=lark` + 2 `chat_id` trên cho `AG-SOURCING`, sau khi
-   enroll xong (`scripts/lsr_adopt.py`). Lúc chạy thật consumer.py **không cần** app_secret —
-   job Lark vào qua `/v1/self/jobs`, trả lời qua `/v1/self/jobs/{id}/reply`.
+Còn việc cần người làm (không tự động được):
+
+**a) Em tự làm — trong Lark Developer Console:** bật Event Subscription `im.message.receive_v1`
++ scope `im:message`, `im:message:send_as_bot`, `im:chat:readonly`, `contact:user.id:readonly`.
+
+**b) Cần maintainer (core, ngoài phạm vi PR agent)** — theo cơ chế đa-app Lark ở
+`docs/TESTCASES.md §14`, app phụ muốn nhận/trả tin cần 4 thứ:
+
+| # | Việc | Ở đâu |
+|---|---|---|
+| 1 | `NIHAO_LARK_APP_ID=cli_aaf6ce7c8d38deed` + `NIHAO_LARK_APP_SECRET=...` | `/opt/lsr-platform/.env` trên VM |
+| 2 | Ghép app vào `LARK_EXTRA_APPS` (JSON app_id→secret) của `platform_api` | `infra/lsr-platform/docker-compose.yml` |
+| 3 | Container long-connection cho app này (mẫu: `gateway_sawadee`) | `infra/lsr-platform/docker-compose.yml` |
+| 4 | `routing_binding` với `app_id=cli_aaf6ce7c8d38deed` + 2 chat_id → `AG-SOURCING` | Console → Ingress |
+
+Thiếu (1)/(2) thì platform trả lỗi rõ *"app … chưa có secret trên VM"* và **không** gửi bằng bot
+sai (TH.3b) — nên không có rủi ro trả lời lẫn bot.
+
+Lúc chạy thật consumer.py **không cần** app_secret: job Lark vào qua `/v1/self/jobs` (kèm `app_id`
+nguồn), trả lời qua `/v1/self/jobs/{id}/reply` → platform tự chọn **đúng bot đã nhận tin** (TH.2b).
