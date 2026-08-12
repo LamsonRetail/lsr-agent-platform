@@ -1,0 +1,49 @@
+apiVersion: lsr/v1
+agent:
+  id: AG-CUNG-UNG
+  name: Trợ lý Cung Ứng
+  version: 0.1.0
+  owner: trinm@hapas.vn           # OWNER thật của agent — auth dùng subscription của người này
+  squad: SQ-CUNGUNG
+  is_squad_agent: true      # agent chính của squad Cung Ứng — squad cần ≥1 agent mới đủ điều kiện đánh giá
+  connect_mode: bot     # bot | user
+  description: >
+    Đầu mối tri thức/dữ liệu chung cho team Cung Ứng (ai trong team cũng hỏi được,
+    trả lời có trích dẫn nguồn, không bịa) + trợ lý biên bản họp (transcript → draft
+    → xin chủ trì xác nhận → tạo task + lưu vào kho tri thức).
+
+lark:
+  connect_mode: bot
+  bot:
+    app: platform-shared
+    chat_ids: []            # điền khi add bot vào (các) nhóm Lark của team Cung Ứng
+    event_webhook: https://collector.lsr.internal/lark/events
+
+runtime:
+  sdk: claude-agent-sdk
+  auth: subscription        # BẮT BUỘC: đăng nhập subscription của OWNER (claude login /
+                            # setup-token). KHÔNG dùng api key, KHÔNG dùng auth chung platform.
+  model: claude-sonnet-5
+
+prompt:                     # con trỏ version prompt — rollback = đổi con trỏ (git-backed)
+  path: system_prompt.md
+  version: 0.1.0
+  ref: main
+
+skills:                     # MCP tự do — chỉ khai báo + log
+  - {name: resource-index, type: builtin}   # kho tri thức Cung Ứng
+  - {name: lark-minutes,   type: mcp}       # lấy transcript/minutes cuộc họp
+  - {name: lark-docx,      type: mcp}       # soạn/ghi biên bản
+  - {name: lark-task,      type: mcp}       # tạo task sau họp
+  - {name: lark-im,        type: mcp}       # gửi tin nhắn xin xác nhận
+
+telemetry:
+  enabled: true             # BẮT BUỘC (control point) — agent không gửi trace = không golive
+  collector: https://collector.lsr.internal
+
+resources:
+  managed_folder: cung-ung-knowledge   # TBD — đổi theo tên thật khi team Cung Ứng confirm nguồn dữ liệu
+
+tests:
+  suite: tests/agent_tests.yaml
+schedule: []
