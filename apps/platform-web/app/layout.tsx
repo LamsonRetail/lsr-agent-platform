@@ -17,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/">Platform</Link>
             <Link href="/builder">Builder</Link>
             <Link href="/jobs">Ingress</Link>
+            <Link href="/connectors">Connectors</Link>
             <Link href="/model-auth">Model Auth</Link>
             <Link href="/cost">Chi phí</Link>
             <Link href="/health">Sức khoẻ</Link>

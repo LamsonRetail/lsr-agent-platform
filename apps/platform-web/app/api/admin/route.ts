@@ -28,6 +28,9 @@ const ALLOWED = [
   /^\/v1\/agents\/[^/]+\/versions$/,
   /^\/v1\/agents\/[^/]+\/versions\/[0-9]+\/publish$/,
   /^\/v1\/agents\/[^/]+\/rollback$/,
+  // P5/P6: cấp-thu quyền connector và quyền gọi agent-agent
+  /^\/v1\/connectors\/grant$/,
+  /^\/v1\/a2a\/grant$/,
 ];
 
 export async function POST(req: Request) {

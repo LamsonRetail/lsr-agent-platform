@@ -68,6 +68,10 @@ export async function versionResolve(id: string, env = "prod") {
   return safe(() => jgetAdmin(`${P}/v1/agents/${id}/versions/resolve?env=${env}`),
     { agent_id: id, env, version: null, config: null });
 }
+// P5: Connector registry + usage
+export async function connectorsList() {
+  return safe(() => jgetAdmin(`${P}/v1/connectors`), { connectors: [], grants: [], usage_7d: [] });
+}
 // P2: Model Auth pool
 export async function modelCredentials() {
   return safe(() => jgetAdmin(`${P}/v1/model-auth/credentials`),

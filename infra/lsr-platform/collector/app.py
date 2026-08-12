@@ -257,6 +257,31 @@ def ingest(trace: dict, authorization: str = Header(default="")) -> dict:
                 error,
             ),
         )
+        # P5 metering: nổ từng tool call thành dòng tool_usage (nguồn số liệu chi phí/
+        # hiệu quả theo SKILL). Best-effort — lỗi ở đây không được làm hỏng ingest trace.
+        try:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS tool_usage (
+                    id bigserial PRIMARY KEY, agent_id text, connector_id text, tool text,
+                    job_id bigint, run_id text, latency_ms int, ok boolean DEFAULT true,
+                    error text, tokens_est int DEFAULT 0, created_at timestamptz DEFAULT now()
+                )
+                """
+            )
+            for c in tcs:
+                if not isinstance(c, dict):
+                    continue
+                conn.execute(
+                    "INSERT INTO tool_usage(agent_id, connector_id, tool, run_id, "
+                    "latency_ms, ok, error, tokens_est) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (trace.get("agent_id"), c.get("connector") or "claude_code",
+                     str(c.get("name") or c.get("tool") or "?")[:120],
+                     trace.get("run_id"), c.get("duration_ms"),
+                     c.get("ok") is not False, str(c.get("error") or "")[:300],
+                     int(c.get("tokens_est") or 0)))
+        except Exception:
+            pass
         conn.commit()
     return {"ok": True, "total_tokens": it + ot, "pii_redacted": pii_flags, "status": status}
 

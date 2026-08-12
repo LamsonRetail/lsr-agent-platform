@@ -823,6 +823,98 @@ def _ensure_schema() -> None:
                          "USING GIN (lower(coalesce(title,'')) gin_trgm_ops)")
         except Exception:
             pass
+        # ================= P5: Connector registry + metering =================
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS connectors (
+                connector_id text PRIMARY KEY,
+                kind         text,               -- lark|data|web|social|core_system|...
+                name         text,
+                config_ref   text,               -- tham chiếu cấu hình/secret trên VM
+                status       text DEFAULT 'active',
+                enforce      boolean DEFAULT true,   -- true = phải có grant mới gọi được
+                note         text,
+                created_at   timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS connector_grants (
+                agent_id     text NOT NULL REFERENCES agents(agent_id) ON DELETE CASCADE,
+                connector_id text NOT NULL REFERENCES connectors(connector_id) ON DELETE CASCADE,
+                scope        text DEFAULT 'use',
+                granted_by   text,
+                granted_at   timestamptz DEFAULT now(),
+                PRIMARY KEY (agent_id, connector_id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tool_usage (
+                id           bigserial PRIMARY KEY,
+                agent_id     text,
+                connector_id text,
+                tool         text,
+                job_id       bigint,
+                run_id       text,
+                latency_ms   int,
+                ok           boolean DEFAULT true,
+                error        text,
+                tokens_est   int DEFAULT 0,
+                created_at   timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_usage_agent ON tool_usage(agent_id, created_at DESC)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_usage_conn ON tool_usage(connector_id, created_at DESC)")
+        # Đăng ký 2 connector đang chạy thật + khung cho các connector sắp làm.
+        for cid, kind, name, enforce in (
+            ("lark", "lark", "Lark Suite (IM/Doc/Base)", True),
+            ("bigquery", "data", "BigQuery AI_DB", True),
+            ("web_search", "web", "Web search/crawl (khung)", True),
+            ("social", "social", "TikTok/Meta/IG (khung)", True),
+            ("core_system", "core_system", "Sapo/Misa/Vietful (khung)", True),
+        ):
+            conn.execute(
+                "INSERT INTO connectors(connector_id, kind, name, enforce) VALUES (%s,%s,%s,%s) "
+                "ON CONFLICT (connector_id) DO NOTHING", (cid, kind, name, enforce))
+        # Backfill: agent đang dùng Lark trước khi có registry → cấp grant để KHÔNG gãy.
+        conn.execute(
+            "INSERT INTO connector_grants(agent_id, connector_id, granted_by) "
+            "SELECT agent_id, 'lark', 'migration' FROM agents ON CONFLICT DO NOTHING")
+        # ================= P6: Directory + A2A =================
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS a2a_grants (
+                caller_id  text NOT NULL REFERENCES agents(agent_id) ON DELETE CASCADE,
+                target_id  text NOT NULL REFERENCES agents(agent_id) ON DELETE CASCADE,
+                scope      text DEFAULT 'call',
+                granted_by text,
+                granted_at timestamptz DEFAULT now(),
+                PRIMARY KEY (caller_id, target_id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS a2a_requests (
+                req_id     text PRIMARY KEY,
+                caller_id  text,
+                target_id  text,
+                task       text,
+                payload    jsonb,
+                job_id     bigint,
+                status     text DEFAULT 'pending',  -- pending|done|failed|expired
+                result     jsonb,
+                hop        int DEFAULT 1,
+                created_at timestamptz DEFAULT now(),
+                updated_at timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_a2a_caller ON a2a_requests(caller_id, created_at DESC)")
         # Migrate 1 lần: agent cũ có prompt_version/prompt_ref → sinh version v1 (P3.8.1)
         conn.execute(
             """
@@ -1764,6 +1856,11 @@ def lark_send(body: dict, authorization: str = Header(default="")) -> dict:
     markdown = body.get("markdown") or ""
     if not to or not (text or markdown):
         raise HTTPException(status_code=400, detail="cần 'to' và 'text' hoặc 'markdown'")
+    # P5: adapter chuẩn — kiểm quyền connector trước khi ra ngoài + đo usage.
+    _t0 = time.time()
+    with _db() as conn:
+        _require_connector(conn, agent_id, "lark", "send")
+        conn.commit()
 
     if to_type == "email":
         token = _lark_token()
@@ -1786,6 +1883,8 @@ def lark_send(body: dict, authorization: str = Header(default="")) -> dict:
     with _db() as conn:
         _audit(conn, agent_id, "lark_send", "lark", f"{id_type}:{receive_id[:24]}",
                {"ok": ok, "detail": detail, "via": to_type})
+        _meter(conn, agent_id, "lark", "send", ok=ok,
+               latency_ms=int((time.time() - _t0) * 1000), error="" if ok else detail)
         conn.commit()
     if not ok:
         raise HTTPException(status_code=502, detail=f"Lark từ chối: {detail}")
@@ -2765,6 +2864,269 @@ def self_facts_list(user_ref: str, authorization: str = Header(default="")) -> l
             "SELECT fact, source, updated_at FROM user_facts WHERE agent_id=%s AND user_ref=%s "
             "ORDER BY updated_at DESC", (agent_id, user_ref)).fetchall()
     return [dict(r) for r in rows]
+
+
+# ==================== P5: Connector registry + usage metering ====================
+# Mỗi connector = 1 adapter chuẩn (auth · schema · rate-limit · error-map · audit · metering).
+# Agent chỉ gọi được connector đã được CẤP QUYỀN — thu quyền là chặn ngay, không cần restart.
+
+def _meter(conn, agent_id: str, connector_id: str, tool: str, *, ok: bool = True,
+           latency_ms: int | None = None, error: str = "", job_id=None,
+           run_id: str = "", tokens_est: int = 0) -> None:
+    """Ghi 1 dòng usage — best-effort, không làm hỏng request."""
+    try:
+        conn.execute(
+            "INSERT INTO tool_usage(agent_id, connector_id, tool, job_id, run_id, "
+            "latency_ms, ok, error, tokens_est) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            (agent_id, connector_id, tool, job_id, run_id or None, latency_ms, ok,
+             (error or "")[:300], tokens_est))
+    except Exception:
+        pass
+
+
+def _require_connector(conn, agent_id: str, connector_id: str, tool: str = "") -> None:
+    """Chặn nếu agent chưa được cấp quyền connector (khi connector bật enforce)."""
+    c = conn.execute("SELECT status, enforce FROM connectors WHERE connector_id=%s",
+                     (connector_id,)).fetchone()
+    if not c:
+        return                              # connector chưa đăng ký → không chặn
+    if c["status"] != "active":
+        _meter(conn, agent_id, connector_id, tool, ok=False, error="connector inactive")
+        _audit(conn, agent_id, "connector_denied", "connector", connector_id,
+               {"reason": "connector inactive"})
+        conn.commit()          # PHẢI commit trước khi raise, nếu không dấu vết bị rollback
+        raise HTTPException(status_code=503, detail=f"connector '{connector_id}' đang tắt")
+    if not c["enforce"]:
+        return
+    g = conn.execute("SELECT 1 FROM connector_grants WHERE agent_id=%s AND connector_id=%s",
+                     (agent_id, connector_id)).fetchone()
+    if not g:
+        _meter(conn, agent_id, connector_id, tool, ok=False, error="no grant")
+        _audit(conn, agent_id, "connector_denied", "connector", connector_id,
+               {"reason": "chưa được cấp quyền", "tool": tool})
+        conn.commit()          # ghi nhận lần bị chặn TRƯỚC khi raise (không mất audit)
+        raise HTTPException(
+            status_code=403,
+            detail=f"agent chưa được cấp quyền connector '{connector_id}' — "
+                   f"nhờ admin cấp ở Console → Connectors")
+
+
+@app.get("/v1/connectors")
+def connectors_list(authorization: str = Header(default="")) -> dict:
+    """Danh sách connector + grant + thống kê usage 7 ngày."""
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        cons = conn.execute(
+            "SELECT connector_id, kind, name, status, enforce, note FROM connectors "
+            "ORDER BY kind, connector_id").fetchall()
+        grants = conn.execute(
+            "SELECT agent_id, connector_id, scope, granted_by, granted_at "
+            "FROM connector_grants ORDER BY connector_id, agent_id").fetchall()
+        usage = conn.execute(
+            "SELECT connector_id, tool, count(*) n, sum(case when ok then 0 else 1 end) n_err, "
+            "round(avg(latency_ms)) avg_ms FROM tool_usage "
+            "WHERE created_at > now() - interval '7 days' "
+            "GROUP BY connector_id, tool ORDER BY n DESC LIMIT 50").fetchall()
+    return {"connectors": [dict(c) for c in cons], "grants": [dict(g) for g in grants],
+            "usage_7d": [dict(u) for u in usage]}
+
+
+@app.post("/v1/connectors/grant")
+def connector_grant(body: dict, authorization: str = Header(default=""),
+                    x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    """Cấp hoặc THU quyền connector cho agent (revoke=true để thu)."""
+    _require_admin(authorization)
+    _ensure_schema()
+    aid, cid = body.get("agent_id"), body.get("connector_id")
+    if not (aid and cid):
+        raise HTTPException(status_code=400, detail="cần agent_id + connector_id")
+    revoke = bool(body.get("revoke"))
+    with _db() as conn:
+        if revoke:
+            conn.execute("DELETE FROM connector_grants WHERE agent_id=%s AND connector_id=%s",
+                         (aid, cid))
+        else:
+            if not conn.execute("SELECT 1 FROM connectors WHERE connector_id=%s", (cid,)).fetchone():
+                raise HTTPException(status_code=404, detail="connector không tồn tại")
+            conn.execute(
+                "INSERT INTO connector_grants(agent_id, connector_id, scope, granted_by) "
+                "VALUES (%s,%s,%s,%s) ON CONFLICT (agent_id, connector_id) DO UPDATE "
+                "SET scope=EXCLUDED.scope, granted_by=EXCLUDED.granted_by, granted_at=now()",
+                (aid, cid, body.get("scope", "use"), x_actor or "admin"))
+        _audit(conn, x_actor or "admin", "connector_revoke" if revoke else "connector_grant",
+               "connector", cid, {"agent_id": aid})
+        conn.commit()
+    return {"ok": True, "agent_id": aid, "connector_id": cid, "revoked": revoke}
+
+
+@app.post("/v1/self/tool-usage")
+def self_tool_usage(body: dict, authorization: str = Header(default="")) -> dict:
+    """Agent tự báo 1 tool call (cho agent tự host / SDK khác)."""
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        _meter(conn, agent_id, body.get("connector_id") or "internal",
+               body.get("tool") or "?", ok=bool(body.get("ok", True)),
+               latency_ms=body.get("latency_ms"), error=body.get("error") or "",
+               job_id=body.get("job_id"), run_id=body.get("run_id") or "",
+               tokens_est=int(body.get("tokens_est") or 0))
+        conn.commit()
+    return {"ok": True}
+
+
+@app.get("/v1/self/usage")
+def self_usage(authorization: str = Header(default=""), days: int = 7) -> dict:
+    """Agent xem usage của chính mình theo connector/tool."""
+    agent_id = _require_self(authorization)
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT connector_id, tool, count(*) n, sum(case when ok then 0 else 1 end) n_err, "
+            "round(avg(latency_ms)) avg_ms, sum(tokens_est) tokens FROM tool_usage "
+            "WHERE agent_id=%s AND created_at > now() - make_interval(days => %s) "
+            "GROUP BY connector_id, tool ORDER BY n DESC", (agent_id, min(days, 90))).fetchall()
+    return {"agent_id": agent_id, "days": days, "usage": [dict(r) for r in rows]}
+
+
+# ==================== P6: Agent Directory + A2A ====================
+# Agent nhìn thấy nhau và gọi nhau KHÔNG qua frontend: A2A chỉ là một nguồn sự kiện
+# nữa vào cùng job queue (P1) → tự hưởng routing/retry/DLQ/quota/audit/kill-switch.
+
+A2A_MAX_HOP = int(os.environ.get("A2A_MAX_HOP", "3"))
+
+
+@app.get("/v1/self/directory")
+def self_directory(authorization: str = Header(default="")) -> dict:
+    """Danh bạ agent: ai đang sống, làm được gì (skills từ version), thuộc domain nào."""
+    caller = _require_self(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        rows = conn.execute(
+            """
+            SELECT a.agent_id, a.name, a.owner, a.status, a.squad,
+                   coalesce(v.skills, to_jsonb(coalesce(a.skills,'{}'))) AS skills,
+                   (SELECT 1 FROM a2a_grants g WHERE g.caller_id=%s AND g.target_id=a.agent_id) AS can_call
+            FROM agents a
+            LEFT JOIN agent_publications p ON p.agent_id=a.agent_id AND p.env='prod'
+            LEFT JOIN agent_versions v ON v.agent_id=p.agent_id AND v.version=p.version
+            WHERE a.status <> 'deactivated'
+            ORDER BY a.agent_id
+            """, (caller,)).fetchall()
+    return {"caller": caller, "agents": [
+        {"agent_id": r["agent_id"], "name": r["name"], "owner": r["owner"],
+         "status": r["status"], "squad": r["squad"], "skills": r["skills"],
+         "can_call": bool(r["can_call"]), "is_self": r["agent_id"] == caller}
+        for r in rows]}
+
+
+@app.post("/v1/a2a/grant")
+def a2a_grant(body: dict, authorization: str = Header(default=""),
+              x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    """Admin cấp/thu quyền agent A được gọi agent B."""
+    _require_admin(authorization)
+    _ensure_schema()
+    caller, target = body.get("caller_id"), body.get("target_id")
+    if not (caller and target):
+        raise HTTPException(status_code=400, detail="cần caller_id + target_id")
+    if caller == target:
+        raise HTTPException(status_code=400, detail="không cấp quyền tự gọi chính mình")
+    revoke = bool(body.get("revoke"))
+    with _db() as conn:
+        if revoke:
+            conn.execute("DELETE FROM a2a_grants WHERE caller_id=%s AND target_id=%s",
+                         (caller, target))
+        else:
+            conn.execute(
+                "INSERT INTO a2a_grants(caller_id, target_id, scope, granted_by) "
+                "VALUES (%s,%s,%s,%s) ON CONFLICT (caller_id, target_id) DO UPDATE "
+                "SET granted_by=EXCLUDED.granted_by, granted_at=now()",
+                (caller, target, body.get("scope", "call"), x_actor or "admin"))
+        _audit(conn, x_actor or "admin", "a2a_revoke" if revoke else "a2a_grant",
+               "a2a", f"{caller}->{target}", {})
+        conn.commit()
+    return {"ok": True, "caller_id": caller, "target_id": target, "revoked": revoke}
+
+
+@app.post("/v1/self/a2a/{target_id}")
+def a2a_call(target_id: str, body: dict, authorization: str = Header(default=""),
+             x_hop: str = Header(default="", alias="X-A2A-Hop")) -> dict:
+    """Agent gọi agent khác. Đẩy job channel=a2a vào CÙNG queue; caller poll kết quả."""
+    caller = _require_self(authorization)
+    _ensure_schema()
+    if target_id == caller:
+        raise HTTPException(status_code=400, detail="không tự gọi chính mình")
+    try:
+        hop = int(x_hop or body.get("hop") or 1)
+    except Exception:
+        hop = 1
+    if hop > A2A_MAX_HOP:
+        raise HTTPException(status_code=429,
+                            detail=f"vượt giới hạn {A2A_MAX_HOP} chặng A2A (chống vòng lặp)")
+    task = (body.get("task") or "").strip()
+    if not task:
+        raise HTTPException(status_code=400, detail="thiếu 'task'")
+    with _db() as conn:
+        tstatus = _agent_status(conn, target_id)
+        if not tstatus:
+            raise HTTPException(status_code=404, detail="target không tồn tại")
+        if tstatus == "deactivated":
+            raise HTTPException(status_code=409, detail="target inactive — không enqueue")
+        if not conn.execute("SELECT 1 FROM a2a_grants WHERE caller_id=%s AND target_id=%s",
+                            (caller, target_id)).fetchone():
+            _audit(conn, caller, "a2a_denied", "a2a", f"{caller}->{target_id}", {"task": task[:80]})
+            conn.commit()
+            raise HTTPException(status_code=403,
+                                detail=f"chưa được cấp quyền gọi '{target_id}'")
+        req_id = "a2a_" + secrets.token_hex(8)
+        res = _ingest(conn, channel="a2a", agent_id=target_id,
+                      session_id=req_id,
+                      payload={"text": task, "task": task, "payload": body.get("payload") or {},
+                               "from_agent": caller, "req_id": req_id, "hop": hop},
+                      reply_to={"channel": "a2a", "req_id": req_id, "caller_id": caller})
+        conn.execute(
+            "INSERT INTO a2a_requests(req_id, caller_id, target_id, task, payload, job_id, hop) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+            (req_id, caller, target_id, task[:2000], Json(body.get("payload") or {}),
+             res.get("job_id"), hop))
+        # Audit 2 chiều: bên gọi và bên phục vụ, khớp req_id để đối chiếu.
+        _audit(conn, caller, "a2a_call", "a2a", req_id,
+               {"target": target_id, "hop": hop, "job_id": res.get("job_id")})
+        _audit(conn, target_id, "a2a_serve", "a2a", req_id, {"caller": caller, "hop": hop})
+        conn.commit()
+    return {"req_id": req_id, "target_id": target_id, "job_id": res.get("job_id"),
+            "status": "queued", "hop": hop}
+
+
+@app.get("/v1/self/a2a/{req_id}")
+def a2a_result(req_id: str, authorization: str = Header(default="")) -> dict:
+    """Caller lấy kết quả lượt A2A (đọc trạng thái job + kết quả target trả về)."""
+    caller = _require_self(authorization)
+    with _db() as conn:
+        r = conn.execute(
+            "SELECT req_id, caller_id, target_id, task, job_id, status, result, hop "
+            "FROM a2a_requests WHERE req_id=%s", (req_id,)).fetchone()
+        if not r or r["caller_id"] != caller:
+            raise HTTPException(status_code=404, detail="không thấy request của agent này")
+        job = conn.execute("SELECT status, last_error FROM jobs WHERE id=%s",
+                           (r["job_id"],)).fetchone() if r["job_id"] else None
+        # Kết quả = event 'message' cuối (nội dung target trả về); nếu không có thì lấy 'done'.
+        ev = None
+        if r["job_id"]:
+            ev = conn.execute(
+                "SELECT data FROM job_events WHERE job_id=%s AND kind='message' "
+                "ORDER BY id DESC LIMIT 1", (r["job_id"],)).fetchone()
+            if not ev:
+                ev = conn.execute(
+                    "SELECT data FROM job_events WHERE job_id=%s AND kind='done' "
+                    "ORDER BY id DESC LIMIT 1", (r["job_id"],)).fetchone()
+        status = (job or {}).get("status") or r["status"]
+        if status == "done" and r["status"] != "done":
+            conn.execute("UPDATE a2a_requests SET status='done', result=%s, updated_at=now() "
+                         "WHERE req_id=%s", (Json((ev or {}).get("data") or {}), req_id))
+            conn.commit()
+    return {"req_id": req_id, "target_id": r["target_id"], "job_status": status,
+            "result": (ev or {}).get("data") or r["result"], "hop": r["hop"],
+            "error": (job or {}).get("last_error")}
 
 
 def _audit(conn, actor: str, action: str, target_type: str, target_id: str,

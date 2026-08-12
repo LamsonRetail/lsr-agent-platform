@@ -242,27 +242,40 @@
 | P4.6.1 | Hội thoại đang chạy | Đổi credential (mô phỏng cooldown → account khác) rồi gọi lại context | Ngữ cảnh **giữ nguyên 100%** (state ở Postgres, không ở model/tiến trình) |
 | P4.6.2 | Đổi version prod giữa hội thoại | Gọi context | Instruction đổi theo version mới nhưng **lịch sử hội thoại không mất** |
 
-## 9. P5 — Connector Registry + metering (⏳ kế hoạch)
+## 9. P5 — Connector Registry + metering (✅ 08-12, 8/8 pass)
 
-| ID | Kịch bản | Kỳ vọng |
-|----|----------|---------|
-| P5.1 | Gọi connector chưa được grant | 403 + audit + error-map rõ |
-| P5.2 | Cấp grant qua console → gọi lại | Chạy ngay, không restart |
-| P5.3 | Thu grant giữa chừng | Call kế tiếp bị chặn ngay |
-| P5.4 | Skill/tool hoàn toàn mới | Mỗi call có dòng tool_usage — tần suất/lỗi/chi phí theo skill |
-| P5.5 | Thêm connector mock | Chỉ đăng ký adapter — không sửa core/agent |
-| P5.6 | Connector bị rate-limit ngoài | Retry backoff; agent không sập; usage ghi lỗi |
+> Lần chạy đầu bắt **1 bug thật**: lần bị chặn quyền ghi audit/usage rồi `raise` → transaction
+> rollback, **mất sạch dấu vết** (đúng thứ cần nhất khi điều tra). Vá bằng commit trước khi raise.
 
-## 10. P6 — Directory + A2A (⏳ kế hoạch)
+| ID | Tiền đề | Thao tác | Kỳ vọng | Trạng thái |
+|----|---------|----------|---------|-----------|
+| P5.1 | Agent chưa được cấp quyền `lark` | Gọi `/v1/lark/send` | 403 + audit `connector_denied` | ✅ 08-12 |
+| P5.1b | Như trên | — | Lần bị chặn **vẫn ghi `tool_usage`** (nhìn được ai đang thiếu quyền) | ✅ 08-12 |
+| P5.2 | Admin cấp quyền qua console | Gọi lại | Qua gate ngay, **không restart** | ✅ 08-12 |
+| P5.3 | Đang có quyền | Thu quyền giữa chừng | Call kế tiếp bị chặn **ngay lập tức** | ✅ 08-12 |
+| P5.4 | Gọi connector thành công | — | `tool_usage` ghi connector+tool+latency | ✅ 08-12 |
+| P5.4b | Agent dùng **skill/tool hoàn toàn mới** | `POST /v1/self/tool-usage` ×2 (1 lỗi) | `GET /v1/self/usage` thấy tần suất + lỗi **theo skill** | ✅ 08-12 |
+| P5.5 | — | Đăng ký connector mock mới | Xuất hiện trong registry, **không sửa core/agent nào** | ✅ 08-12 |
+| P5.6 | Connector bị rate-limit ngoài | — | Retry theo backoff của adapter; agent không sập; usage ghi lỗi | ⏳ nghiệm thu khi có connector ngoài thật |
+| P5.7 | Agent Claude Code chạy tool | Trace về collector | Collector **tự nổ `tool_calls` thành `tool_usage`** (metering không cần agent làm gì) | ⏳ nghiệm thu cùng agent Claude Code thật |
 
-| ID | Kịch bản | Kỳ vọng |
-|----|----------|---------|
-| P6.1 | AG-A đọc directory | Thấy AG-B + skill/domain/status; không thấy agent deactive |
-| P6.2 | A gọi B (có grant) | Nhận kết quả; trace/audit 2 phía khớp req_id |
-| P6.3 | A gọi C (không grant) | 403 + audit denied |
-| P6.4 | Vòng lặp A→B→A | Hop 3 bị chặn, không treo queue |
-| P6.5 | Target đang deactive | Lỗi "target inactive" ngay, không enqueue |
-| P6.6 | Chi phí lượt A2A | Tính cho agent GỌI (caller-pays) trong mart |
+## 10. P6 — Agent Directory + A2A (✅ 08-12, 8/8 pass)
+
+> Lần chạy đầu bắt **1 bug thật**: A2A trả kết quả lấy nhầm event `done` (`{ok:true}`)
+> thay vì nội dung `message` → caller nhận rỗng. Đã sửa thứ tự ưu tiên event.
+
+| ID | Tiền đề | Thao tác | Kỳ vọng | Trạng thái |
+|----|---------|----------|---------|-----------|
+| P6.1 | A và B cùng active | A gọi `/v1/self/directory` | Thấy B kèm skill/status + cờ `can_call` | ✅ 08-12 |
+| P6.1b | B bị deactivate | A đọc directory | **Không** thấy B | ✅ 08-12 |
+| P6.2 | Đã cấp `a2a_grant` A→B | A gọi `/v1/self/a2a/B` | Job `channel=a2a` vào **cùng queue**; audit **2 chiều** khớp `req_id` | ✅ 08-12 |
+| P6.2b | B lấy job, trả kết quả | A gọi `GET /v1/self/a2a/{req_id}` | Job mang `from_agent=A`; A nhận đúng nội dung B trả | ✅ 08-12 |
+| P6.2c | — | Agent khác đọc kết quả của A | 404 — không rò kết quả | ✅ 08-12 |
+| P6.3 | Chưa có grant | A gọi B | 403 + audit `a2a_denied` | ✅ 08-12 |
+| P6.4 | — | Gọi với `X-A2A-Hop: 4` | 429 (chặn vòng lặp, giới hạn 3 chặng) | ✅ 08-12 |
+| P6.4b | — | Tự gọi chính mình | 400 | ✅ 08-12 |
+| P6.5 | Target đang deactivate | A gọi B | 409 **và KHÔNG enqueue** (không rác queue) | ✅ 08-12 |
+| P6.6 | Lượt A2A tiêu tốn token | — | Chi phí tính cho agent **GỌI** (caller-pays) trong mart | ⏳ P7 (mart) |
 
 ## 11. P7 — Platform agents + HITL + Mart (⏳ kế hoạch)
 
@@ -278,4 +291,4 @@
 
 ---
 
-**Tổng:** 14 CORE + 6 Brain + 6 Lark + 8 P1 + 9 P2 + 8 Stable + 33 P3 + 30 P4 = **114 case đã có** (100 ✅ nghiệm thu, 14 ⏳ chờ điều kiện ngoài/UI thủ công) · P5–P7 = **18 case kế hoạch**. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.
+**Tổng:** 14 CORE + 6 Brain + 6 Lark + 8 P1 + 9 P2 + 8 Stable + 33 P3 + 30 P4 + 9 P5 + 10 P6 = **133 case đã có** (116 ✅ nghiệm thu, 17 ⏳ chờ điều kiện ngoài/UI thủ công) · P7 = **7 case kế hoạch**. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.
