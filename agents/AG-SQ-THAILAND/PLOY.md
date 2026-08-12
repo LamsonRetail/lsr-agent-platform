@@ -111,8 +111,14 @@ Vinh sở hữu trên Lark Developer Console, đã Enabled + published).
 
 ## 7. Bẫy đã biết (đọc trước khi test)
 
-- Câu chứa **"chốt"/"duyệt"** bị gate xác nhận biên bản bắt trước khi tới tool TH
-  (`minutes.is_confirm` khớp chuỗi con) — hỏi mốc thì dùng "hạn", "deadline".
+- Gate confirm biên bản đã **chống phủ định + idempotent** (fix 12/08 tối, sau review):
+  "khoan, **chưa** chốt nhé" / câu hỏi "ai duyệt?" không kích hoạt chốt; chốt lần 2 bị
+  chặn để khỏi lưu kho + đề xuất task trùng; "hạn chốt KOC" khi chưa có nháp đi thẳng
+  vào tool mốc. Regression: `python3 tests/selfcheck_flows.py`.
+- Dán nội dung họp bằng text ra thẳng biên bản nháp — hint ("họp xong", "nội dung
+  họp"…) hoặc text >200 ký tự có ≥2 dấu hiệu họp (quyết định/giao việc/hạn).
+- Chat thử tại máy **không cần token/admin**: `python3 chat_local.py` (dán nhiều dòng:
+  gõ `<<<` rồi dán, kết thúc `>>>`; bật model: `LSR_MODEL_MODE=auto`).
 - Hai base target song song: **9,3M THB (tháng) · 8,0M THB (ngày, rebase 22/07)** —
   mọi số phải nói rõ base nào.
 - %MTD = target lũy kế pro-rata theo ngày, không phải actual ÷ target cả tháng.

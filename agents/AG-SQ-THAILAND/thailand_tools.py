@@ -385,24 +385,26 @@ _MM_Q = ("mate made", "matemade")
 
 
 def route(q_low: str) -> str | None:
-    """Định tuyến câu hỏi bối cảnh TH → tool tương ứng. Không khớp → None (consumer đi tiếp).
+    """Định tuyến câu hỏi bối cảnh TH → tool. Câu chạm NHIỀU nhóm thì ghép đủ các phần
+    (vd "ưu tiên gì theo mốc BST và lịch mùa vụ" → mốc + mùa vụ). Không khớp → None.
 
     Gọi SAU các gate của consumer (confirm biên bản, task, save, nhạy cảm) — thứ tự
     trong consumer.answer(). Lưu ý: câu chứa 'chốt'/'duyệt' bị gate confirm bắt trước.
     """
+    parts = []
     if any(k in q_low for k in _CONFLICT_Q):
-        return th_milestone_conflict()
-    if any(k in q_low for k in _MILESTONE_Q):
-        return th_milestone_check()
+        parts.append(th_milestone_conflict())
+    elif any(k in q_low for k in _MILESTONE_Q):   # check đã kèm conflict ở cuối
+        parts.append(th_milestone_check())
     if any(k in q_low for k in _SEASON_Q):
-        return th_season_calendar(filter_q=q_low)
+        parts.append(th_season_calendar(filter_q=q_low))
     if any(k in q_low for k in _TARGET_Q):
-        return th_base_targets()
+        parts.append(th_base_targets())
     if any(k in q_low for k in _KB_Q):
-        return th_kb_index()
+        parts.append(th_kb_index())
     if any(k in q_low for k in _MM_Q):
-        return th_context(brand="mm")
-    return None
+        parts.append(th_context(brand="mm"))
+    return "\n\n".join(parts) if parts else None
 
 
 # ----------------------------- CLI: --list / --call -----------------------------

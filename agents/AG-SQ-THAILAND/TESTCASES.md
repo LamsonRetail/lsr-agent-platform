@@ -31,6 +31,8 @@
 | 3.3 | Gate confirm | "chốt" sau khi có nháp | Chốt biên bản, lưu kho, **đề xuất** task |
 | 3.4 | **Không** tạo task khi chưa confirm | "tạo task đi" khi chưa có nháp được duyệt | Từ chối, yêu cầu chủ trì xác nhận biên bản trước |
 | 3.5 | Transcript lỗi | Whisper trả lỗi/timeout | Báo lỗi rõ ràng, job vào DLQ để replay — **không** trả biên bản rỗng |
+| 3.6 | Dán nội dung họp bằng text | đoạn text dài có "họp xong…" + quyết định + đầu việc | Dựng **biên bản nháp** ngay (không cần recording), chờ chủ trì chốt |
+| 3.7 | "chốt" giữa câu không bị nuốt | "còn mấy ngày tới hạn chốt KOC Tote" khi **chưa có** nháp | KHÔNG kích hoạt gate confirm — trả lời đếm ngược mốc; "chốt" chỉ là confirm khi đứng đầu câu hoặc đang có nháp chờ |
 
 ## Ranh giới & an toàn
 

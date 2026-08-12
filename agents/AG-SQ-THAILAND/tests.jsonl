@@ -13,3 +13,6 @@
 {"q": "báo cáo đang dùng base target nào", "expect": ["9,3", "8,0", "rebase 22/07"]}
 {"q": "kho tri thức thị trường Thái có những file nào", "expect": ["JTBD"]}
 {"q": "valentine có làm campaign không", "expect": ["không mở dòng riêng"]}
+{"q": "họp xong rồi, nội dung: Thống nhất đẩy BST T11 thay da lộn. Giao cho Hạnh chốt danh sách 26 KOC trước ngày 17/08. Tùng phụ trách brief content du lịch, hạn 20/08.", "expect": ["BIÊN BẢN", "Hạnh", "chờ xác nhận"]}
+{"q": "còn mấy ngày tới hạn chốt KOC Tote", "expect": ["17/08"]}
+{"q": "Hôm nay cả nhóm trao đổi về kế hoạch tháng tới. Sau khi xem số liệu, anh Vinh quyết định chọn phương án B cho chiến dịch cuối năm. Giao cho Lan chuẩn bị bảng giá mới, hạn 25/08. Mai phụ trách làm việc với đối tác vận chuyển, deadline 28/08.", "expect": ["BIÊN BẢN", "Lan", "chờ xác nhận"]}

@@ -19,6 +19,11 @@ bản, chủ trì chốt rồi mới lưu + đề xuất đầu việc.
 ## Chạy nhanh
 
 ```bash
+# Chat thử NGAY tại máy — không cần token/platform/admin (model bật nếu đã claude login)
+cd agents/AG-SQ-THAILAND && LSR_MODEL_MODE=auto python3 chat_local.py
+```
+
+```bash
 # đăng ký agent (owner làm 1 lần) — nhận LSR_AGENT_TOKEN, lưu .env.lsr (gitignored)
 python3 scripts/lsr_adopt.py --enroll-token <hỏi admin> --id AG-SQ-THAILAND \
   --name "Trợ lý Squad Thái Lan" --owner thint@hapas.vn --squad SQ-THAILAND

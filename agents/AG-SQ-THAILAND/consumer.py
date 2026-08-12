@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -36,6 +37,8 @@ AGENT_ID = os.environ.get("LSR_AGENT_ID", "AG-SQ-THAILAND")
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() != "false"
 
 RECORDING_TYPES = {"audio", "media", "file", "video"}
+TRANSCRIPT_HINTS = ("họp xong", "hop xong", "nội dung họp", "noi dung hop", "biên bản:",
+                    "transcript", "ghi chú họp", "tóm tắt họp")
 GREET_WORDS = ("chào", "chao", "hello", "hi ", "xin chao")
 CAPABILITY_WORDS = ("làm được gì", "lam duoc gi", "giúp gì", "giup gi", "bạn là ai")
 TASK_WORDS = ("tạo task", "tao task", "giao việc", "tạo đầu việc")
@@ -61,6 +64,33 @@ def api(method: str, path: str, payload=None, timeout: int = 40):
 
 # ----------------------------- định tuyến (phần nghiệp vụ) -----------------------------
 
+# Phủ định đứng gần chữ chốt/duyệt → KHÔNG phải confirm ("khoan, chưa chốt nhé").
+_NEG_CONFIRM = re.compile(
+    r"(khoan|chưa|chua|không|khong|đừng|dung|dừng|hoãn|hoan)[^.!?\n]{0,24}"
+    r"(chốt|chot|duyệt|duyet|confirm)")
+_MEETING_MARKERS = minutes.DECISION_WORDS + minutes.TASK_WORDS
+
+
+def is_transcript(q: str, low: str) -> bool:
+    """Text dán tay có phải nội dung họp không (để dựng biên bản nháp)."""
+    if len(q) > 80 and any(h in low for h in TRANSCRIPT_HINTS):
+        return True
+    return len(q) > 200 and sum(1 for w in _MEETING_MARKERS if w in low) >= 2
+
+
+def is_real_confirm(low: str, ctx: dict) -> bool:
+    """Gate HITL: chỉ coi là chủ trì chốt khi không có phủ định và không phải câu hỏi."""
+    if not minutes.is_confirm(low):
+        return False
+    if _NEG_CONFIRM.search(low) or low.rstrip().endswith("?"):
+        return False
+    return bool(minutes.find_draft(ctx)) or low.startswith(minutes.CONFIRM_WORDS)
+
+
+def _is_confirmed(draft_text: str) -> bool:
+    return "Trạng thái: đã chốt" in draft_text
+
+
 def answer(q: str, ctx: dict, payload: dict) -> str:
     low = q.lower().strip()
 
@@ -68,15 +98,31 @@ def answer(q: str, ctx: dict, payload: dict) -> str:
     if payload.get("message_type") in RECORDING_TYPES:
         return handle_recording(q, payload)
 
-    # --- Luồng 3: chủ trì chốt biên bản ---
-    if minutes.is_confirm(low):
+    # --- Luồng 3: dán NỘI DUNG họp bằng text → biên bản nháp (USECASE: "hoặc nội dung
+    # trao đổi"). Phải đứng TRƯỚC gate confirm: transcript hay chứa chữ "chốt" giữa câu.
+    # Nhận diện 2 cách: có hint rõ ("họp xong", "nội dung họp"…) HOẶC text dài có ≥2 dấu
+    # hiệu cuộc họp (quyết định/giao việc/hạn) — transcript thô không cần "từ khoá thần chú".
+    if is_transcript(q, low):
+        draft = minutes.build_draft(q, "Họp squad Thái Lan (nội dung dán tay)")
+        return (draft.render() +
+                "\n\nNhờ **chủ trì** kiểm rồi trả lời `chốt` để tôi lưu kho và đề xuất đầu việc.")
+
+    # --- Luồng 3: chủ trì chốt biên bản. Chỉ là confirm khi: có chữ chốt/duyệt, KHÔNG bị
+    # phủ định ("khoan/chưa/không/đừng… chốt"), không phải câu hỏi, và (đang có nháp chờ
+    # hoặc chữ chốt đứng đầu câu — tránh nuốt "hạn chốt KOC"). ---
+    if is_real_confirm(low, ctx):
         return handle_confirm(ctx)
 
     # --- Gate: không tạo task khi chưa có biên bản được chốt ---
     if any(w in low for w in TASK_WORDS):
-        if not minutes.find_draft(ctx):
+        draft = minutes.find_draft(ctx)
+        if not draft:
             return ("Chưa có biên bản nào được **xác nhận**. Quy trình: recording → biên bản "
                     "nháp → chủ trì xác nhận (`chốt`) → khi đó tôi mới đề xuất đầu việc.")
+        if _is_confirmed(draft):
+            return ("Biên bản gần nhất **đã chốt** và đầu việc đã được đề xuất lên console "
+                    "(chờ duyệt ở đó). Giao việc mới ngoài biên bản sẽ có ở luồng giao việc "
+                    "Phase 2 (`th_assignment_create`).")
         return ("Biên bản chưa được chủ trì **xác nhận**. Nhờ chủ trì trả lời `chốt` để tôi "
                 "đề xuất đầu việc.")
 
@@ -142,11 +188,18 @@ def fetch_recording(payload: dict) -> bytes | None:
 
 
 def handle_confirm(ctx: dict) -> str:
-    """Chủ trì chốt → lưu biên bản vào kho + ĐỀ XUẤT task (không tự tạo)."""
+    """Chủ trì chốt → lưu biên bản vào kho + ĐỀ XUẤT task (không tự tạo).
+
+    Idempotent: biên bản đã chốt thì không chốt lại (tránh lưu kho + đề xuất task trùng).
+    Reply kèm nguyên văn biên bản ĐÃ CHỐT — để lượt sau find_draft() thấy đúng trạng thái.
+    """
     draft = minutes.find_draft(ctx)
     if not draft:
         return ("Chưa có biên bản nháp nào để **chốt**. Anh/chị gửi recording hoặc dán nội "
                 "dung cuộc họp, tôi dựng biên bản trước đã.")
+    if _is_confirmed(draft):
+        return ("Biên bản gần nhất **đã chốt trước đó** — không chốt lại để tránh trùng đề "
+                "xuất. Cần biên bản mới thì gửi recording / dán nội dung cuộc họp mới.")
 
     final = minutes.confirm(draft)
     title = final.splitlines()[0].replace(minutes.HEADER, "").strip() or "Biên bản squad Thái Lan"
@@ -157,7 +210,8 @@ def handle_confirm(ctx: dict) -> str:
         api("POST", "/v1/self/actions/propose",
             {"kind": "create_task", "summary": t, "source": "AG-SQ-THAILAND/minutes"})
 
-    return (f"Đã **chốt** biên bản và lưu vào kho squad Thái Lan (chờ duyệt).\n"
+    return (final +
+            f"\n\nĐã **chốt** biên bản và lưu vào kho squad Thái Lan (chờ duyệt).\n"
             f"Đã đề xuất {len(tasks)} đầu việc — duyệt trên console để tạo task. ✅")
 
 
