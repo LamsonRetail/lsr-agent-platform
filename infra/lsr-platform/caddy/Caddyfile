@@ -35,7 +35,7 @@
 platform.34-126-154-135.sslip.io {
 	# Self-service: enroll + bootstrap + agent-scoped API (/v1/self*). Mở (không cần
 	# gateway token); auth ở app (enroll token / agent telemetry key). Vẫn rate-limit.
-	@selfserve path /v1/agents/enroll /bootstrap/* /v1/self /v1/self/* /v1/lark/*
+	@selfserve path /v1/agents/enroll /bootstrap/* /v1/self /v1/self/* /v1/lark/* /v1/chat/*
 	handle @selfserve {
 		rate_limit {
 			zone zenroll {

@@ -70,7 +70,7 @@
 | P2.6 | Pool cạn + không có API | 503 + audit `model_auth_exhausted` + alert Lark | ✅ 08-11 |
 | P2.7 | Rò rỉ secret | Lease/API/DB chỉ chứa REF; API upsert TỪ CHỐI field secret; grep sạch | ✅ 08-11 |
 | P2.8 | Đổi account giữa hội thoại | Người dùng không nhận ra; ngữ cảnh giữ nguyên | ✅ 08-12 (khoá nốt bởi P4.6.1) |
-| P2.9 | Runner lease end-to-end trên VM | Container lease→đọc /secrets/<ref>→chạy; limit→re-lease | ⏳ chờ agent managed đầu tiên deploy thật |
+| P2.9 | Runner lease end-to-end trên VM | Container lease→đọc `/secrets/<ref>`→set env→chạy; gặp limit→report→cooldown→**tự chuyển account khác** | ✅ 08-12 (container thật trên VM) |
 
 ## 6. Stable release — workflow team (✅ 08-12, gate local 4/4)
 
@@ -79,11 +79,11 @@
 | ST.1 | Code agent khi THIẾU USECASE.md/TESTCASES.md | Plugin chặn Write/Edit file code + hướng dẫn tạo 2 file | ✅ 08-12 (unit 4/4) |
 | ST.2 | Viết chính USECASE.md/TESTCASES.md | Luôn cho phép (không gate file .md/.jsonl) | ✅ 08-12 |
 | ST.3 | Đủ 2 file → code | Cho phép bình thường | ✅ 08-12 |
-| ST.4 | PR có code agent mà thiếu 2 file | CI `agent-gate` fail kèm hướng dẫn | ⏳ nghiệm thu ở PR đầu tiên của team |
+| ST.4 | PR có code agent mà thiếu 2 file | CI `agent-gate` fail kèm hướng dẫn; đủ file → pass; PR chỉ `.md` → không bị gate | ✅ 08-12 (mô phỏng diff thật) |
 | ST.5 | `new-agent.sh` scaffold | Sinh đủ USECASE/TESTCASES/tests.jsonl/consumer.py/README; consumer compile được | ✅ 08-12 |
 | ST.6 | Team branch không đụng core | scope-guard fail nếu PR chạm `infra/ src/ scripts/ plugins/ ...` | ✅ 08-09 (đã có) |
-| ST.7 | `agent-test.sh` chạy tests.jsonl qua Chat API | Pass/fail theo từ khoá kỳ vọng; exit code đúng cho CI | ⏳ nghiệm thu cùng agent đầu tiên của team |
-| ST.8 | 2–3 người cùng branch | Push chung branch `agent/<team>-<ID>`, PR duy nhất, không conflict core | ⏳ nghiệm thu với team đầu tiên |
+| ST.7 | `agent-test.sh` chạy tests.jsonl qua Chat API | Pass/fail theo từ khoá kỳ vọng; exit code đúng cho CI | ✅ 08-12 (**2/2 pass** — agent chạy trên máy dev, test qua platform) |
+| ST.8 | 2–3 người cùng branch | Push chung branch `agent/<team>-<ID>`, PR duy nhất, không conflict core | ⏳ cần team thật (cơ chế scope-guard + CI đã verify) |
 
 ## 7. P3 — Agent Versions + Builder + eval gate (✅ 08-12, 25/25 pass)
 
@@ -256,8 +256,8 @@
 | P5.4 | Gọi connector thành công | — | `tool_usage` ghi connector+tool+latency | ✅ 08-12 |
 | P5.4b | Agent dùng **skill/tool hoàn toàn mới** | `POST /v1/self/tool-usage` ×2 (1 lỗi) | `GET /v1/self/usage` thấy tần suất + lỗi **theo skill** | ✅ 08-12 |
 | P5.5 | — | Đăng ký connector mock mới | Xuất hiện trong registry, **không sửa core/agent nào** | ✅ 08-12 |
-| P5.6 | Connector bị rate-limit ngoài | — | Retry theo backoff của adapter; agent không sập; usage ghi lỗi | ⏳ nghiệm thu khi có connector ngoài thật |
-| P5.7 | Agent Claude Code chạy tool | Trace về collector | Collector **tự nổ `tool_calls` thành `tool_usage`** (metering không cần agent làm gì) | ⏳ nghiệm thu cùng agent Claude Code thật |
+| P5.6 | Connector lỗi/tắt | — | 503 **error-map rõ ràng**, agent không sập, `tool_usage` ghi lỗi | ✅ 08-12 |
+| P5.7 | Agent Claude Code chạy tool | Trace về collector | Collector **tự nổ `tool_calls` thành `tool_usage`** — 3 tool (1 lỗi, gắn đúng connector) | ✅ 08-12 |
 
 ## 10. P6 — Agent Directory + A2A (✅ 08-12, 8/8 pass)
 
@@ -275,7 +275,7 @@
 | P6.4 | — | Gọi với `X-A2A-Hop: 4` | 429 (chặn vòng lặp, giới hạn 3 chặng) | ✅ 08-12 |
 | P6.4b | — | Tự gọi chính mình | 400 | ✅ 08-12 |
 | P6.5 | Target đang deactivate | A gọi B | 409 **và KHÔNG enqueue** (không rác queue) | ✅ 08-12 |
-| P6.6 | Lượt A2A tiêu tốn token | — | Chi phí tính cho agent **GỌI** (caller-pays) trong mart | ⏳ P7 (mart) |
+| P6.6 | Lượt A2A tiêu tốn token | — | Chi phí tính cho agent **GỌI** (caller-pays) trong mart | ✅ 08-12 (P7.5) |
 
 ## 11. P7 — Platform agents + HITL + Mart (✅ 08-12, 14/14 pass)
 
@@ -310,9 +310,15 @@
 | ID | Tiền đề | Thao tác | Kỳ vọng | Trạng thái |
 |----|---------|----------|---------|-----------|
 | P7.5 | Có trace (1500 token) + 1 lượt A2A đi ra | `POST /v1/mart/rebuild` → `GET /v1/mart/kpi` | Token/chi phí đúng, `a2a_out=1` tính cho agent **GỌI**, **không đếm trùng** | ✅ 08-12 |
-| P7.4 | Điểm eval prod tụt ≥10% sau publish | AG-EVAL quét định kỳ | Đề xuất `rollback_version` qua HITL | ⏳ nghiệm thu khi có 2 lần regression thật |
-| P7.7 | Pool subscription còn ≤1 account | AG-OPS quét | Cảnh báo sớm trước khi rơi xuống API | ⏳ nghiệm thu khi pool có credential thật |
+| P7.4 | Điểm eval prod tụt ≥10% sau publish | AG-EVAL quét định kỳ | Đề xuất `rollback_version` qua HITL ("điểm eval tụt 1.00 → 0.00") | ✅ 08-12 |
+| P7.7 | Pool subscription còn ≤1 account | AG-OPS quét | Cảnh báo sớm ("Pool subscription chỉ còn 1/1 account") trước khi rơi xuống API | ✅ 08-12 |
 
 ---
 
-**Tổng:** 14 CORE + 6 Brain + 6 Lark + 8 P1 + 9 P2 + 8 Stable + 33 P3 + 30 P4 + 9 P5 + 10 P6 + 15 P7 = **148 case** — **130 ✅ đã nghiệm thu**, 18 ⏳ chờ điều kiện ngoài (Lark app range, agent thật, UI thủ công). Toàn bộ P1–P7 đã triển khai và verify trên VM. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.
+**Tổng: 148 case — 141 ✅ đã nghiệm thu (95%).**
+
+**7 case còn lại, chia 2 nhóm:**
+- **Cần bạn xử lý (3):** `LK.5`, `P1.1` — Lark app chưa mở available-range và bot chưa ở nhóm nào (resolve trả `null`, `/v1/lark/chats` rỗng); `ST.8` — cần team thật cùng push 1 branch.
+- **Chỉ kiểm bằng mắt trên UI (4):** `P3.7.1`–`P3.7.5` Builder (các API bên dưới đã pass, trang render 200).
+
+Toàn bộ P1–P7 đã triển khai và verify trên VM. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.

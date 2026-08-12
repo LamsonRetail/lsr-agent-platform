@@ -60,11 +60,14 @@ CMD="${AGENT_START_CMD:-echo '[lsr-agent] chưa đặt AGENT_START_CMD — giữ
 
 # Vòng chạy: nếu agent thoát vì rate-limit → báo broker → lease account khác → chạy lại.
 MAX_RELEASE=5
+LOGF=$(mktemp)
 for i in $(seq 1 $MAX_RELEASE); do
   set +e
-  out=$(bash -lc "$CMD" 2>&1); code=$?
+  # tee: log HIỆN NGAY (ops xem được agent đang chạy gì) đồng thời giữ lại để dò rate-limit.
+  bash -lc "$CMD" 2>&1 | tee "$LOGF"
+  code=${PIPESTATUS[0]}
   set -e
-  echo "$out"
+  out=$(cat "$LOGF")
   if echo "$out" | grep -qiE "rate.?limit|status 429|usage limit|quota exceeded"; then
     report_limit
     lease_credential
