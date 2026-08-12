@@ -12,38 +12,46 @@
 Cần platform đổi gì (mở đường tải file, gán ingress, cấp token...) → **mở issue**, gắn
 nhãn `agent:AG-SQ-THAILAND`, maintainer (`ntranthi`) xử lý. Xem [PLAN.md](PLAN.md) §4.
 
-## Mô hình cộng tác: FORK + PR (chặn cứng)
+## Mô hình cộng tác: BRANCH CHUNG trên repo gốc
 
-Hương và Thái giữ quyền **read** trên `LamsonRetail/lsr-agent-platform` — về mặt kỹ thuật
-**không thể push** vào repo gốc, nên không có cách nào "lỡ tay" đụng core.
+Thành viên team có quyền **write** trên `LamsonRetail/lsr-agent-platform` → clone thẳng,
+cùng push lên **branch của dự án** `agent/thailand-AG-SQ-THAILAND`. **Không commit thẳng
+main** — xong việc thì mở PR.
 
 ```bash
-# 1. Fork trên GitHub (nút Fork) → về tài khoản cá nhân, rồi:
-git clone https://github.com/<username>/lsr-agent-platform.git
+# 1. Clone repo gốc:
+git clone https://github.com/LamsonRetail/lsr-agent-platform.git
 cd lsr-agent-platform
-git remote add upstream https://github.com/LamsonRetail/lsr-agent-platform.git
 
-# 2. Cài hook chặn sớm (nhắc ngay khi commit chạm core):
+# 2. BẮT BUỘC ngay sau clone — cài hook chặn commit chạm core:
 bash scripts/install-git-hooks.sh
 
-# 3. Làm việc trên branch của dự án:
-git checkout -b agent/thailand-AG-SQ-THAILAND
+# 3. Làm việc trên branch của dự án (cả team dùng chung):
+git checkout agent/thailand-AG-SQ-THAILAND
+git pull
 
 # 4. Trước khi push, tự kiểm phạm vi:
 bash scripts/check-scope.sh --vs-main
 
-# 5. Push lên FORK của mình rồi mở PR về LamsonRetail:main
+# 5. Push lên branch dự án (KHÔNG push main):
 git push origin agent/thailand-AG-SQ-THAILAND
-gh pr create --repo LamsonRetail/lsr-agent-platform --base main
+
+# 6. Khi muốn merge vào bản stable → mở PR:
+gh pr create --base main
 ```
 
 Khi PR mở, CI chạy 2 gate của platform:
 - **scope-guard** — fail nếu PR chạm file ngoài `agents/<id>/**`, `apps/agents/<id>/**`;
 - **agent-gate** — fail nếu có code mà thiếu `USECASE.md`/`TESTCASES.md` (đã có sẵn).
 
-Cập nhật code mới nhất từ repo gốc:
+> ⚠️ Repo private + org Free ⇒ **không có branch protection**: quyền write về kỹ thuật
+> push được cả vào `main` và file core. Vì vậy kỷ luật bắt buộc: (1) cài pre-commit hook
+> ở bước 2 — commit chạm core bị chặn ngay tại máy; (2) mọi thay đổi vào `main` đi qua
+> PR để CI scope-guard kiểm. Push nhầm main/core = revert + nhắc nhở.
+
+Cập nhật bản mới nhất từ main vào branch dự án:
 ```bash
-git fetch upstream && git merge upstream/main
+git fetch origin && git merge origin/main
 ```
 
 ## Chia việc để không giẫm chân nhau (1 người / 1 file)
