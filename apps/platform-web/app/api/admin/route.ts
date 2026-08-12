@@ -34,6 +34,9 @@ const ALLOWED = [
   // P7: duyệt/từ chối đề xuất của platform agent + dựng lại mart
   /^\/v1\/actions\/[0-9]+\/decide$/,
   /^\/v1\/mart\/rebuild$/,
+  // P9: tạo agent no-code + sửa use case/test case
+  /^\/v1\/agents\/nocode$/,
+  /^\/v1\/agents\/[^/]+\/spec$/,
   // P8: quản lý tài khoản + phân quyền (API tự kiểm quyền admin)
   /^\/v1\/accounts$/,
   /^\/v1\/accounts\/[^/]+\/roles$/,

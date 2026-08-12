@@ -19,6 +19,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <nav className="nav">
             <Link href="/">Platform</Link>
             {u?.platform_role === "admin" && <Link href="/approvals">Duyệt việc</Link>}
+            {(u?.can_create_agent) && <Link href="/agents/new">+ Agent mới</Link>}
             {(u?.can_create_agent) && <Link href="/builder">Builder</Link>}
             {(u?.can_create_agent) && <Link href="/jobs">Ingress</Link>}
             {u?.platform_role === "admin" && <Link href="/connectors">Connectors</Link>}

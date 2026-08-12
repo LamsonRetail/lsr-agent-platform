@@ -264,6 +264,10 @@ def _ensure_schema() -> None:
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS auth_mode text DEFAULT 'pool'",
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS credential_id text",
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS model_fallback text",
+            # P9: no-code — platform tự chạy agent bằng instruction của version.
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS runtime text DEFAULT 'external'",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS usecase_md text",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS testcases jsonb DEFAULT '[]'::jsonb",
         ):
             conn.execute(ddl)
         # --- Test & Learn ---
@@ -1109,6 +1113,18 @@ def _ensure_schema() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_login_recent ON login_attempts(email, at DESC)")
+        # P9: token NGẮN HẠN để nocode_runtime hành động NHÂN DANH agent no-code
+        # (khoá gốc của agent chỉ lưu hash nên không lấy lại được).
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_runtime_tokens (
+                token_hash text PRIMARY KEY,
+                agent_id   text NOT NULL REFERENCES agents(agent_id) ON DELETE CASCADE,
+                expires_at timestamptz NOT NULL,
+                created_at timestamptz DEFAULT now()
+            )
+            """
+        )
         # Seed 2 admin đầu tiên — mật khẩu tạm in ra LOG của platform_api (không vào git/DB rõ).
         for em, nm in (("thint@hapas.vn", "Nguyễn Trần Thi - BOD"),
                        ("thienlq@hapas.vn", "Lê Quý Thiện")):
@@ -1526,6 +1542,12 @@ def _agent_from_token(authorization: str) -> str | None:
         with _db() as conn:
             row = conn.execute(
                 "SELECT agent_id FROM agents WHERE telemetry_key_hash=%s", (h,)).fetchone()
+            if row:
+                return row["agent_id"]
+            # Token ngắn hạn do platform cấp cho nocode_runtime (P9)
+            row = conn.execute(
+                "SELECT agent_id FROM agent_runtime_tokens WHERE token_hash=%s "
+                "AND expires_at > now()", (h,)).fetchone()
         return row["agent_id"] if row else None
     except Exception:
         return None
@@ -3420,6 +3442,102 @@ def self_facts_list(user_ref: str, authorization: str = Header(default="")) -> l
     return [dict(r) for r in rows]
 
 
+# ==================== P9: tạo agent no-code từ console ====================
+
+@app.post("/v1/agents/nocode")
+def agent_create_nocode(body: dict, authorization: str = Header(default="")) -> dict:
+    """Tạo agent KHÔNG CẦN CODE: platform tự chạy bằng instruction của version.
+
+    Bắt buộc có use case + tối thiểu 2 test case — cùng nguyên tắc với đường code.
+    """
+    p = _require_role(authorization, "moderator")
+    _ensure_schema()
+    aid = (body.get("agent_id") or "").strip().upper()
+    name = (body.get("name") or "").strip()
+    usecase = (body.get("usecase_md") or "").strip()
+    tests = body.get("testcases") or []
+    instruction = (body.get("instruction_block") or "").strip()
+    if not re.match(r"^AG-[A-Z0-9-]+$", aid):
+        raise HTTPException(status_code=400, detail="agent_id dạng AG-TEN-VIET-HOA")
+    if not name:
+        raise HTTPException(status_code=400, detail="thiếu tên agent")
+    if len(usecase) < 30:
+        raise HTTPException(status_code=422,
+                            detail="phải mô tả USE CASE trước khi tạo agent (tối thiểu 30 ký tự)")
+    valid_tests = [t for t in tests if (t or {}).get("q") and (t or {}).get("expect")]
+    if len(valid_tests) < 2:
+        raise HTTPException(status_code=422,
+                            detail="phải có tối thiểu 2 TEST CASE (câu hỏi + từ khoá kỳ vọng)")
+    if not instruction:
+        raise HTTPException(status_code=400, detail="thiếu instruction (hành vi agent)")
+    actor = p["actor"] or "admin"
+    key = "lsr_tel_" + secrets.token_hex(20)
+    with _db() as conn:
+        if conn.execute("SELECT 1 FROM agents WHERE agent_id=%s", (aid,)).fetchone():
+            raise HTTPException(status_code=409, detail="agent_id đã tồn tại")
+        conn.execute(
+            """
+            INSERT INTO agents(agent_id, name, owner, status, telemetry_key_hash, runtime,
+                               usecase_md, testcases, deployment, connect_mode, model_fallback)
+            VALUES (%s,%s,%s,'registered',%s,'nocode',%s,%s,'managed','bot',%s)
+            """,
+            (aid, name, body.get("owner") or actor,
+             hashlib.sha256(key.encode()).hexdigest(), usecase, Json(valid_tests),
+             body.get("model")))
+        conn.execute(
+            """
+            INSERT INTO agent_versions(agent_id, version, instruction_block, skills, model,
+                                       model_fallback, publication, note, created_by)
+            VALUES (%s,1,%s,%s,%s,%s,'draft','tạo từ wizard no-code',%s)
+            """,
+            (aid, instruction, Json(body.get("skills") or []), body.get("model"),
+             body.get("model_fallback"), actor))
+        # Người tạo tự động là moderator của agent này (nếu chưa phải admin platform).
+        if p["role"] != "admin" and p["kind"] == "session":
+            conn.execute(
+                "INSERT INTO role_bindings(email, scope_type, scope_id, role, granted_by) "
+                "VALUES (%s,'agent',%s,'moderator','auto-create') ON CONFLICT DO NOTHING",
+                (actor, aid))
+        # Kênh vào (nếu chọn ở bước 5)
+        for ch in (body.get("channels") or []):
+            if ch.get("channel") and ch.get("chat_id"):
+                conn.execute(
+                    "INSERT INTO routing_binding(channel, app_id, chat_id, agent_id, created_by) "
+                    "VALUES (%s,%s,%s,%s,%s)",
+                    (ch["channel"], ch.get("app_id"), ch["chat_id"], aid, actor))
+        _audit(conn, actor, "agent_create_nocode", "agent", aid,
+               {"name": name, "n_tests": len(valid_tests), "channels": len(body.get("channels") or [])})
+        conn.commit()
+    return {"agent_id": aid, "telemetry_key": key, "version": 1, "runtime": "nocode",
+            "console_url": f"{APP_PUBLIC_URL}/agent/{aid}",
+            "note": "Agent đã sẵn sàng — bấm Chạy thử. Publish prod cần admin duyệt."}
+
+
+@app.get("/v1/agents/{agent_id}/spec")
+def agent_spec(agent_id: str, authorization: str = Header(default="")) -> dict:
+    """Use case + test case của agent (dùng cho console và nút Xuất repo)."""
+    _require_role(authorization, "user", agent_id)
+    with _db() as conn:
+        r = conn.execute("SELECT agent_id, name, owner, runtime, usecase_md, testcases "
+                         "FROM agents WHERE agent_id=%s", (agent_id,)).fetchone()
+    if not r:
+        raise HTTPException(status_code=404, detail="agent không tồn tại")
+    return dict(r)
+
+
+@app.post("/v1/agents/{agent_id}/spec")
+def agent_spec_update(agent_id: str, body: dict, authorization: str = Header(default="")) -> dict:
+    p = _require_role(authorization, "moderator", agent_id)
+    with _db() as conn:
+        conn.execute("UPDATE agents SET usecase_md=coalesce(%s, usecase_md), "
+                     "testcases=coalesce(%s, testcases) WHERE agent_id=%s",
+                     (body.get("usecase_md"), Json(body["testcases"]) if body.get("testcases") else None,
+                      agent_id))
+        _audit(conn, p["actor"], "agent_spec_update", "agent", agent_id, {})
+        conn.commit()
+    return {"ok": True}
+
+
 # ==================== P5: Connector registry + usage metering ====================
 # Mỗi connector = 1 adapter chuẩn (auth · schema · rate-limit · error-map · audit · metering).
 # Agent chỉ gọi được connector đã được CẤP QUYỀN — thu quyền là chặn ngay, không cần restart.
@@ -3540,6 +3658,82 @@ def self_usage(authorization: str = Header(default=""), days: int = 7) -> dict:
             "WHERE agent_id=%s AND created_at > now() - make_interval(days => %s) "
             "GROUP BY connector_id, tool ORDER BY n DESC", (agent_id, min(days, 90))).fetchall()
     return {"agent_id": agent_id, "days": days, "usage": [dict(r) for r in rows]}
+
+
+@app.get("/v1/runtime/jobs")
+def runtime_jobs(authorization: str = Header(default=""), max: int = 5) -> list[dict]:
+    """Runtime no-code lấy job của MỌI agent runtime='nocode' (1 service phục vụ N agent)."""
+    tok = _bearer(authorization)
+    if not (tok and tok in (ADMIN_TOKEN, GATEWAY_INGEST_TOKEN)):
+        raise HTTPException(status_code=401, detail="cần runtime/admin token")
+    _ensure_schema()
+    out = []
+    with _db() as conn:
+        _reap_stale(conn)
+        for _ in range(max):
+            row = conn.execute(
+                """
+                UPDATE jobs SET status='running', locked_by='nocode-runtime', locked_at=now(),
+                                attempts=attempts+1, updated_at=now()
+                WHERE id = (
+                    SELECT j.id FROM jobs j JOIN agents a ON a.agent_id=j.agent_id
+                    WHERE j.status='queued' AND j.run_after<=now()
+                      AND a.runtime='nocode' AND a.status <> 'deactivated'
+                    ORDER BY j.priority ASC, j.id ASC
+                    FOR UPDATE OF j SKIP LOCKED LIMIT 1
+                )
+                RETURNING id, agent_id, channel, session_id, reply_to, payload, attempts
+                """).fetchone()
+            if not row:
+                break
+            out.append(dict(row))
+        conn.commit()
+    return out
+
+
+@app.get("/v1/agents/{agent_id}/runtime-token")
+def runtime_token(agent_id: str, authorization: str = Header(default="")) -> dict:
+    """Cấp token ngắn hạn cho runtime hành động nhân danh agent NO-CODE."""
+    tok = _bearer(authorization)
+    if not (tok and tok in (ADMIN_TOKEN, GATEWAY_INGEST_TOKEN)):
+        raise HTTPException(status_code=401, detail="cần runtime/admin token")
+    _ensure_schema()
+    with _db() as conn:
+        a = conn.execute("SELECT runtime, status FROM agents WHERE agent_id=%s",
+                         (agent_id,)).fetchone()
+        if not a:
+            raise HTTPException(status_code=404, detail="agent không tồn tại")
+        if a["runtime"] != "nocode":
+            raise HTTPException(status_code=403, detail="chỉ cấp cho agent no-code")
+        if a["status"] == "deactivated":
+            raise HTTPException(status_code=403, detail="agent deactivated")
+        t = "lsr_rt_" + secrets.token_hex(24)
+        conn.execute("DELETE FROM agent_runtime_tokens WHERE expires_at < now()")
+        conn.execute(
+            "INSERT INTO agent_runtime_tokens(token_hash, agent_id, expires_at) "
+            "VALUES (%s,%s, now() + interval '30 minutes')",
+            (hashlib.sha256(t.encode()).hexdigest(), agent_id))
+        conn.commit()
+    return {"agent_id": agent_id, "token": t, "expires_minutes": 30}
+
+
+@app.get("/v1/runtime/agent/{agent_id}/config")
+def runtime_agent_config(agent_id: str, authorization: str = Header(default=""),
+                         env: str = "prod") -> dict:
+    """Runtime lấy cấu hình để chạy 1 agent no-code: instruction + model + token của agent."""
+    tok = _bearer(authorization)
+    if not (tok and tok in (ADMIN_TOKEN, GATEWAY_INGEST_TOKEN)):
+        raise HTTPException(status_code=401, detail="cần runtime/admin token")
+    with _db() as conn:
+        a = conn.execute("SELECT agent_id, name, runtime, model_fallback FROM agents "
+                         "WHERE agent_id=%s", (agent_id,)).fetchone()
+        if not a:
+            raise HTTPException(status_code=404, detail="agent không tồn tại")
+        ver = _resolve_version(conn, agent_id, env) or _resolve_version(conn, agent_id, "dev")
+    return {"agent_id": agent_id, "name": a["name"],
+            "instruction_block": (ver or {}).get("instruction_block"),
+            "model": (ver or {}).get("model") or a["model_fallback"],
+            "version": (ver or {}).get("version")}
 
 
 # ==================== P6: Agent Directory + A2A ====================

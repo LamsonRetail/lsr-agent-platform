@@ -74,6 +74,19 @@ services:
       TELEGRAM_LINK_CODE: ${TELEGRAM_LINK_CODE:-}
     restart: unless-stopped
 
+  # P9: runtime cho agent NO-CODE — 1 service phục vụ mọi agent runtime='nocode'.
+  nocode_runtime:
+    build: ./nocode_runtime
+    depends_on: [platform_api]
+    environment:
+      PLATFORM_URL: http://platform_api:8090
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
+      LLM_BASE_URL: ${NOCODE_LLM_BASE:-}
+      LLM_API_KEY: ${NOCODE_LLM_KEY:-}
+      NOCODE_DEFAULT_MODEL: ${NOCODE_DEFAULT_MODEL:-claude-sonnet-4-5}
+    restart: unless-stopped
+
   # P7: platform agents — quan sát & ĐỀ XUẤT, người duyệt (HITL).
   ag_ops:
     build: ./platform_agents
