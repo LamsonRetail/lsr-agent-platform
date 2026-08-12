@@ -49,6 +49,26 @@ Quên thì hệ thống tự nhắc ở 2 lớp:
    `agents/<ID>/` kèm hướng dẫn (viết 2 file .md xong là code tiếp được).
 2. **Khi mở PR** — CI `agent-gate` fail nếu có code mà thiếu 2 file trên.
 
+### Console của agent nằm ở đâu?
+
+**Trong chính platform** — `https://app.34-126-154-135.sslip.io/agent/<AGENT_ID>`:
+chat thử, jobs/DLQ, traces, chi phí, brain riêng, version. Agent mới đăng ký là **tự có**,
+**KHÔNG cần tài khoản Vercel/Supabase, không phải deploy web riêng, không đăng nhập thêm gì**.
+
+Kênh vào của agent do admin gán 1 dòng ở Console → **Ingress**:
+
+| Kênh | Cần gì |
+|---|---|
+| Web chat (Chat thử) | có sẵn |
+| Telegram | routing: channel `telegram` + chat_id |
+| Lark | routing: channel `lark` + chat_id nhóm |
+
+Agent **không cần biết tin đến từ kênh nào**: trả lời bằng
+`POST /v1/self/jobs/{id}/reply`, platform tự gửi đúng chỗ.
+
+Muốn xem một agent đã nối đủ mọi thứ: **[agents/AG-MINH-ANH](agents/AG-MINH-ANH/README.md)**
+là agent demo tham chiếu (Lark + Telegram + web chat + brain + memory + Docker riêng).
+
 ### Tạo + chạy + test agent trong 5 phút
 
 ```bash
@@ -57,8 +77,9 @@ bash scripts/new-agent.sh AG-KHO-HN "Trợ lý kho HN"   # scaffold đủ templa
 # 2) đăng ký với platform (nhận token, hỏi admin enroll-token):
 python3 scripts/lsr_adopt.py --enroll-token <token> --id AG-KHO-HN \
   --name "Trợ lý kho HN" --owner <email của bạn>
-# 3) code handle() trong agents/AG-KHO-HN/consumer.py rồi chạy:
-cd agents/AG-KHO-HN && LSR_AGENT_TOKEN=<token> python3 consumer.py
+# 3) code answer() trong agents/AG-KHO-HN/consumer.py rồi chạy (Docker, giống thật):
+cd agents/AG-KHO-HN && cp .env.example .env && vi .env && docker compose up
+#    (hoặc chạy thẳng: LSR_AGENT_TOKEN=<token> python3 consumer.py)
 # 4) terminal khác — test tự động theo tests.jsonl:
 bash scripts/agent-test.sh AG-KHO-HN
 # hoặc chat tay: bash scripts/agent-chat.sh AG-KHO-HN "câu hỏi thử"
@@ -114,20 +135,23 @@ curl -s $PLATFORM/v1/agents/register -H "Authorization: Bearer $ADMIN" \
 Rồi: kết nối Lark (bot/user) → bật telemetry → **pass bộ test** → golive. Xem chi tiết
 [CREATE_AGENT.md](CREATE_AGENT.md).
 
-## 5. (Tuỳ chọn) Backend UI riêng cho agent
-```bash
-node scripts/new-agent-backend.mjs <AGENT_ID> "Tên agent"
-cd apps/agents/<AGENT_ID> && npm install && npm run build
-```
-Deploy: Vercel project riêng, **Root Directory = `apps/agents/<id>`** (xem
-[apps/agents/README.md](apps/agents/README.md)).
+## 5. Console của agent — CÓ SẴN, không phải làm gì
+
+`https://app.34-126-154-135.sslip.io/agent/<AGENT_ID>` — chat thử, jobs/DLQ, traces,
+chi phí, brain riêng, version. **Không cần Vercel/Supabase, không deploy web riêng.**
+
+> *(Nâng cao — hiếm khi cần)* Nếu agent cần **giao diện riêng cho người dùng cuối**
+> (không phải console vận hành), có thể sinh app Next.js riêng:
+> `node scripts/new-agent-backend.mjs <AGENT_ID> "Tên"` rồi deploy bằng tài khoản Vercel
+> của **owner platform**. Mặc định **không dùng** — console trong platform là đủ.
 
 ## 6. Quy trình đóng góp
 1. Tạo nhánh: `git checkout -b agent/<id>`.
 2. Chạy `pytest` (phải xanh — gồm kiểm chuẩn agent).
 3. Mở PR vào `main`. **CI** (`.github/workflows/ci.yml`) chạy test + validator; không
    đạt chuẩn → không merge.
-4. Merge → auto-deploy: backend VM (CI `deploy.yml`) + web (Vercel git).
+4. Merge → auto-deploy: platform trên VM (CI `deploy.yml`). Agent của bạn chạy bằng
+   `docker compose up` ở nơi bạn muốn; console đã có sẵn trong platform.
 
 ## Tiêu chuẩn agent (CI enforce)
 - `agent.owner` = email owner thật · `connect_mode` ∈ {bot,user}.

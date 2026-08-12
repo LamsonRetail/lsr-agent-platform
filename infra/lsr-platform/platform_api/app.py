@@ -872,6 +872,7 @@ def _ensure_schema() -> None:
         # Đăng ký 2 connector đang chạy thật + khung cho các connector sắp làm.
         for cid, kind, name, enforce in (
             ("lark", "lark", "Lark Suite (IM/Doc/Base)", True),
+            ("telegram", "telegram", "Telegram (bot admin + kênh chat agent)", False),
             ("bigquery", "data", "BigQuery AI_DB", True),
             ("web_search", "web", "Web search/crawl (khung)", True),
             ("social", "social", "TikTok/Meta/IG (khung)", True),
@@ -2148,6 +2149,45 @@ def self_job_event(job_id: int, body: dict, authorization: str = Header(default=
     return {"ok": True}
 
 
+@app.post("/v1/self/jobs/{job_id}/reply")
+def self_job_reply(job_id: int, body: dict, authorization: str = Header(default="")) -> dict:
+    """Trả lời một job — platform TỰ chọn kênh theo reply_to.
+
+    Nhờ endpoint này, code agent KHÔNG cần biết tin đến từ Lark, Telegram, web chat
+    hay agent khác: cứ gọi reply, platform gửi đúng chỗ. Luôn ghi job_event để
+    web chat (SSE) và A2A đọc được.
+    """
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    text = (body.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="thiếu text")
+    with _db() as conn:
+        job = conn.execute("SELECT agent_id, reply_to, channel FROM jobs WHERE id=%s",
+                           (job_id,)).fetchone()
+        if not job or job["agent_id"] != agent_id:
+            raise HTTPException(status_code=404, detail="job không thuộc agent")
+        rt = job["reply_to"] or {}
+        ch = rt.get("channel") or job["channel"] or "web"
+        # Luôn ghi event (nguồn cho SSE web chat + kết quả A2A).
+        conn.execute("INSERT INTO job_events(job_id, kind, data) VALUES (%s,'message',%s)",
+                     (job_id, Json({"text": text})))
+        delivered = {"channel": ch, "sent": False}
+        if ch == "lark" and rt.get("chat_id"):
+            _require_connector(conn, agent_id, "lark", "reply")
+            ok, detail = _lark_send_to(rt["chat_id"], "chat_id", text=text)
+            _meter(conn, agent_id, "lark", "reply", ok=ok, error="" if ok else detail)
+            delivered["sent"] = ok
+        elif ch == "telegram" and rt.get("chat_id"):
+            ok = _tg_send(str(rt["chat_id"]), text)
+            _meter(conn, agent_id, "telegram", "reply", ok=ok)
+            delivered["sent"] = ok
+        else:
+            delivered["sent"] = True     # web/a2a: đọc qua job_events
+        conn.commit()
+    return {"ok": True, "job_id": job_id, **delivered}
+
+
 @app.post("/v1/self/jobs/{job_id}/complete")
 def self_job_complete(job_id: int, body: dict, authorization: str = Header(default="")) -> dict:
     agent_id = _require_self(authorization)
@@ -2254,6 +2294,17 @@ def jobs_list(authorization: str = Header(default=""), status: str | None = None
     q += " ORDER BY id DESC LIMIT %s"; args.append(min(limit, 500))
     with _db() as conn:
         rows = conn.execute(q, tuple(args)).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.get("/v1/jobs/{job_id}/events")
+def job_events_list(job_id: int, authorization: str = Header(default="")) -> list[dict]:
+    """Sự kiện của 1 job (dùng cho Chat thử trong console + soi lỗi)."""
+    _require_admin(authorization)
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT id, kind, data, created_at FROM job_events WHERE job_id=%s ORDER BY id",
+            (job_id,)).fetchall()
     return [dict(r) for r in rows]
 
 

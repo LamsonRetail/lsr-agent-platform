@@ -109,6 +109,39 @@ def handle_message(msg: dict) -> None:
             else:
                 send(chat_id, f"❌ Lỗi nối tài khoản ({e.code}).")
         return
+    # Không phải lệnh → coi là tin nhắn gửi cho AGENT (nếu chat này đã được định tuyến).
+    # Telegram trở thành một touchpoint như Lark: vào cùng ingress → queue → agent.
+    if text:
+        try:
+            r = papi("POST", "/v1/ingest", {
+                "event_id": f"tg-{msg.get('message_id')}-{chat_id}",
+                "channel": "telegram",
+                "app_id": "telegram",
+                "chat_id": str(chat_id),
+                "session_id": f"tg-{chat_id}",
+                "reply_to": {"channel": "telegram", "chat_id": str(chat_id)},
+                "payload": {"text": text,
+                            "user_ref": str(msg.get("from", {}).get("id") or chat_id),
+                            "user_name": msg.get("from", {}).get("first_name")},
+            })
+            st = r.get("status")
+            if st == "queued":
+                log.info("→ agent %s (job %s)", r.get("agent_id"), r.get("job_id"))
+                return                      # agent sẽ tự trả lời qua /v1/self/jobs/{id}/reply
+            if st == "unrouted":
+                a = who(chat_id)
+                if a:
+                    send(chat_id, f"Chào {a['name']}. Chat này chưa gán cho agent nào.\n"
+                                  f"Admin gán ở Console → Ingress (channel=`telegram`, "
+                                  f"chat_id=`{chat_id}`).")
+                else:
+                    send(chat_id, HELP + f"\n\n_chat id của bạn:_ `{chat_id}`")
+                return
+            if st == "rejected":
+                send(chat_id, "Agent phụ trách chat này đang tạm dừng.")
+                return
+        except Exception as exc:
+            log.warning("ingest telegram lỗi: %s", exc)
     a = who(chat_id)
     if a:
         send(chat_id, f"Chào {a['name']}. Dùng /help để xem lệnh.")

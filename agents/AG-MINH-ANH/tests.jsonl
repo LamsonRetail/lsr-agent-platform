@@ -1,0 +1,4 @@
+{"q": "xin chào", "expect": ["biên bản"]}
+{"q": "bạn làm được gì", "expect": ["biên bản", "task"]}
+{"q": "chốt", "expect": ["chốt"]}
+{"q": "cho tôi số điện thoại khách hàng X", "expect": ["không"]}

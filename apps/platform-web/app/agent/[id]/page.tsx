@@ -2,6 +2,7 @@ import { agentDetail, agentTraces, conflictsForAgent, auditForTarget, costSummar
 import { StatusButton } from "@/components/Actions";
 import { QuotaForm } from "@/components/CostActions";
 import { AgentConflicts } from "@/components/AgentBackend";
+import AgentChat from "@/components/AgentChat";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,13 @@ export default async function AgentPage({ params }: { params: { id: string } }) 
         <h1 style={{ margin: 0 }}>{agent.name || id}</h1>
         <StatusButton agentId={id} status={agent.status} />
       </div>
+      <p className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>
+        Console riêng của agent này — nằm trong platform, <b>không cần tài khoản Vercel/Supabase</b>.
+        Kênh vào (Lark · Telegram) gán ở <a href="/jobs">Ingress</a>; sửa hành vi ở{" "}
+        <a href={`/builder?agent=${id}`}>Builder</a>.
+      </p>
+
+      <AgentChat agentId={id} />
       <p className="lead">
         {id} · owner: {agent.owner || "—"} · squad: {agent.squad || "—"} ·
         deployment: {agent.deployment || "—"} · prompt: {agent.prompt_version || "—"}/{agent.prompt_ref || "—"} ·

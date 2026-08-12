@@ -139,13 +139,8 @@ def main():
             jid = job["id"]
             try:
                 reply = handle(job)
-                # đẩy câu trả lời (web chat đọc qua SSE; Lark trả qua /v1/lark/send)
-                api("POST", f"/v1/self/jobs/{jid}/event",
-                    {"kind": "message", "data": {"text": reply}})
-                rt = job.get("reply_to") or {}
-                if rt.get("channel") == "lark" and rt.get("chat_id"):
-                    api("POST", "/v1/lark/send",
-                        {"to": rt["chat_id"], "to_type": "chat_id", "text": reply})
+                # MỘT lời gọi cho MỌI kênh — platform tự gửi đúng Lark/Telegram/web/A2A
+                api("POST", f"/v1/self/jobs/{jid}/reply", {"text": reply})
                 api("POST", f"/v1/self/jobs/{jid}/complete", {"result": {"ok": True}})
                 print(f"✓ job#{jid}")
             except Exception as exc:
@@ -155,6 +150,34 @@ def main():
 
 if __name__ == "__main__":
     main()
+EOF
+
+cat > "$DIR/Dockerfile" <<'EOF'
+# Agent chạy trong container riêng — chỉ cần stdlib.
+FROM python:3.11-slim
+WORKDIR /agent
+COPY consumer.py .
+CMD ["python", "consumer.py"]
+EOF
+
+cat > "$DIR/docker-compose.yml" <<EOF
+# Chạy agent ở bất kỳ đâu: docker compose up
+# Chỉ cần LSR_AGENT_TOKEN — KHÔNG cần Vercel/Supabase/DB riêng.
+services:
+  agent:
+    build: .
+    environment:
+      LSR_PLATFORM_URL: \${LSR_PLATFORM_URL:-https://platform.34-126-154-135.sslip.io}
+      LSR_AGENT_ID: $AID
+      LSR_AGENT_TOKEN: \${LSR_AGENT_TOKEN:?cần token — xin ở Console hoặc scripts/lsr_adopt.py}
+      DRY_RUN: \${DRY_RUN:-true}
+    restart: unless-stopped
+EOF
+
+cat > "$DIR/.env.example" <<'EOF'
+# Copy thành .env rồi điền (KHÔNG commit .env)
+LSR_AGENT_TOKEN=lsr_tel_...
+DRY_RUN=true
 EOF
 
 cat > "$DIR/README.md" <<EOF
@@ -168,8 +191,9 @@ Chạy nhanh:
 # đăng ký agent (1 lần) — nhận LSR_AGENT_TOKEN, lưu vào .env.lsr (gitignored)
 python3 scripts/lsr_adopt.py --enroll-token <hỏi admin> --id $AID --name "$NAME" --owner <email>
 
-# chạy agent
-cd agents/$AID && LSR_AGENT_TOKEN=... python3 consumer.py
+# chạy agent (Docker — giống môi trường thật)
+cd agents/$AID && cp .env.example .env && vi .env && docker compose up
+# hoặc chạy trực tiếp: LSR_AGENT_TOKEN=... python3 consumer.py
 
 # test tự động theo tests.jsonl (terminal khác)
 bash scripts/agent-test.sh $AID
@@ -177,6 +201,17 @@ bash scripts/agent-test.sh $AID
 # chat tay 1 câu
 bash scripts/agent-chat.sh $AID "câu hỏi thử"
 \`\`\`
+
+## Console của agent
+**https://app.34-126-154-135.sslip.io/agent/$AID** — chat thử, jobs, traces, chi phí,
+brain riêng, version. KHÔNG cần tài khoản Vercel/Supabase: console nằm sẵn trong platform.
+
+## Kênh vào (admin gán 1 dòng ở Console → Ingress)
+| Kênh | Cần gì |
+|---|---|
+| Web chat | có sẵn, không cần gán |
+| Telegram | channel=telegram, chat_id của chat |
+| Lark | channel=lark, chat_id nhóm |
 EOF
 
 echo "✓ đã tạo $DIR/ (USECASE.md, TESTCASES.md, tests.jsonl, consumer.py, README.md)"
