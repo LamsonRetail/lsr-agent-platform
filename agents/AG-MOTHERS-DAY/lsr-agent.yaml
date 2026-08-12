@@ -17,8 +17,8 @@ lark:
   bot:
     app: nihao-sourcing              # Lark custom app của team Sourcing (dùng chung cho campaign)
     app_id: cli_aaf6ce7c8d38deed     # identifier công khai; app_secret CHỈ nằm trên VM/.env local
-    secret_env: NIHAO_LARK_APP_SECRET   # theo convention đa-app của platform (xem docs/TESTCASES.md §14
-                                        # + infra/lsr-platform/.env.example: <APP>_LARK_APP_ID/SECRET)
+    secret_env: SOURCING_LARK_APP_SECRET  # tên biến THẬT trên VM — xem infra/lsr-platform/.env.example:15
+                                          # (maintainer đặt SOURCING_*, không phải NIHAO_*)
     domain: https://open.larksuite.com
     chat_ids: []                     # TODO: điền chat_id nhóm Lark "Mother's Day" sau khi add bot
                                      #   (chạy `python3 lark_link.py` để lấy danh sách nhóm)
