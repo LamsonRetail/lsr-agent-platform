@@ -1,0 +1,43 @@
+# Gate quy trình tạo agent: PR có CODE trong agents/<id>/ thì agent đó BẮT BUỘC
+# đã có USECASE.md + TESTCASES.md (use case → test case → code).
+# Bổ trợ cho gate local trong plugin lsr-telemetry (nhắc ngay khi đang code).
+name: agent-gate
+
+on:
+  pull_request:
+    paths:
+      - "agents/**"
+      - "apps/agents/**"
+
+jobs:
+  usecase-testcase-required:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Kiểm USECASE.md + TESTCASES.md cho agent có code mới
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          CODE_RE='\.(py|ts|tsx|js|jsx|mjs|sh|go|rb|java|sql)$'
+          fail=0
+          # agents/<id>/**  và  apps/agents/<id>/**  → id ở segment 2 hoặc 3
+          for aid in $(git diff --name-only "$BASE" "$HEAD" \
+                        | grep -E '^(agents|apps/agents)/' | grep -E "$CODE_RE" \
+                        | sed -E 's#^(agents|apps/agents)/([^/]+)/.*#\2#' | sort -u); do
+            dir="agents/$aid"
+            missing=""
+            [ -f "$dir/USECASE.md" ]   || missing="$missing USECASE.md"
+            [ -f "$dir/TESTCASES.md" ] || missing="$missing TESTCASES.md"
+            if [ -n "$missing" ]; then
+              echo "::error::Agent '$aid' có code nhưng thiếu:$missing trong $dir/"
+              echo "→ Quy trình platform: viết USE CASE + TEST CASE trước, code sau."
+              echo "→ Scaffold nhanh: bash scripts/new-agent.sh $aid"
+              fail=1
+            else
+              echo "✓ $aid có đủ USECASE.md + TESTCASES.md"
+            fi
+          done
+          exit $fail

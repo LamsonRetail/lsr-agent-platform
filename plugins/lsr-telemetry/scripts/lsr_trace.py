@@ -59,7 +59,19 @@ def _policy_check(payload: dict) -> dict:
 
 
 def pre_tool(evt: dict) -> None:
-    """PreToolUse: hỏi policy trước khi chạy tool. Deny → chặn tool."""
+    """PreToolUse: gate use-case/test-case (local) + hỏi policy (remote). Deny → chặn tool."""
+
+    # --- Gate LOCAL: agent mới phải có USE CASE + TEST CASE trước khi viết code ---
+    # Chặn Write/Edit file CODE trong agents/<id>/ nếu thiếu USECASE.md / TESTCASES.md.
+    # Viết chính 2 file .md đó (hoặc tests.jsonl, README...) thì luôn cho phép.
+    gate = _usecase_gate(evt)
+    if gate:
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": gate,
+        }}, ensure_ascii=False))
+        return
 
     res = _policy_check({
         "agent_id": os.environ.get("LSR_AGENT_ID", "unknown"),
@@ -74,6 +86,39 @@ def pre_tool(evt: dict) -> None:
             "permissionDecisionReason": res.get("reason") or "bị chặn bởi policy LSR",
         }}))
     # allow → không in gì (mặc định cho phép)
+
+
+_CODE_EXT = {".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".sh", ".go", ".rb", ".java", ".sql"}
+
+
+def _usecase_gate(evt: dict) -> str | None:
+    """Trả message chặn nếu đang viết CODE cho agent chưa có USECASE.md + TESTCASES.md."""
+
+    if evt.get("tool_name") not in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
+        return None
+    fp = (evt.get("tool_input") or {}).get("file_path") or ""
+    if not fp:
+        return None
+    p = pathlib.Path(fp)
+    parts = p.parts
+    # tìm segment 'agents/<id>/...' trong đường dẫn
+    try:
+        i = parts.index("agents")
+    except ValueError:
+        return None
+    if i + 2 > len(parts) - 1:          # phải có agents/<id>/<file...>
+        return None
+    if p.suffix.lower() not in _CODE_EXT:
+        return None                      # .md/.jsonl/.yaml... luôn cho phép
+    agent_dir = pathlib.Path(*parts[: i + 2])
+    missing = [f for f in ("USECASE.md", "TESTCASES.md") if not (agent_dir / f).exists()]
+    if not missing:
+        return None
+    return (f"⛔ Agent '{parts[i+1]}' chưa có {' + '.join(missing)} — theo quy trình platform, "
+            f"phải viết USE CASE và TEST CASE trước rồi mới code. "
+            f"Tạo {agent_dir}/USECASE.md (bài toán, người dùng, luồng chính) và "
+            f"{agent_dir}/TESTCASES.md (bảng case: đầu vào → kỳ vọng) rồi chạy lại. "
+            f"Scaffold nhanh: bash scripts/new-agent.sh {parts[i+1]}")
 
 
 def pre_prompt(evt: dict) -> None:

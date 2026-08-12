@@ -24,7 +24,50 @@ Cơ chế chặn (3 lớp):
 Cần sửa core? Mở issue hoặc nhờ maintainer (xem `.github/CODEOWNERS`). Maintainer khai báo
 trong `.github/maintainers.txt`.
 
-## 1. Lấy repo về
+## 0. Workflow theo TEAM (bản stable)
+
+Mọi team làm **chung repo này** nhưng trên **branch riêng** — main luôn là bản stable.
+
+```bash
+git clone https://github.com/LamsonRetail/lsr-agent-platform.git
+cd lsr-agent-platform
+git checkout -b agent/<team>-<AGENT-ID>     # vd: agent/bi-AG-KHO-HN
+```
+
+Quy ước:
+- **1 agent = 1 branch** `agent/<team>-<AGENT-ID>`; team 2–3 người cùng push lên branch đó
+  (chia file: người viết USECASE/TESTCASES, người code consumer, người lo backend/routing).
+- **Không commit thẳng main.** Xong thì mở PR → CI (scope-guard + agent-gate) chạy →
+  maintainer review → merge. Pull bản stable mới nhất: `git pull origin main` (hoặc tag `v1.x`).
+- Secrets (`.env.lsr`, token) **không bao giờ commit** — đã gitignore, CI cũng quét.
+
+### Quy trình BẮT BUỘC: use case → test case → code
+
+Mỗi agent mới phải có `agents/<ID>/USECASE.md` + `TESTCASES.md` **trước khi viết code**.
+Quên thì hệ thống tự nhắc ở 2 lớp:
+1. **Ngay khi đang code** — plugin lsr-telemetry chặn Write/Edit file code trong
+   `agents/<ID>/` kèm hướng dẫn (viết 2 file .md xong là code tiếp được).
+2. **Khi mở PR** — CI `agent-gate` fail nếu có code mà thiếu 2 file trên.
+
+### Tạo + chạy + test agent trong 5 phút
+
+```bash
+bash scripts/new-agent.sh AG-KHO-HN "Trợ lý kho HN"   # scaffold đủ template
+# 1) điền agents/AG-KHO-HN/USECASE.md + TESTCASES.md (+ tests.jsonl case tự động)
+# 2) đăng ký với platform (nhận token, hỏi admin enroll-token):
+python3 scripts/lsr_adopt.py --enroll-token <token> --id AG-KHO-HN \
+  --name "Trợ lý kho HN" --owner <email của bạn>
+# 3) code handle() trong agents/AG-KHO-HN/consumer.py rồi chạy:
+cd agents/AG-KHO-HN && LSR_AGENT_TOKEN=<token> python3 consumer.py
+# 4) terminal khác — test tự động theo tests.jsonl:
+bash scripts/agent-test.sh AG-KHO-HN
+# hoặc chat tay: bash scripts/agent-chat.sh AG-KHO-HN "câu hỏi thử"
+```
+
+Chat test đi qua **Chat API của platform** (cùng đường với Lark) nên chạy được ngay
+không cần Lark app, và mọi lần chạy đều có telemetry/quota/audit như thật.
+
+## 1. Lấy repo về (chi tiết)
 ```bash
 git clone https://github.com/LamsonRetail/lsr-agent-platform.git
 cd lsr-agent-platform
