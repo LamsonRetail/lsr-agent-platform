@@ -90,7 +90,8 @@ Vinh sở hữu trên Lark Developer Console, đã Enabled + published).
 | 3 | Cấp enroll-token + register agent | `scripts/lsr_adopt.py` — xem README | Agent chưa poll được job |
 | 4 | Mở đường tải file recording qua gateway (C1 của Thi) | gateway chỉ đẩy text/message_type, chưa có file_key | Luồng biên bản từ recording |
 | 5 | Đọc Lark doc/base qua `/v1/lark/*` cho agent | hoặc cấp scope docs/base cho app Sawadee HAPAS rồi share doc với bot | `th_kb_read`, cả nhóm báo cáo F2 |
-| 6 | (Nếu sau này đổi webhook mode) | Caddy chưa route công khai cho gateway; handler webhook chưa verify chữ ký + chưa lấy `sender_open_id` | — |
+| 6 | **Chiều gửi trả lời theo app** | `platform_api` gửi Lark bằng 1 tenant token duy nhất (`LARK_NOTIFY_APP_ID`/`MINH_ANH_*`, `app.py:88`) → trả lời sẽ KHÔNG đi ra từ bot Sawadee HAPAS. Cần core: chọn credential theo app_id của routing_binding | Bot nhận được tin nhưng không trả lời được trong nhóm |
+| 7 | (Nếu sau này đổi webhook mode) | Caddy chưa route công khai cho gateway; handler webhook chưa verify chữ ký + chưa lấy `sender_open_id` | — |
 
 ## 6b. Việc Vinh tự làm trên Lark Developer Console (không cần admin)
 
