@@ -20,6 +20,7 @@
 | 2.1 | Chào hỏi | "xin chào" | Giới thiệu là trợ lý squad Thái Lan |
 | 2.2 | Liền mạch ngữ cảnh | Hỏi tiếp "còn cái đầu tiên?" sau 1 lượt | Dùng `recent_turns`/`rolling_summary`, không hỏi lại từ đầu |
 | 2.3 | Cùng kết quả trên mọi kênh | Cùng câu hỏi qua Lark / web chat | Nội dung trả lời tương đương; agent không phân biệt kênh |
+| 2.4 | Model trả lời khi luật không khớp (Phase 2, test tay — bật `LSR_MODEL_MODE=auto`) | "soạn tin thông báo cho squad là bot sẽ đọc nhóm này" | Trả lời từ model với persona Ploy (xưng em); mọi gate vẫn chạy TRƯỚC model; câu hỏi số liệu không nguồn vẫn ra "chưa có"; tắt model → về luật, không lỗi |
 
 ## Luồng 3 — Biên bản họp
 

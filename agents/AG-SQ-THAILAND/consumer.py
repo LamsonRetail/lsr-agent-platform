@@ -26,6 +26,7 @@ import urllib.request
 
 import knowledge
 import minutes
+import model
 import thailand_tools
 import transcribe
 
@@ -103,6 +104,12 @@ def answer(q: str, ctx: dict, payload: dict) -> str:
     hit = knowledge.answer_from_knowledge(ctx)
     if hit:
         return hit
+
+    # --- Phase 2: model với ngữ cảnh platform (LSR_MODEL_MODE=off/không CLI → về luật) ---
+    if model.enabled():
+        out = model.complete(build_prompt(ctx, q), system=model.build_system())
+        if out:
+            return out
     return knowledge.NO_DATA
 
 
