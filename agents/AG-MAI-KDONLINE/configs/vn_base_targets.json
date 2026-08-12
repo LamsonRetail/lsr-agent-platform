@@ -1,0 +1,18 @@
+{
+  "_status": "TODO",
+  "_owner": "PM / TP KD Online",
+  "_skill": "skills/vn-weekly-report.md",
+  "_note": "BẪY 1: nhiều base chạy song song → MAI luôn in rõ đang dùng base nào. BẪY 2: %MTD so target LŨY KẾ PRO-RATA THEO NGÀY.",
+  "base_dang_dung": null,
+  "cong_thuc_mtd": "actual ÷ (target_thang × số_ngày_đã_qua ÷ số_ngày_trong_tháng)",
+  "bases": [
+    {
+      "ma": null,
+      "ten": null,
+      "ngay_rebase": null,
+      "target_thang_vnd": null,
+      "pham_vi": null,
+      "con_ai_dang_dung": null
+    }
+  ]
+}

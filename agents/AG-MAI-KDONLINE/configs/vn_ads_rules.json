@@ -1,0 +1,39 @@
+{
+  "_status": "TODO",
+  "_owner": "TN Facebook Ads",
+  "_skill": "skills/vn-ads-workflow.md",
+  "_note": "Ngưỡng scale/kill + trần ngân sách + hành động MAI ĐƯỢC tự chạy. Vượt hạn mức = phải người duyệt (cổng WHY B7/B10). Bắt đầu ở chế độ đề xuất.",
+  "che_do": "de_xuat",
+  "_che_do_hop_le": [
+    "de_xuat",
+    "tu_chay_trong_han_muc"
+  ],
+  "tran_ngan_sach_ngay_vnd": null,
+  "muc_tang_toi_da_moi_lan_pct": null,
+  "so_lan_tang_toi_da_moi_ngay": null,
+  "nguong_kill": {
+    "cpa_vuot_target_pct": null,
+    "spend_toi_thieu_truoc_khi_ket_luan_vnd": null,
+    "so_ngay_quan_sat": null
+  },
+  "nguong_scale": {
+    "roas_toi_thieu": null,
+    "cpa_duoi_target_pct": null,
+    "so_ngay_on_dinh": null
+  },
+  "canh_bao_bat_thuong": {
+    "cpm_tang_pct": null,
+    "ctr_giam_pct": null
+  },
+  "hanh_dong_mai_duoc_tu_chay": [],
+  "hanh_dong_bat_buoc_nguoi_duyet": [
+    "tăng ngân sách vượt trần",
+    "nhân bản camp",
+    "tắt camp đang chạy tốt"
+  ],
+  "theo_nganh": {
+    "Túi xách": {},
+    "Trang sức": {},
+    "Nước hoa": {}
+  }
+}

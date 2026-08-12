@@ -1,0 +1,46 @@
+apiVersion: lsr/v1
+agent:
+  id: AG-MAI-KDONLINE
+  name: MAI
+  version: 0.1.0
+  owner: minhnd@hapas.vn      # OWNER thật — auth dùng subscription của người này.
+                              # TODO: đổi sang email Rooky (Head of Online Business) nếu Rooky là owner.
+  squad: SQ-KD-ONLINE
+  is_squad_agent: true        # agent chính của Khối KD Online VN
+  connect_mode: bot           # bot | user
+  description: >
+    Trợ lý AI dùng chung cho Khối Kinh doanh Online VN (LAMSON RETAIL) — 2 brand
+    HAPAS + MATE MADE, 3 ngành Túi xách · Trang sức · Nước hoa. Gánh phần THỰC THI
+    của quy trình 10 bước quảng cáo (con người giữ 5 cổng WHY), tra kho tri thức nội
+    bộ có trích nguồn, dựng báo cáo tuần/tháng (WBR), nhắc lịch mùa vụ VN & mốc BST,
+    giao việc theo RACI. Chi tiết: FEATURES.md · PLAN.md trong thư mục agent.
+
+lark:
+  connect_mode: bot
+  bot:
+    app: platform-shared
+    chat_ids: []              # điền chat_id nhóm KD Online khi add bot
+    event_webhook: https://collector.lsr.internal/lark/events
+
+runtime:
+  sdk: claude-agent-sdk
+  auth: subscription          # BẮT BUỘC: subscription của OWNER (claude setup-token).
+                              # KHÔNG dùng khoá LLM, KHÔNG auth chung platform.
+  model: claude-sonnet-5
+
+prompt:                       # con trỏ version prompt — rollback = đổi con trỏ (git-backed)
+  path: system_prompt.md
+  version: 0.1.0
+  ref: feature/vn-agent-mai
+
+skills:                       # MCP tự do — chỉ khai báo + log
+  - {name: vn, type: mcp}                  # vn/vietnam_tools.py — 7 nhóm tool của MAI
+  - {name: resource-index, type: builtin}  # index file/link được share (chống long-memory)
+
+telemetry:
+  enabled: true               # BẮT BUỘC (control point) — không gửi trace = không golive
+  collector: https://collector.lsr.internal
+
+tests:
+  suite: tests/agent_tests.yaml
+schedule: []

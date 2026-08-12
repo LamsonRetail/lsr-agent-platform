@@ -1,0 +1,37 @@
+{
+  "_status": "TODO",
+  "_owner": "PM Ngành Nước hoa",
+  "_skill": "skills/vn-nganh-nuochoa.md",
+  "_note": "KHÔNG gộp số ngành này với Túi xách hay ngành còn lại.",
+  "nganh": "Nước hoa",
+  "giai_doan": null,
+  "_giai_doan_hop_le": [
+    "hoc_thi_truong",
+    "mo_rong",
+    "toi_uu"
+  ],
+  "tep_khach": {
+    "ai_mua": null,
+    "mua_cho_ai": null,
+    "dip_mua": []
+  },
+  "vung_gia": {
+    "thap_vnd": null,
+    "cao_vnd": null,
+    "gia_tb_don_vnd": null
+  },
+  "doi_thu": [
+    {
+      "ten": null,
+      "vung_gia": null,
+      "diem_manh": null,
+      "cach_ho_chay": null,
+      "nam_du_lieu": null
+    }
+  ],
+  "sp_chu_luc": [],
+  "sp_dang_xa": [],
+  "sp_bien_ln_cao": [],
+  "kpi_dang_do": [],
+  "mai_hay_tra_loi_sai": []
+}

@@ -1,0 +1,73 @@
+{
+  "_status": "TODO",
+  "_owner": "MKT / CĐS",
+  "_skill": "skills/vn-season-calendar.md",
+  "_note": "Mỗi dịp PHẢI có kết luận làm / không làm + lý do. Danh sách ngày suông là không đạt.",
+  "dip": [
+    {
+      "ten": "Tết Nguyên đán",
+      "loai": "peak_lon_nhat",
+      "ngay": null,
+      "ket_luan": null,
+      "ly_do": null,
+      "hanh_dong": [
+        "deadline sản xuất trước nghỉ Tết",
+        "vùng chết cận Tết",
+        "combo quà biếu"
+      ],
+      "han_chuan_bi_D": null,
+      "nganh": []
+    },
+    {
+      "ten": "Back-to-school",
+      "loai": "lam",
+      "ngay": "T7–T9",
+      "ket_luan": null,
+      "ly_do": null,
+      "hanh_dong": [
+        "tệp người thân tặng tân sinh viên (balo/tote) — nhắm phụ huynh/anh chị"
+      ],
+      "han_chuan_bi_D": null,
+      "nganh": []
+    },
+    {
+      "ten": "Sàn double-day",
+      "loai": "peak_san",
+      "ngay": "9/9 · 10/10 · 11/11 · 12/12",
+      "ket_luan": null,
+      "ly_do": null,
+      "hanh_dong": [
+        "đăng ký flash deal/voucher"
+      ],
+      "ngay_khoa_dang_ky": null,
+      "han_chuan_bi_D": null,
+      "nganh": []
+    },
+    {
+      "ten": "20/10 · 8/3 · Valentine",
+      "loai": "dip_qua_nu",
+      "ngay": null,
+      "ket_luan": null,
+      "ly_do": null,
+      "hanh_dong": [
+        "trục tặng quà — mạnh cho TS & NH"
+      ],
+      "han_chuan_bi_D": null,
+      "nganh": []
+    },
+    {
+      "ten": "Black Friday · Noel/Năm mới",
+      "loai": "peak_cuoi_nam",
+      "ngay": null,
+      "ket_luan": null,
+      "ly_do": null,
+      "hanh_dong": [
+        "nhịp dồn cuối năm",
+        "xả tồn trước load hàng mới"
+      ],
+      "han_chuan_bi_D": null,
+      "nganh": []
+    }
+  ],
+  "dip_da_thu_va_that_bai": []
+}

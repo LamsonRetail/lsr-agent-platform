@@ -1,0 +1,114 @@
+{
+  "_status": "TODO",
+  "_owner": "TP Digital Performance",
+  "_skill": "skills/vn-internal-knowledge.md",
+  "_note": "Map vai trò RACI → quyền xem/làm. Bám FEATURES.md §5. Mặc định của mọi vai trò chưa khai = KHÔNG được xem số nhạy cảm.",
+  "mac_dinh": {
+    "xem": [],
+    "lam": []
+  },
+  "vai_tro": {
+    "TP_KD_ONLINE": {
+      "xem": [
+        "tất cả",
+        "P&L 2 brand"
+      ],
+      "lam": [
+        "tất cả",
+        "giao việc toàn khối"
+      ]
+    },
+    "TP_DIGITAL_PERF": {
+      "xem": [
+        "toàn bộ số Digital (Ads/AFF/Content)"
+      ],
+      "lam": [
+        "giao việc trong khối Digital",
+        "duyệt ngân sách"
+      ]
+    },
+    "PM_NGANH_TS": {
+      "xem": [
+        "số ngành Trang sức (toàn kênh)"
+      ],
+      "lam": [
+        "quyết đẩy SP",
+        "giao việc trong ngành"
+      ]
+    },
+    "PM_NGANH_NH": {
+      "xem": [
+        "số ngành Nước hoa (toàn kênh)"
+      ],
+      "lam": [
+        "quyết đẩy SP",
+        "giao việc trong ngành"
+      ]
+    },
+    "TN_ADS": {
+      "xem": [
+        "số kênh mình, 3 ngành"
+      ],
+      "lam": [
+        "đặt luật camp",
+        "duyệt scale trong hạn mức",
+        "giao việc CV"
+      ]
+    },
+    "CV_ADS": {
+      "xem": [
+        "số camp/ngành mình"
+      ],
+      "lam": [
+        "vận hành camp",
+        "cập nhật assignment"
+      ]
+    },
+    "TN_AFFILIATE": {
+      "xem": [
+        "DT AFF",
+        "KOC pool"
+      ],
+      "lam": [
+        "booking KOC",
+        "giao việc CV AFF"
+      ]
+    },
+    "TN_CV_CONTENT": {
+      "xem": [
+        "chỉ số creative"
+      ],
+      "lam": [
+        "sản xuất",
+        "cập nhật assignment"
+      ]
+    },
+    "TP_TMDT_TN_VH_HOST": {
+      "xem": [
+        "số gian hàng & phiên live"
+      ],
+      "lam": [
+        "vận hành sàn/live",
+        "cập nhật assignment"
+      ]
+    },
+    "SALE_ONLINE_TNKH": {
+      "xem": [
+        "feedback",
+        "chỉ số chốt đơn"
+      ],
+      "lam": [
+        "cập nhật assignment",
+        "báo feedback"
+      ]
+    }
+  },
+  "chi_cap_quan_ly": [
+    "LNĐG",
+    "P&L"
+  ],
+  "khong_bao_gio_tra_loi": [
+    "lương",
+    "đánh giá cá nhân"
+  ]
+}

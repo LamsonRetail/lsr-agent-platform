@@ -1,0 +1,30 @@
+{
+  "_status": "TODO",
+  "_owner": "TP Digital Performance",
+  "_skill": "skills/vn-internal-knowledge.md",
+  "_note": "Cây tổ chức từ RACI: ai thuộc nhóm nào, báo cáo lên ai, vai trò gì. Dùng cho phân quyền + giao việc + escalate.",
+  "nguoi": [
+    {
+      "email": null,
+      "ten": null,
+      "vai_tro": null,
+      "nganh": null,
+      "bao_cao_len": null,
+      "lark_open_id": null,
+      "telegram_id": null
+    }
+  ],
+  "duoc_giao_viec": [
+    "TP_KD_ONLINE",
+    "TP_DIGITAL_PERF",
+    "PM_NGANH_TS",
+    "PM_NGANH_NH",
+    "TP_TMDT",
+    "TRUONG_NHOM (trong phạm vi nhóm mình)"
+  ],
+  "cay_escalate": [
+    "CV",
+    "TN",
+    "TP/PM"
+  ]
+}

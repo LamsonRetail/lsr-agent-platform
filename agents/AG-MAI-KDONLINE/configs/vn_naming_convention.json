@@ -1,0 +1,20 @@
+{
+  "_status": "TODO",
+  "_owner": "TN Facebook Ads",
+  "_skill": "skills/vn-ads-workflow.md",
+  "_note": "Sai naming thì MAI không dựng camp.",
+  "mau_camp": "[Angle]_[Tep]_[Format]_[v]",
+  "mau_adset": null,
+  "mau_ad": null,
+  "tu_dien": {
+    "Angle": [],
+    "Tep": [],
+    "Format": [
+      "9:16",
+      "1:1",
+      "4:5"
+    ]
+  },
+  "vi_du_dat": [],
+  "vi_du_sai": []
+}

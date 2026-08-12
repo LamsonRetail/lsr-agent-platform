@@ -1,0 +1,34 @@
+{
+  "_status": "TODO",
+  "_owner": "TP Digital Performance",
+  "_skill": "skills/vn-internal-knowledge.md",
+  "_note": "Target tháng/quý, 2 brand, 3 ngành, mục tiêu KD hiện tại. Số nào chưa có thì để null — MAI sẽ nói 'chưa có'.",
+  "ky_hien_tai": null,
+  "don_vi_tien": "VND",
+  "brands": [
+    "HAPAS",
+    "MATE MADE"
+  ],
+  "nganh": [
+    "Túi xách",
+    "Trang sức",
+    "Nước hoa"
+  ],
+  "target": {
+    "thang": null,
+    "quy": null,
+    "ghi_chu_base": "xem vn_base_targets"
+  },
+  "muc_tieu_kd_hien_tai": null,
+  "kenh": [
+    "Facebook Ads",
+    "TikTok Ads",
+    "Google Ads",
+    "Affiliate/KOC",
+    "Content",
+    "Shopee",
+    "TikTok Shop",
+    "Livestream",
+    "Sale & CSKH"
+  ]
+}

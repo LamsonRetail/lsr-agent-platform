@@ -1,0 +1,30 @@
+{
+  "_status": "TODO",
+  "_owner": "MKT / CĐS",
+  "_skill": "skills/vn-bst-milestones.md",
+  "_note": "Mốc TUYỆT ĐỐI (ngày cụ thể). Mỗi BST phải khai 1 nguồn chuẩn duy nhất cho ngày.",
+  "luat_D": {
+    "chot_mau": null,
+    "xuong_PO": null,
+    "hang_ve": null,
+    "len_ke": null,
+    "chot_KOC": null
+  },
+  "bst": [
+    {
+      "ma": null,
+      "ten": null,
+      "nganh": null,
+      "ngay_launching": null,
+      "nguon_chuan": null,
+      "moc": {
+        "chot_mau": null,
+        "xuong_PO": null,
+        "hang_ve": null,
+        "len_ke": null,
+        "chot_KOC": null,
+        "mo_ban": null
+      }
+    }
+  ]
+}

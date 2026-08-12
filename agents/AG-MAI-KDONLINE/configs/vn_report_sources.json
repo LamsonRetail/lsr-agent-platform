@@ -1,0 +1,50 @@
+{
+  "_status": "TODO",
+  "_owner": "PM / TP KD Online",
+  "_skill": "skills/vn-weekly-report.md",
+  "_note": "Nguồn cố định để dựng WBR. Nguồn nào chưa nối thì ghi rõ 'thủ công' — MAI sẽ nói cần người cung cấp.",
+  "nguon": [
+    {
+      "ten": "Export Ads Manager — Facebook",
+      "cach_lay": null,
+      "ai_giu": null,
+      "tan_suat": null
+    },
+    {
+      "ten": "Export Ads Manager — TikTok",
+      "cach_lay": null,
+      "ai_giu": null,
+      "tan_suat": null
+    },
+    {
+      "ten": "Export Ads Manager — Google",
+      "cach_lay": null,
+      "ai_giu": null,
+      "tan_suat": null
+    },
+    {
+      "ten": "Shopee",
+      "cach_lay": null,
+      "ai_giu": null,
+      "tan_suat": null
+    },
+    {
+      "ten": "TikTok Shop",
+      "cach_lay": null,
+      "ai_giu": null,
+      "tan_suat": null
+    },
+    {
+      "ten": "Lark Base",
+      "cach_lay": null,
+      "ai_giu": null,
+      "tan_suat": null
+    },
+    {
+      "ten": "Chat group",
+      "cach_lay": null,
+      "ai_giu": null,
+      "tan_suat": null
+    }
+  ]
+}
