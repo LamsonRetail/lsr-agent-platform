@@ -6,7 +6,7 @@ Thứ tự làm việc (gate tự nhắc nếu bỏ qua):
 Chạy nhanh:
 ```bash
 # đăng ký agent (1 lần) — nhận LSR_AGENT_TOKEN, lưu vào .env.lsr (gitignored)
-python3 scripts/lsr_adopt.py --enroll-token <hỏi admin> --id AG-SOURCING --name "Sourcing" --owner <email>
+python3 scripts/lsr_adopt.py --enroll-token <hỏi admin> --id AG-SOURCING --name "Sourcing" --owner linhntt@hapas.vn
 
 # chạy agent (Docker — giống môi trường thật)
 cd agents/AG-SOURCING && cp .env.example .env && vi .env && docker compose up
