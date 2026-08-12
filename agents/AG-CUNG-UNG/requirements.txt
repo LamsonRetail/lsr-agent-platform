@@ -1,0 +1,4 @@
+# Chỉ cần khi muốn answer() trong consumer.py gọi Claude Agent SDK thật (auth bằng
+# subscription của OWNER — claude setup-token, KHÔNG api key). Nếu không cài/CLI `claude`
+# chưa đăng nhập, ask_model() tự fallback về luật đơn giản — agent vẫn chạy được.
+claude-agent-sdk>=0.1

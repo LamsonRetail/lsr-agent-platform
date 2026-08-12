@@ -7,5 +7,10 @@ services:
       LSR_PLATFORM_URL: ${LSR_PLATFORM_URL:-https://platform.34-126-154-135.sslip.io}
       LSR_AGENT_ID: ${LSR_AGENT_ID:-AG-CUNG-UNG}
       LSR_AGENT_TOKEN: ${LSR_AGENT_TOKEN:?cần token — xin ở Console hoặc scripts/lsr_adopt.py}
+      LSR_MODEL: ${LSR_MODEL:-claude-sonnet-5}
       DRY_RUN: ${DRY_RUN:-true}      # false = gửi tin thật ra Lark
+    volumes:
+      # Subscription của OWNER (đăng nhập bằng `claude setup-token` trên máy/VPS này) —
+      # mount để Claude Agent SDK dùng, KHÔNG commit thư mục này vào git.
+      - ${CLAUDE_CONFIG_DIR:?điền đường dẫn ~/.claude của owner (nơi đã claude setup-token)}:/root/.claude:ro
     restart: unless-stopped

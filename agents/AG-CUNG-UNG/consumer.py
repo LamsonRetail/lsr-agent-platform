@@ -16,8 +16,10 @@ Docker: docker compose up   (xem docker-compose.yml cùng thư mục)
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import pathlib
 import time
 import urllib.error
 import urllib.parse
@@ -27,9 +29,64 @@ PLATFORM = os.environ.get("LSR_PLATFORM_URL", "https://platform.34-126-154-135.s
 TOKEN = os.environ.get("LSR_AGENT_TOKEN", "")
 AGENT_ID = os.environ.get("LSR_AGENT_ID", "AG-CUNG-UNG")
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() != "false"
+MODEL = os.environ.get("LSR_MODEL", "claude-sonnet-5")
+SYSTEM_PROMPT_PATH = pathlib.Path(__file__).parent / "system_prompt.md"
 
 RECORDING_TYPES = {"audio", "media", "file"}
 CONFIRM_WORDS = {"chốt", "chot", "confirm", "duyệt", "duyet"}
+
+
+def _load_system_prompt() -> str:
+    try:
+        return SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return "Bạn là Trợ lý Cung Ứng của LamsonRetail."
+
+
+async def _ask_model_async(prompt: str) -> str:
+    # Import trong hàm (không ở top-level) để agent vẫn chạy được khi chưa cài package
+    # này (fallback sang luật đơn giản) — xem ask_model().
+    from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, TextBlock, query
+
+    options = ClaudeAgentOptions(
+        system_prompt=_load_system_prompt(),
+        model=MODEL,
+        max_turns=1,              # 1 lượt hỏi-đáp, không tự gọi tool/agent con
+        permission_mode="default",
+    )
+    chunks: list[str] = []
+    result_text = ""
+    async for message in query(prompt=prompt, options=options):
+        if isinstance(message, AssistantMessage):
+            for block in message.content:
+                if isinstance(block, TextBlock):
+                    chunks.append(block.text)
+        elif isinstance(message, ResultMessage) and message.result:
+            result_text = message.result
+    return (result_text or "".join(chunks)).strip()
+
+
+def ask_model(prompt: str) -> str | None:
+    """Gọi Claude Agent SDK thật — auth bằng subscription của OWNER (`claude setup-token`
+    trên máy/VPS chạy agent), KHÔNG dùng API key (xem agents/AG-CUNG-UNG/README.md).
+
+    Trả None nếu package/CLI chưa sẵn sàng (chưa cài `claude-agent-sdk`, chưa đăng nhập
+    subscription, mất mạng...) để answer() tự fallback sang câu trả lời theo luật — agent
+    không crash khi môi trường chưa cấu hình xong (vd chạy test local không có subscription).
+
+    LƯU Ý: chưa test end-to-end với subscription thật (môi trường phát triển không có
+    credential/Docker) — cần owner tự verify khi golive.
+    """
+    if not prompt.strip():
+        return None
+    try:
+        text = asyncio.run(_ask_model_async(prompt))
+    except ImportError:
+        return None
+    except Exception as exc:  # CLINotFoundError, CLIConnectionError, chưa login, v.v.
+        print(f"[ask_model] lỗi gọi Claude Agent SDK: {exc}")
+        return None
+    return text or None
 
 
 def api(method: str, path: str, payload=None, timeout: int = 40):
@@ -66,7 +123,15 @@ def answer(q: str, ctx: dict, payload: dict) -> str:
                 "hàng, hợp đồng, tồn kho...), (2) dựng **biên bản họp** từ recording/nội dung "
                 "trao đổi, (3) chốt biên bản rồi tạo **task**.")
 
-    # Có tri thức liên quan → trả lời kèm trích dẫn nguồn (không bịa).
+    # Câu hỏi tri thức chung — ưu tiên gọi Claude Agent SDK thật (auth subscription của
+    # owner) để trả lời tự nhiên trên nền ctx (tóm tắt, fact, tri thức); system_prompt.md
+    # đã yêu cầu model luôn trích nguồn / nói rõ "chưa có" — không bịa.
+    model_reply = ask_model(build_prompt(ctx, q))
+    if model_reply:
+        return model_reply
+
+    # Fallback khi SDK/subscription chưa sẵn sàng (vd chạy test local) — luật đơn giản,
+    # đảm bảo agent luôn trả lời được / test được dù chưa nối model thật.
     hits = ctx.get("knowledge") or []
     if hits:
         h = hits[0]

@@ -8,10 +8,28 @@ và luồng kỹ thuật ở [WORKFLOW.md](WORKFLOW.md).
 
 ## Chạy thử nhanh (Docker, giống thật)
 ```bash
-cp .env.example .env && vi .env   # điền LSR_AGENT_TOKEN
+cp .env.example .env && vi .env   # điền LSR_AGENT_TOKEN + CLAUDE_CONFIG_DIR
 docker compose up
 ```
-hoặc chạy thẳng: `LSR_AGENT_TOKEN=<token> python3 consumer.py`
+hoặc chạy thẳng (trên máy đã `claude setup-token` sẵn):
+`LSR_AGENT_TOKEN=<token> python3 consumer.py`
+
+## Trả lời bằng model thật (Claude Agent SDK)
+`consumer.py` ưu tiên gọi **Claude Agent SDK** (auth subscription của OWNER, không API
+key) cho câu hỏi tri thức chung — xem hàm `ask_model()`. Cần:
+1. Owner đã `claude setup-token` trên máy/VPS chạy agent (token lưu ở `~/.claude`).
+2. `pip install -r requirements.txt` (cài `claude-agent-sdk`) — Dockerfile đã tự làm,
+   kèm cài Node + `@anthropic-ai/claude-code` (CLI mà SDK gọi xuống).
+3. `docker-compose.yml` mount `CLAUDE_CONFIG_DIR` (đường dẫn `~/.claude` của owner) vào
+   container.
+
+Nếu SDK chưa cài / chưa đăng nhập / lỗi mạng → `ask_model()` trả `None`, `answer()` tự
+**fallback về luật đơn giản** (trích excerpt tri thức hoặc từ chối) — agent không crash,
+vẫn test được (`tests.jsonl`) khi chưa nối model thật.
+
+> **Chưa test end-to-end với subscription thật** (môi trường code không có credential/
+> Docker) — owner cần tự verify bằng `docker compose up` sau khi có token trước khi
+> golive cho người dùng thật.
 
 Test tự động theo `tests.jsonl`:
 ```bash
@@ -30,6 +48,7 @@ AG-CUNG-UNG/
 ├── tests.jsonl            # case ngắn cho scripts/agent-test.sh
 ├── tests/agent_tests.yaml # bộ test có nhãn (needs_tool) cho 6 chỉ số hành vi
 ├── consumer.py            # logic agent — CHỈ cần sửa answer()
+├── requirements.txt       # claude-agent-sdk (tuỳ chọn — cho ask_model() gọi model thật)
 ├── Dockerfile / docker-compose.yml
 └── .env.example
 ```
