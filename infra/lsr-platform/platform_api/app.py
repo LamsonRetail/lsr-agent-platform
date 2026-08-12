@@ -87,6 +87,23 @@ def _agent_links(agent_id: str, backend_url: str = "", dashboard_url: str = "") 
 # Lark notify: bot của platform (fallback creds Minh Anh nếu chưa cấu hình riêng)
 LARK_APP_ID = os.environ.get("LARK_NOTIFY_APP_ID") or os.environ.get("MINH_ANH_LARK_APP_ID", "")
 LARK_APP_SECRET = os.environ.get("LARK_NOTIFY_APP_SECRET") or os.environ.get("MINH_ANH_LARK_APP_SECRET", "")
+
+# ĐA APP: mỗi routing_binding có thể gắn một app Lark riêng (vd Sawadee HAPAS cho squad TH).
+# Trả lời job PHẢI đi bằng đúng bot đã nhận tin — bot khác không ở trong nhóm đó.
+# Secret chỉ nằm trong .env trên VM; compose ghép thành LARK_EXTRA_APPS='{"cli_x":"secret"}'.
+_LARK_APPS: dict = {}
+for _aid, _sec in (
+    (os.environ.get("LARK_NOTIFY_APP_ID", ""), os.environ.get("LARK_NOTIFY_APP_SECRET", "")),
+    (os.environ.get("MINH_ANH_LARK_APP_ID", ""), os.environ.get("MINH_ANH_LARK_APP_SECRET", "")),
+):
+    if _aid and _sec:
+        _LARK_APPS.setdefault(_aid, _sec)
+try:
+    for _aid, _sec in json.loads(os.environ.get("LARK_EXTRA_APPS") or "{}").items():
+        if _aid and _sec:
+            _LARK_APPS[_aid] = _sec
+except Exception:
+    pass
 LARK_DOMAIN = os.environ.get("LARK_DOMAIN", "https://open.larksuite.com").rstrip("/")
 LARK_NOTIFY = os.environ.get("LARK_NOTIFY_ENABLED", "true").lower() != "false"
 # Nhóm nhận thông báo khi CHƯA có scope contact:user.id:readonly (không tra được email→open_id)
@@ -2081,53 +2098,58 @@ def team_brain(team_id: str) -> dict:
 
 # ======================= LSR Brain: shared brain + consolidate =======================
 
-_LARK_TOKEN: dict = {"value": "", "exp": 0.0}
+_LARK_TOKEN: dict = {}          # app_id -> {"value": str, "exp": float}
 
 
-def _lark_token() -> str:
-    """tenant_access_token dùng chung — cache 2 tầng: L1 in-memory, L2 Postgres.
+def _lark_token(app_id: str = "") -> str:
+    """tenant_access_token THEO APP — cache 2 tầng: L1 in-memory, L2 Postgres.
 
-    Cache L2 (bảng lark_token_cache) để MỌI service/agent trong platform xài chung
-    một token, không mỗi nơi tự fetch (đồng bộ + tiết kiệm call, sống qua restart).
+    app_id rỗng = app mặc định của platform (LARK_NOTIFY/MINH_ANH). App khác
+    (vd Sawadee HAPAS) phải có secret trong _LARK_APPS — không có thì trả "",
+    caller báo lỗi rõ thay vì âm thầm gửi bằng bot sai (bot đó không ở trong nhóm).
+    Cache L2 (bảng lark_token_cache, key app_id) để MỌI service/agent xài chung
+    một token mỗi app, không mỗi nơi tự fetch (đồng bộ + tiết kiệm call, sống qua restart).
     """
 
     import time as _t
-    now = _t.time()
-    if _LARK_TOKEN["value"] and now < _LARK_TOKEN["exp"]:
-        return _LARK_TOKEN["value"]
-    if not (LARK_APP_ID and LARK_APP_SECRET):
+    app_id = app_id or LARK_APP_ID
+    secret = _LARK_APPS.get(app_id, "")
+    if not (app_id and secret):
         return ""
+    now = _t.time()
+    ent = _LARK_TOKEN.get(app_id)
+    if ent and ent["value"] and now < ent["exp"]:
+        return ent["value"]
     # L2: token còn hạn do service khác vừa lấy?
     try:
         with _db() as conn:
             row = conn.execute(
                 "SELECT token, extract(epoch from expire_at) AS exp "
-                "FROM lark_token_cache WHERE app_id=%s", (LARK_APP_ID,)).fetchone()
+                "FROM lark_token_cache WHERE app_id=%s", (app_id,)).fetchone()
         if row and row["token"] and row["exp"] and now < float(row["exp"]):
-            _LARK_TOKEN["value"], _LARK_TOKEN["exp"] = row["token"], float(row["exp"])
-            return _LARK_TOKEN["value"]
+            _LARK_TOKEN[app_id] = {"value": row["token"], "exp": float(row["exp"])}
+            return row["token"]
     except Exception:
         pass
     r = requests.post(
         f"{LARK_DOMAIN}/open-apis/auth/v3/tenant_access_token/internal",
-        json={"app_id": LARK_APP_ID, "app_secret": LARK_APP_SECRET}, timeout=10)
+        json={"app_id": app_id, "app_secret": secret}, timeout=10)
     d = r.json()
     if d.get("code") != 0:
         return ""
     exp = now + int(d.get("expire", 7200)) - 120
-    _LARK_TOKEN["value"] = d["tenant_access_token"]
-    _LARK_TOKEN["exp"] = exp
+    _LARK_TOKEN[app_id] = {"value": d["tenant_access_token"], "exp": exp}
     try:
         with _db() as conn:
             conn.execute(
                 "INSERT INTO lark_token_cache (app_id, token, expire_at) "
                 "VALUES (%s,%s,to_timestamp(%s)) ON CONFLICT (app_id) DO UPDATE "
                 "SET token=EXCLUDED.token, expire_at=EXCLUDED.expire_at",
-                (LARK_APP_ID, _LARK_TOKEN["value"], exp))
+                (app_id, d["tenant_access_token"], exp))
             conn.commit()
     except Exception:
         pass
-    return _LARK_TOKEN["value"]
+    return d["tenant_access_token"]
 
 
 def _identity_cache_get(email: str) -> str | None:
@@ -2308,10 +2330,16 @@ def _sync_lark_status(conn, agent_id: str, activate: bool) -> list[dict]:
 
 
 def _lark_send_to(receive_id: str, id_type: str, *, text: str = "",
-                  markdown: str = "") -> tuple[bool, str]:
-    """Gửi 1 tin tới receive_id (open_id|email|chat_id). Trả (ok, detail)."""
+                  markdown: str = "", app_id: str = "") -> tuple[bool, str]:
+    """Gửi 1 tin tới receive_id (open_id|email|chat_id). Trả (ok, detail).
 
-    token = _lark_token()
+    app_id: gửi bằng bot của app đó (job đến từ app nào trả lời bằng app đó);
+    rỗng = app mặc định. App chưa có secret trên VM → lỗi RÕ, không gửi bot sai.
+    """
+
+    if app_id and app_id not in _LARK_APPS:
+        return False, f"app {app_id} chưa có secret trên VM — thêm vào /opt/lsr-platform/.env"
+    token = _lark_token(app_id)
     if not token:
         return False, "no lark token (thiếu LARK_APP_ID/SECRET)"
     if markdown:
@@ -2357,10 +2385,11 @@ def lark_resolve(body: dict, authorization: str = Header(default="")) -> dict:
 
 @app.post("/v1/lark/send")
 def lark_send(body: dict, authorization: str = Header(default="")) -> dict:
-    """Gửi tin Lark thay cho agent. body: {to, to_type?, text?|markdown?}.
+    """Gửi tin Lark thay cho agent. body: {to, to_type?, text?|markdown?, app_id?}.
 
     to_type: email (mặc định) | open_id | chat_id. Với email sẽ tự resolve→open_id;
     nếu chưa tra được và có LARK_NOTIFY_CHAT_ID thì rơi về nhóm chung (không mất tin).
+    app_id: gửi bằng bot của app đó (rỗng = app mặc định của platform).
     """
 
     agent_id = _require_self(authorization)
@@ -2369,6 +2398,7 @@ def lark_send(body: dict, authorization: str = Header(default="")) -> dict:
     to_type = (body.get("to_type") or "email").strip()
     text = body.get("text") or ""
     markdown = body.get("markdown") or ""
+    send_app = (body.get("app_id") or "").strip()
     if not to or not (text or markdown):
         raise HTTPException(status_code=400, detail="cần 'to' và 'text' hoặc 'markdown'")
     # P5: adapter chuẩn — kiểm quyền connector trước khi ra ngoài + đo usage.
@@ -2378,7 +2408,8 @@ def lark_send(body: dict, authorization: str = Header(default="")) -> dict:
         conn.commit()
 
     if to_type == "email":
-        token = _lark_token()
+        # Resolve email→open_id bằng token của app sẽ gửi (scope contact theo từng app).
+        token = _lark_token(send_app) or _lark_token()
         open_id = _lark_open_id(to, token) if token else ""
         if open_id:
             receive_id, id_type = open_id, "open_id"
@@ -2394,10 +2425,11 @@ def lark_send(body: dict, authorization: str = Header(default="")) -> dict:
     else:
         receive_id, id_type = to, to_type
 
-    ok, detail = _lark_send_to(receive_id, id_type, text=text, markdown=markdown)
+    ok, detail = _lark_send_to(receive_id, id_type, text=text, markdown=markdown,
+                               app_id=send_app)
     with _db() as conn:
         _audit(conn, agent_id, "lark_send", "lark", f"{id_type}:{receive_id[:24]}",
-               {"ok": ok, "detail": detail, "via": to_type})
+               {"ok": ok, "detail": detail, "via": to_type, "app_id": send_app or None})
         _meter(conn, agent_id, "lark", "send", ok=ok,
                latency_ms=int((time.time() - _t0) * 1000), error="" if ok else detail)
         conn.commit()
@@ -2407,21 +2439,80 @@ def lark_send(body: dict, authorization: str = Header(default="")) -> dict:
 
 
 @app.get("/v1/lark/chats")
-def lark_chats(authorization: str = Header(default="")) -> dict:
-    """Liệt kê các nhóm mà BOT platform đang tham gia (để agent biết chat_id gửi vào)."""
+def lark_chats(authorization: str = Header(default=""), app_id: str = "") -> dict:
+    """Liệt kê các nhóm mà BOT đang tham gia (để agent biết chat_id gửi vào).
+
+    app_id: xem nhóm của bot app đó (vd Sawadee HAPAS); rỗng = bot mặc định platform.
+    """
 
     _require_self(authorization)
-    token = _lark_token()
+    if app_id and app_id not in _LARK_APPS:
+        raise HTTPException(status_code=503,
+                            detail=f"app {app_id} chưa có secret trên VM (.env)")
+    token = _lark_token(app_id)
     if not token:
         raise HTTPException(status_code=503, detail="Lark chưa cấu hình")
     try:
         r = requests.get(f"{LARK_DOMAIN}/open-apis/im/v1/chats?page_size=100",
                          headers={"Authorization": f"Bearer {token}"}, timeout=10)
         items = (r.json().get("data") or {}).get("items") or []
-        return {"chats": [{"chat_id": c.get("chat_id"), "name": c.get("name")}
+        return {"app_id": app_id or LARK_APP_ID,
+                "chats": [{"chat_id": c.get("chat_id"), "name": c.get("name")}
                           for c in items]}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)[:160])
+
+
+@app.get("/v1/lark/resource/{message_id}/{file_key}")
+def lark_resource(message_id: str, file_key: str, type: str = "file", app_id: str = "",
+                  authorization: str = Header(default="")):
+    """Tải file/media đính kèm 1 tin Lark (vd recording cuộc họp) — stream về agent.
+
+    C1: gateway đẩy file_key trong payload; agent gọi endpoint này để lấy nội dung,
+    KHÔNG cần cầm app_secret. type: file (mặc định) | image. app_id = app đã nhận tin
+    (lấy từ reply_to.app_id của job) để dùng đúng tenant token.
+    """
+
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    _t0 = time.time()
+    with _db() as conn:
+        _require_connector(conn, agent_id, "lark", "resource")
+        conn.commit()
+    if app_id and app_id not in _LARK_APPS:
+        raise HTTPException(status_code=503,
+                            detail=f"app {app_id} chưa có secret trên VM (.env)")
+    token = _lark_token(app_id)
+    if not token:
+        raise HTTPException(status_code=503, detail="Lark chưa cấu hình")
+    url = (f"{LARK_DOMAIN}/open-apis/im/v1/messages/{message_id}"
+           f"/resources/{file_key}?type={type}")
+    try:
+        r = requests.get(url, headers={"Authorization": f"Bearer {token}"},
+                         stream=True, timeout=120)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)[:160])
+    ctype = r.headers.get("content-type", "application/octet-stream")
+    if r.status_code != 200 or ctype.startswith("application/json"):
+        # Lark trả lỗi dạng JSON (code/msg) — chuyển tiếp cho agent biết vì sao.
+        try:
+            detail = str(r.json().get("msg"))[:160]
+        except Exception:
+            detail = f"http {r.status_code}"
+        with _db() as conn:
+            _meter(conn, agent_id, "lark", "resource", ok=False,
+                   latency_ms=int((time.time() - _t0) * 1000), error=detail)
+            conn.commit()
+        raise HTTPException(status_code=502, detail=f"Lark từ chối: {detail}")
+    with _db() as conn:
+        _meter(conn, agent_id, "lark", "resource", ok=True,
+               latency_ms=int((time.time() - _t0) * 1000))
+        _audit(conn, agent_id, "lark_resource", "lark", file_key[:48],
+               {"message_id": message_id, "type": type, "app_id": app_id or None})
+        conn.commit()
+    return StreamingResponse(r.iter_content(chunk_size=64 * 1024), media_type=ctype,
+                             headers={"Content-Disposition":
+                                      f'attachment; filename="{file_key}"'})
 
 
 # ==================== P1: Ingress hợp nhất — routing + job queue ====================
@@ -2487,6 +2578,10 @@ def _ingest(conn, *, channel: str, payload: dict, event_id: str | None = None,
             session_id: str | None = None, reply_to: dict | None = None,
             agent_id: str | None = None) -> dict:
     """dedupe → route → enqueue. Trả {job_id|None, status, dedupe?}."""
+    # Nhớ app nguồn vào reply_to → khi trả lời chọn ĐÚNG bot (app khác không ở trong nhóm).
+    if app_id:
+        reply_to = dict(reply_to or {})
+        reply_to.setdefault("app_id", app_id)
     if event_id:
         r = conn.execute(
             "INSERT INTO event_dedupe(event_id) VALUES (%s) ON CONFLICT DO NOTHING RETURNING event_id",
@@ -2618,9 +2713,12 @@ def self_job_reply(job_id: int, body: dict, authorization: str = Header(default=
         delivered = {"channel": ch, "sent": False}
         if ch == "lark" and rt.get("chat_id"):
             _require_connector(conn, agent_id, "lark", "reply")
-            ok, detail = _lark_send_to(rt["chat_id"], "chat_id", text=text)
+            ok, detail = _lark_send_to(rt["chat_id"], "chat_id", text=text,
+                                       app_id=rt.get("app_id") or "")
             _meter(conn, agent_id, "lark", "reply", ok=ok, error="" if ok else detail)
             delivered["sent"] = ok
+            if not ok:
+                delivered["error"] = detail
         elif ch == "telegram" and rt.get("chat_id"):
             ok = _tg_send(str(rt["chat_id"]), text)
             _meter(conn, agent_id, "telegram", "reply", ok=ok)

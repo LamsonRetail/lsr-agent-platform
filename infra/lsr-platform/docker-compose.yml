@@ -62,6 +62,21 @@ services:
       LARK_DOMAIN_CONST: LARK
     restart: unless-stopped
 
+  # Long-connection cho app Lark Sawadee HAPAS (squad Thái Lan — AG-SQ-THAILAND).
+  # 1 container / 1 app: thiếu SAWADEE_LARK_APP_ID/SECRET trong .env thì container
+  # chỉ idle (log cảnh báo), không ảnh hưởng gì — điền secret là tự chạy sau restart.
+  event_gateway_sawadee:
+    build: ./event_gateway
+    depends_on: [platform_api]
+    environment:
+      PLATFORM_URL: http://platform_api:8090
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
+      LARK_APP_ID: ${SAWADEE_LARK_APP_ID:-}
+      LARK_APP_SECRET: ${SAWADEE_LARK_APP_SECRET:-}
+      LARK_DOMAIN_CONST: LARK
+    restart: unless-stopped
+
   # Bot admin Telegram: kênh AG-OPS/AG-EVAL ↔ admin (cảnh báo + nút duyệt việc).
   telegram_bot:
     build: ./telegram_bot
@@ -144,6 +159,9 @@ services:
       LARK_NOTIFY_APP_SECRET: ${LARK_NOTIFY_APP_SECRET:-}
       MINH_ANH_LARK_APP_ID: ${MINH_ANH_LARK_APP_ID:-}
       MINH_ANH_LARK_APP_SECRET: ${MINH_ANH_LARK_APP_SECRET:-}
+      # App Lark phụ (theo routing_binding.app_id) — trả lời job bằng ĐÚNG bot đã nhận tin.
+      # Secret chỉ nằm trong .env trên VM; thêm app mới = thêm cặp env + ghép vào JSON này.
+      LARK_EXTRA_APPS: '{"${SAWADEE_LARK_APP_ID:-}": "${SAWADEE_LARK_APP_SECRET:-}"}'
       LARK_NOTIFY_CHAT_ID: ${LARK_NOTIFY_CHAT_ID:-}
       LARK_DOMAIN: ${LARK_DOMAIN:-https://open.larksuite.com}
       AGENT_RUNNER_IMAGE: ${AGENT_RUNNER_IMAGE:-lsr-agent-runner:latest}

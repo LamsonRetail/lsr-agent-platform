@@ -356,9 +356,30 @@
 | P9.4.4 | Deactivate agent no-code | Job `rejected`, runtime bỏ qua (kill-switch vẫn hiệu lực) | ✅ |
 | P9.4.2 | Xuất repo (USECASE/TESTCASES ra file) | — | ⏳ chưa làm (spec đã lưu DB, API sẵn) |
 
+## 14. TH — Đa app Lark theo squad + C1 tải file (✅ 08-12, 13/13 pass)
+
+> Nền cho AG-SQ-THAILAND (app Sawadee HAPAS `cli_aaf6d2b3a5b8ded3`): mỗi routing_binding
+> có thể gắn app Lark riêng, trả lời job bằng **đúng bot đã nhận tin**.
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| TH.1 | Token agent AG-SQ-THAILAND (enroll) | `/v1/self` trả đúng agent | ✅ |
+| TH.2a | Ingest sự kiện từ app Sawadee | Route → AG-SQ-THAILAND theo `routing_binding.app_id` | ✅ |
+| TH.2b | reply_to của job | Tự mang `app_id` nguồn (chọn bot khi trả lời) | ✅ |
+| TH.3a | Agent lease job | Nhận được job vừa ingest | ✅ |
+| TH.3b | Reply khi app chưa có secret trên VM | Lỗi **RÕ** "chưa có secret" — KHÔNG gửi bằng bot sai | ✅ |
+| TH.3c | Reply lỗi kênh Lark | Message vẫn ghi `job_events` (web/SSE không mất) | ✅ |
+| TH.4 | Regression app mặc định | `/v1/lark/chats` = 200 (Minh Anh/notify còn nguyên) | ✅ |
+| TH.5 | `chats?app_id=` app thiếu secret | 503 kèm hướng dẫn thêm vào `.env` VM | ✅ |
+| TH.6 | C1: tin nhắn file qua gateway | Payload có `file_key`+`file_name`+`sender_open_id`+`app_id` | ✅ |
+| TH.7a | Tải resource app thiếu secret | 503 secret missing | ✅ |
+| TH.7b | Tải resource app mặc định (id giả) | Tới Lark, Lark từ chối → 502 minh bạch | ✅ |
+| TH.7c | Tải resource không token | 401 | ✅ |
+| TH.8 | Container gateway_sawadee chưa có secret | Idle an toàn + log cảnh báo rõ | ✅ |
+
 ---
 
-**Tổng: 179 case — 172 ✅ đã nghiệm thu (96%).**
+**Tổng: 192 case — 185 ✅ đã nghiệm thu (96%).**
 
 **7 case còn lại, chia 2 nhóm:**
 - **Cần bạn xử lý (3):** `LK.5`, `P1.1` — Lark app chưa mở available-range và bot chưa ở nhóm nào (resolve trả `null`, `/v1/lark/chats` rỗng); `ST.8` — cần team thật cùng push 1 branch.
