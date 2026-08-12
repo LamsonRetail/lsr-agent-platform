@@ -1,8 +1,14 @@
 """Lark Base — vừa là nguồn, vừa là MẶT TIỀN FIN-HUB. Hương.
 
-Đang chờ: bot được cấp scope `bitable:app` và app_token của Base FIN-HUB.
+Đang chờ: bot được cấp scope `bitable:app` và app_token của Base FIN-HUB. Đã kiểm ngày
+2026-08-12 với app thật: có scope im và drive, CHƯA có bitable — gọi
+`/open-apis/bitable/v1/apps/...` trả 99991672 đòi `bitable:app` hoặc `bitable:app:readonly`.
 
-Env cần: LARK_BASE_APP_TOKEN, LARK_BASE_TABLE_<TABLE> (table_id cho từng bảng).
+Env cần: LARK_BASE_APP_TOKEN, LARK_BASE_TABLE_<TABLE> (table_id cho từng bảng), và
+FIN_LARK_APP_ID / FIN_LARK_APP_SECRET / FIN_LARK_DOMAIN để lấy tenant_access_token.
+
+Tên biến CỐ Ý không phải LARK_APP_ID/LARK_APP_SECRET: lsr_lark tự chuyển sang chế độ
+"direct" khi thấy hai biến đó, làm shared/lark.py lặng lẽ bỏ qua broker của platform.
 
 Lưu ý quan trọng: `libs/lsr_lark` của platform CHƯA hỗ trợ Bitable — nó chỉ có gửi tin,
 resolve open_id và liệt kê chat. Nên phần Bitable phải gọi Lark Open API trực tiếp và code
