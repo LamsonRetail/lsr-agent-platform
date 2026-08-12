@@ -12,6 +12,10 @@ import json, os, subprocess, time, urllib.parse, urllib.request, urllib.error
 PLATFORM = os.environ.get("LSR_PLATFORM_URL", "https://platform.34-126-154-135.sslip.io").rstrip("/")
 TOKEN = os.environ["LSR_AGENT_TOKEN"]
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() == "true"
+# Môi trường đọc instruction: /v1/self/context mặc định env=prod (platform_api/app.py:3448).
+# Chạy LSR_ENV=dev để thử version draft TRƯỚC khi publish prod — cần cho eval gate, xem
+# golden_run.py. Không đặt gì = prod, y như cũ.
+ENV = os.environ.get("LSR_ENV", "prod")
 
 CONFIRM_WORDS = ("confirm", "duyệt", "chốt", "ok chốt", "đồng ý")
 
@@ -87,7 +91,7 @@ def handle(job):
     sid = job.get("session_id") or f"job-{job['id']}"
     uref = payload.get("sender_open_id") or payload.get("user_ref") or ""
     ctx = api("GET", f"/v1/self/context?session_id={sid}&user_ref={uref}"
-                     f"&q={urllib.parse.quote(q[:200])}")
+                     f"&q={urllib.parse.quote(q[:200])}&env={ENV}")
 
     pending = _pending_draft(sid, uref)
     if payload.get("kind") == "transcript":
