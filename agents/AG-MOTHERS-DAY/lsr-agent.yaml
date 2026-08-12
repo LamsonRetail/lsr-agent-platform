@@ -1,0 +1,39 @@
+apiVersion: lsr/v1
+agent:
+  id: AG-MOTHERS-DAY
+  name: Mother's Day
+  version: 0.1.0
+  owner: linhntt@hapas.vn      # OWNER thật của agent — auth dùng subscription của người này
+  squad: SQ-SOURCING
+  is_squad_agent: false        # agent theo campaign, không phải agent chính của squad
+  connect_mode: bot            # bot | user
+  description: >
+    Tổng hợp dữ liệu chung của dự án campaign Mother's Day (báo giá NCC, tiến độ sản
+    xuất/nhập hàng, kế hoạch truyền thông) vào một kho tri thức ai cũng hỏi được qua
+    chat, kèm dựng biên bản họp tự động (transcript → nháp → chủ trì confirm → tạo task).
+
+lark:
+  connect_mode: bot
+  bot:
+    app: platform-shared        # dùng bot dùng chung của platform (admin đã cài sẵn vào tenant)
+    chat_ids: []                # điền khi add bot vào nhóm Lark của dự án Mother's Day
+    event_webhook: https://collector.lsr.internal/lark/events
+
+runtime:
+  sdk: claude-agent-sdk
+  auth: subscription        # BẮT BUỘC: đăng nhập subscription của OWNER (claude login /
+                             # setup-token). KHÔNG dùng api key, KHÔNG dùng auth chung platform.
+  model: claude-sonnet-5
+
+skills:                     # MCP tự do — chỉ khai báo + log
+  - {name: resource-index, type: builtin}
+  - {name: lark-minutes, type: mcp}
+  - {name: lark-task, type: mcp}
+  - {name: lark-base, type: mcp}
+
+telemetry:
+  enabled: true             # BẮT BUỘC (control point) — agent không gửi trace = không golive
+  collector: https://collector.lsr.internal
+
+tests:
+  suite: agents/AG-MOTHERS-DAY/tests.jsonl
