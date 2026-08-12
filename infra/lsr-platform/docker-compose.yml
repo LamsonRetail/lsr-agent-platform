@@ -105,6 +105,9 @@ services:
       # Nơi chạy agent GĐ này = docker-socket-proxy trên VM chung (quyền hạn chế).
       # Tương lai: agent set runtime_host = daemon VM riêng → không đổi code.
       AGENT_DOCKER_HOST: ${AGENT_DOCKER_HOST:-tcp://docker_proxy:2375}
+      # P2 Model Auth: thư mục secrets trên VM (host path) để mount ro vào agent_runner.
+      SECRETS_HOST_DIR: ${SECRETS_HOST_DIR:-/opt/lsr-platform/secrets}
+      LSR_DEFAULT_FALLBACK_MODEL: ${LSR_DEFAULT_FALLBACK_MODEL:-claude-sonnet-4-5}
     ports:
       - "127.0.0.1:8090:8090"
     restart: unless-stopped

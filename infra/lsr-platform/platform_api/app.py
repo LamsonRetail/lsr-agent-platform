@@ -161,6 +161,13 @@ def _ensure_schema() -> None:
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS backup_owner text",
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS lark_app_id text",
             "ALTER TABLE agents ADD COLUMN IF NOT EXISTS lark_chat_ids text[]",
+            # P2 Model Auth: cách agent lấy quyền gọi model.
+            #  own  = subscription RIÊNG (credential_id) → fallback pool nếu kẹt
+            #  pool = dùng pool subscription chung
+            #  api  = ưu tiên API key (litellm)  (thường chỉ dùng khi mọi sub cooldown)
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS auth_mode text DEFAULT 'pool'",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS credential_id text",
+            "ALTER TABLE agents ADD COLUMN IF NOT EXISTS model_fallback text",
         ):
             conn.execute(ddl)
         # --- Test & Learn ---
@@ -707,6 +714,27 @@ def _ensure_schema() -> None:
             )
             """
         )
+        # ================= P2: Model Auth — pool credential (ref, KHÔNG lưu secret) =============
+        # secret_ref = đường dẫn file trên VM (/opt/lsr-platform/secrets/<ref>). DB chỉ giữ ref.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS model_credentials (
+                id            text PRIMARY KEY,
+                kind          text NOT NULL,        -- subscription | api_key
+                label         text,
+                owner_email   text,
+                secret_ref    text NOT NULL,        -- path tương đối trong secrets/
+                status        text DEFAULT 'active',-- active | cooldown | disabled
+                cooldown_until timestamptz,
+                priority      int DEFAULT 100,      -- nhỏ = ưu tiên
+                note          text,
+                created_at    timestamptz DEFAULT now(),
+                updated_at    timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_cred_pick "
+                     "ON model_credentials(kind, status, priority)")
         conn.commit()
     _READY = True
 
@@ -925,9 +953,12 @@ def self_deploy(body: dict, authorization: str = Header(default="")) -> dict:
         raise HTTPException(status_code=501, detail="runtime chưa bật (thiếu docker SDK/host)")
 
     # Env truyền thẳng vào container qua daemon (không ghi file host — thân thiện đa-VM).
+    # P2: runner tự LEASE credential từ broker (LSR_PLATFORM_URL). oauth_token vẫn nhận
+    # như FALLBACK (own-mode chưa cấu hình pool) — không log.
     env = {
         "CLAUDE_CODE_OAUTH_TOKEN": oauth,
         "LSR_AGENT_ID": aid,
+        "LSR_PLATFORM_URL": "http://platform_api:8090",
         "LSR_COLLECTOR": "http://collector:8081",   # nội bộ docker network (GĐ VM chung)
         "LSR_TELEMETRY_API_KEY": tok,
         "AGENT_REPO": body.get("repo") or "",
@@ -936,18 +967,24 @@ def self_deploy(body: dict, authorization: str = Header(default="")) -> dict:
     name = _agent_container(aid)
     mem = int(body.get("mem_mb") or 512)
     cpus = float(body.get("cpus") or 0.5)
+    # Mount thư mục secrets của VM (chứa credential pool) READ-ONLY để runner đọc theo ref.
+    secrets_host = os.environ.get("SECRETS_HOST_DIR", "")
+    volumes = ({secrets_host: {"bind": "/secrets", "mode": "ro"}} if secrets_host else None)
     try:
         try:
             client.containers.get(name).remove(force=True)
         except Exception:
             pass
-        c = client.containers.run(
-            AGENT_RUNNER_IMAGE, name=name, detach=True,
+        run_kwargs = dict(
+            name=name, detach=True,
             environment=env, network=AGENT_NETWORK,
             restart_policy={"Name": "unless-stopped"},
             mem_limit=f"{mem}m", nano_cpus=int(cpus * 1e9),
             labels={"lsr-agent": aid},
         )
+        if volumes:
+            run_kwargs["volumes"] = volumes
+        c = client.containers.run(AGENT_RUNNER_IMAGE, **run_kwargs)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"không chạy được container: {str(exc)[:200]}")
     with _db() as conn:
@@ -2031,6 +2068,170 @@ def chat_stream(agent_id: str, session_id: str, authorization: str = Header(defa
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# ==================== P2: Model Auth Broker (UC3·4·5) ====================
+# Ladder: subscription RIÊNG → pool subscription chung → API key (litellm).
+# Trả REF (đường dẫn file trên VM), KHÔNG trả secret → token không bao giờ rời VM/qua log.
+
+LITELLM_URL = os.environ.get("LITELLM_INTERNAL_URL", "http://litellm:4000")
+DEFAULT_FALLBACK_MODEL = os.environ.get("LSR_DEFAULT_FALLBACK_MODEL", "claude-sonnet-4-5")
+COOLDOWN_SECS = int(os.environ.get("MODEL_COOLDOWN_SECS", str(5 * 3600)))  # cửa sổ 5h
+
+# "Dùng được" = active, hoặc cooldown đã hết hạn (tự hồi phục khi lease).
+_USABLE = ("(status='active' OR (status='cooldown' AND cooldown_until < now()))")
+
+
+def _pick_credential(conn, kind: str, exclude_id: str | None = None) -> dict | None:
+    q = (f"SELECT id, kind, secret_ref, label, owner_email FROM model_credentials "
+         f"WHERE kind=%s AND {_USABLE}")
+    args: list = [kind]
+    if exclude_id:
+        q += " AND id <> %s"; args.append(exclude_id)
+    q += " ORDER BY priority ASC, id ASC LIMIT 1"
+    return conn.execute(q, tuple(args)).fetchone()
+
+
+def _fallback_model(agent_row: dict) -> str:
+    return (agent_row or {}).get("model_fallback") or DEFAULT_FALLBACK_MODEL
+
+
+@app.post("/v1/self/model-auth/lease")
+def model_auth_lease(authorization: str = Header(default=""), body: dict | None = None) -> dict:
+    """Cấp quyền gọi model cho agent theo ladder. Trả ref + cấu hình, không trả secret."""
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        a = conn.execute(
+            "SELECT auth_mode, credential_id, model_fallback FROM agents WHERE agent_id=%s",
+            (agent_id,)).fetchone() or {}
+        mode = (a.get("auth_mode") or "pool")
+        cred = None
+        # ① subscription RIÊNG (own)
+        if mode == "own" and a.get("credential_id"):
+            cred = conn.execute(
+                f"SELECT id, kind, secret_ref, label, owner_email FROM model_credentials "
+                f"WHERE id=%s AND kind='subscription' AND {_USABLE}",
+                (a["credential_id"],)).fetchone()
+        # ② pool subscription chung
+        if not cred and mode in ("own", "pool"):
+            cred = _pick_credential(conn, "subscription")
+        # ③ API key (litellm) — chỉ khi không còn subscription (hoặc mode=api)
+        if not cred:
+            api = _pick_credential(conn, "api_key")
+            if api:
+                _audit(conn, agent_id, "model_auth_lease", "credential", api["id"],
+                       {"mode": "api", "reason": "no_subscription_available"})
+                conn.commit()
+                return {"mode": "api", "credential_id": api["id"], "kind": "api_key",
+                        "secret_ref": api["secret_ref"], "base_url": LITELLM_URL,
+                        "model": _fallback_model(a), "env_var": "ANTHROPIC_API_KEY"}
+            # ④ cạn hoàn toàn → alert + 503
+            _audit(conn, agent_id, "model_auth_exhausted", "agent", agent_id, {})
+            try:
+                if LARK_NOTIFY_CHAT_ID:
+                    _lark_send_to(LARK_NOTIFY_CHAT_ID, "chat_id",
+                                  text=f"⚠️ Model Auth CẠN: agent {agent_id} không còn credential nào (pool + API đều hết).")
+            except Exception:
+                pass
+            conn.commit()
+            raise HTTPException(status_code=503, detail="không còn credential khả dụng (pool cạn + không có API)")
+        _audit(conn, agent_id, "model_auth_lease", "credential", cred["id"],
+               {"mode": "subscription"})
+        conn.commit()
+    return {"mode": "subscription", "credential_id": cred["id"], "kind": "subscription",
+            "secret_ref": cred["secret_ref"], "env_var": "CLAUDE_CODE_OAUTH_TOKEN"}
+
+
+@app.post("/v1/self/model-auth/report")
+def model_auth_report(body: dict, authorization: str = Header(default="")) -> dict:
+    """Agent báo trạng thái credential: limit/429 → cooldown; ok → giữ active."""
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    cid = body.get("credential_id")
+    reason = (body.get("reason") or "").lower()
+    if not cid:
+        raise HTTPException(status_code=400, detail="thiếu credential_id")
+    with _db() as conn:
+        if reason in ("limit", "429", "rate_limit", "quota"):
+            conn.execute(
+                "UPDATE model_credentials SET status='cooldown', "
+                "cooldown_until = now() + make_interval(secs => %s), updated_at=now() WHERE id=%s",
+                (COOLDOWN_SECS, cid))
+            _audit(conn, agent_id, "model_auth_cooldown", "credential", cid, {"reason": reason})
+        elif reason in ("auth_error", "invalid"):
+            conn.execute("UPDATE model_credentials SET status='disabled', updated_at=now() WHERE id=%s", (cid,))
+            _audit(conn, agent_id, "model_auth_disabled", "credential", cid, {"reason": reason})
+        # reason=ok → không đổi
+        conn.commit()
+    return {"ok": True}
+
+
+# -------- Admin: quản lý credential (secret tạo bằng script trên VM) --------
+
+@app.post("/v1/model-auth/credentials")
+def cred_upsert(body: dict, authorization: str = Header(default="")) -> dict:
+    """Đăng ký/ cập nhật metadata credential. KHÔNG nhận secret — chỉ ref tới file VM."""
+    _require_admin(authorization)
+    _ensure_schema()
+    cid = body.get("id")
+    kind = body.get("kind")
+    ref = body.get("secret_ref")
+    if not (cid and kind in ("subscription", "api_key") and ref):
+        raise HTTPException(status_code=400, detail="cần id, kind(subscription|api_key), secret_ref")
+    if "token" in body or "secret" in body or "api_key" in body:
+        raise HTTPException(status_code=400, detail="KHÔNG gửi secret qua API — chỉ secret_ref (file trên VM)")
+    with _db() as conn:
+        conn.execute(
+            """
+            INSERT INTO model_credentials(id, kind, label, owner_email, secret_ref, priority, note)
+            VALUES (%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (id) DO UPDATE SET kind=EXCLUDED.kind, label=EXCLUDED.label,
+              owner_email=EXCLUDED.owner_email, secret_ref=EXCLUDED.secret_ref,
+              priority=EXCLUDED.priority, note=EXCLUDED.note, updated_at=now()
+            """,
+            (cid, kind, body.get("label"), body.get("owner_email"), ref,
+             int(body.get("priority", 100)), body.get("note")))
+        _audit(conn, "admin", "cred_upsert", "credential", cid, {"kind": kind})
+        conn.commit()
+    return {"id": cid, "ok": True}
+
+
+@app.post("/v1/model-auth/credentials/{cid}/status")
+def cred_status(cid: str, body: dict, authorization: str = Header(default="")) -> dict:
+    _require_admin(authorization)
+    st = body.get("status")
+    if st not in ("active", "disabled", "cooldown"):
+        raise HTTPException(status_code=400, detail="status: active|disabled|cooldown")
+    with _db() as conn:
+        n = conn.execute(
+            "UPDATE model_credentials SET status=%s, "
+            "cooldown_until = CASE WHEN %s='cooldown' THEN now()+make_interval(secs=>%s) ELSE NULL END, "
+            "updated_at=now() WHERE id=%s RETURNING id",
+            (st, st, COOLDOWN_SECS, cid)).fetchone()
+        if not n:
+            raise HTTPException(status_code=404, detail="credential không tồn tại")
+        _audit(conn, "admin", "cred_status", "credential", cid, {"status": st})
+        conn.commit()
+    return {"id": cid, "status": st}
+
+
+@app.get("/v1/model-auth/credentials")
+def cred_list(authorization: str = Header(default="")) -> dict:
+    """Liệt kê credential (KHÔNG lộ secret) + agent nào đang trỏ own vào cred nào."""
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        creds = conn.execute(
+            "SELECT id, kind, label, owner_email, status, cooldown_until, priority, note, "
+            "secret_ref FROM model_credentials ORDER BY kind, priority, id").fetchall()
+        agents = conn.execute(
+            "SELECT agent_id, auth_mode, credential_id, model_fallback FROM agents "
+            "WHERE auth_mode IS NOT NULL ORDER BY agent_id").fetchall()
+        n_sub = conn.execute(f"SELECT count(*) c FROM model_credentials WHERE kind='subscription' AND {_USABLE}").fetchone()["c"]
+        n_api = conn.execute(f"SELECT count(*) c FROM model_credentials WHERE kind='api_key' AND {_USABLE}").fetchone()["c"]
+    return {"credentials": [dict(c) for c in creds], "agents": [dict(a) for a in agents],
+            "pool_subscription_usable": n_sub, "pool_api_usable": n_api}
 
 
 def _audit(conn, actor: str, action: str, target_type: str, target_id: str,

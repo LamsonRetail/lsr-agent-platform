@@ -16,6 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <nav className="nav">
             <Link href="/">Platform</Link>
             <Link href="/jobs">Ingress</Link>
+            <Link href="/model-auth">Model Auth</Link>
             <Link href="/cost">Chi phí</Link>
             <Link href="/health">Sức khoẻ</Link>
             <Link href="/test-learn">Test &amp; Learn</Link>

@@ -62,6 +62,11 @@ async function jgetAdmin(url: string) {
 }
 export async function routingList() { return safe(() => jgetAdmin(`${P}/v1/routing`), []); }
 export async function jobsList(qs = "") { return safe(() => jgetAdmin(`${P}/v1/jobs${qs}`), []); }
+// P2: Model Auth pool
+export async function modelCredentials() {
+  return safe(() => jgetAdmin(`${P}/v1/model-auth/credentials`),
+    { credentials: [], agents: [], pool_subscription_usable: 0, pool_api_usable: 0 });
+}
 
 async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
   try { return await fn(); } catch { return fallback; }
