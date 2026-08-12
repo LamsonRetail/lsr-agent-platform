@@ -15,7 +15,8 @@ agent:
 lark:
   connect_mode: bot
   bot:
-    app: platform-shared
+    app: "Magic LSR"           # app riêng "Magic LSR" — admin cấu hình LARK_APP_ID/SECRET
+                                # ở .env gốc trên server platform (KHÔNG nằm ở đây)
     chat_ids: []
     event_webhook: https://collector.lsr.internal/lark/events
 
