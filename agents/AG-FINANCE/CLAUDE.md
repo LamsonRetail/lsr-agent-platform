@@ -61,3 +61,14 @@ soi ngược được, ví dụ `test_a1_nguoi_ngoai_squad_bi_tu_choi`.
 
 Không mock tầng dữ liệu bằng số đẹp rồi coi là pass. Case quan trọng nhất là case dữ liệu
 xấu: thiếu cột, sai định dạng, nguồn chết, hai nguồn lệch nhau.
+
+Dữ liệu giả nằm tập trung ở `data_hub/sources/fake.py` và đi qua đúng đường chuẩn hoá của
+nguồn thật. Cần thêm tình huống xấu thì thêm dòng vào đó, đừng dựng dict rời rạc trong từng
+file test — nếu không, khi cắm nguồn thật vào sẽ không biết case nào còn đúng.
+
+## Chỗ để cắm nguồn thật
+
+Mỗi nguồn tách làm hai phần: đọc dòng thô (cần credential) và chuẩn hoá (không cần). Chuẩn
+hoá đã xong ở `TabularSource` + `mapping.py`. Khi có credential, chỉ truyền hàm đọc dòng vào
+constructor — không sửa logic đã test. Tương tự, `LarkBaseStore` nhận writer từ ngoài vào và
+có cùng giao diện với `MemoryStore`.

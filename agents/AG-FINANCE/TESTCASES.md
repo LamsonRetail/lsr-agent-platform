@@ -23,7 +23,7 @@ Cột **Ai** = người chịu trách nhiệm làm case đó pass: `Hương` (da
 | B2 | Sheet thiếu cột bắt buộc | row thiếu `due_date` | Báo lỗi rõ tên cột thiếu, KHÔNG tự điền giá trị mặc định | Hương |
 | B3 | Số tiền sai định dạng | `"1.234.567đ"` | Parse đúng thành 1234567, hoặc báo lỗi — không được ra 1.234 | Hương |
 | B4 | MISA API trả lỗi 500 | mock lỗi | Đồng bộ dừng ở nguồn đó, các nguồn khác vẫn chạy, ghi nhật ký lỗi | Hương |
-| B5 | MISA và Sheet lệch số | cùng mã KH, 2 số khác nhau | Báo lệch cho người xử lý, KHÔNG tự chọn bên nào | Hương |
+| B5 | MISA và Sheet lệch số | cùng mã KH + số hoá đơn, 2 số khác nhau | Giữ cả hai bản ghi, báo lệch nêu rõ cả hai con số và nguồn, KHÔNG tự chọn bên nào | Hương |
 | B6 | Chạy đồng bộ 2 lần liên tiếp | cùng dữ liệu nguồn | Lark Base không bị nhân đôi dòng (idempotent) | Hương |
 | B7 | Nguồn rỗng | Sheet không có dòng nào | Không ghi gì, không xoá dữ liệu cũ, ghi nhật ký "0 dòng" | Hương |
 
@@ -38,6 +38,9 @@ Cột **Ai** = người chịu trách nhiệm làm case đó pass: `Hương` (da
 | C5 | Hỏi số không có trong nguồn | "lương từng người bao nhiêu" | Nói không có dữ liệu đó trong phạm vi, không bịa | Hương |
 | C6 | Tra cứu quy định nội bộ | "quy trình duyệt chi trên 50 triệu" | Trả lời từ tri thức đã duyệt, kèm trích dẫn nguồn | chung |
 | C7 | Không có tri thức liên quan | câu hỏi quy định chưa có tài liệu | Nói chưa có tài liệu được duyệt, không suy diễn | chung |
+| C8 | Cùng hoá đơn có ở hai nguồn, số KHỚP nhau | gsheet và misa cùng INV-001 cùng số | Tổng chỉ tính hoá đơn đó MỘT lần, không cộng đôi | Hương |
+| C9 | Cùng hoá đơn có ở hai nguồn, số LỆCH nhau | gsheet và misa cùng INV-001 khác số | Loại hoá đơn đó khỏi tổng, nói rõ đã loại mấy hoá đơn và vì sao. Không tự chọn bên nào để cộng vào | Hương |
+| C10 | Câu hỏi nêu tháng không nêu năm | "doanh thu tháng 7" | Trả lời nhưng nêu rõ kỳ đã hiểu là `2026-07` để người hỏi tự phát hiện nếu sai | Hương |
 
 ## D. Biên bản họp (meeting)
 
@@ -63,7 +66,12 @@ Cột **Ai** = người chịu trách nhiệm làm case đó pass: `Hương` (da
 ## Định nghĩa "xong" cho mỗi phase
 
 - Toàn bộ nhóm **A** phải pass trước khi bất kỳ dữ liệu thật nào được nạp vào.
-- Phase 1 xong = A + B1..B3, B6..B7 + C1..C5 pass.
-- Phase 2 xong = thêm B4, B5.
+- Phase 1 xong = A + B1..B3, B5..B7 + C1..C5, C8..C10 pass **với dữ liệu giả**
+  (`data_hub/sources/fake.py`). Logic chuẩn hoá và truy vấn không phụ thuộc credential nên
+  test được đầy đủ trước khi có quyền truy cập nguồn thật.
+- B4 đã pass ở mức **cô lập lỗi** (một nguồn chết không làm dừng nguồn còn lại, có ghi nhật
+  ký) bằng nguồn giả đặt ở trạng thái lỗi. Phần còn lại của B4 là hành vi thật của API MISA
+  khi trả 5xx, thuộc Phase 2.
+- Phase 2 xong = B4 với API MISA thật, thêm bảng `cashflow`.
 - Phase 3 xong = toàn bộ D.
 - Go-live = toàn bộ A-E pass, không có case nào bị skip.

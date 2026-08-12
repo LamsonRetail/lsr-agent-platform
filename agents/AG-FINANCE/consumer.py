@@ -3,8 +3,8 @@
 File này chỉ ĐIỀU PHỐI. Logic nghiệp vụ nằm trong data_hub/ (Hương) và meeting/ (Thái).
 Thêm code nghiệp vụ vào đây là sai chỗ và sẽ làm hai người sửa chồng file nhau.
 
-Trạng thái Phase 0: cửa phân quyền và ranh giới phạm vi đã chạy thật. Phần trả số liệu và
-biên bản họp trả lời rõ là chưa triển khai, thay vì trả lời sai.
+Trạng thái Phase 1: phân quyền, ranh giới phạm vi và tra cứu số liệu đã chạy thật. Biên bản
+họp trả lời rõ là chưa triển khai, thay vì trả lời sai.
 
 Chạy:   LSR_AGENT_TOKEN=... python3 consumer.py
 Docker: docker compose up
@@ -19,6 +19,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from data_hub import ask, runtime
+from data_hub.sources.base import SourceError
 from shared.auth import DENY_MESSAGE, is_squad_member_from_payload
 
 PLATFORM = os.environ.get("LSR_PLATFORM_URL", "https://platform.34-126-154-135.sslip.io").rstrip("/")
@@ -98,7 +100,11 @@ def answer(question: str, ctx: dict, payload: dict) -> str:
     if intent == INTENT_MEETING:
         return "Luồng biên bản họp đang được xây (Phase 3). Hiện tôi chưa dựng được biên bản."
 
-    return "Phần tra cứu số liệu đang được xây (Phase 1). Hiện tôi chưa có dữ liệu để trả lời."
+    try:
+        return ask.answer_question(question, runtime.hub()).text
+    except SourceError as exc:
+        # Chưa nối được nguồn thật. Nói thẳng, KHÔNG rơi về dữ liệu giả.
+        return f"Tôi chưa truy cập được nguồn số liệu nên chưa trả lời được ({exc})."
 
 
 def handle(job: dict) -> str:
@@ -139,7 +145,10 @@ def handle(job: dict) -> str:
 def main() -> None:
     if not TOKEN:
         print("⚠️  thiếu LSR_AGENT_TOKEN — xin ở Console hoặc chạy scripts/lsr_adopt.py")
-    print(f"AG-FINANCE chạy — agent={AGENT_ID} DRY_RUN={DRY_RUN} → {PLATFORM}")
+    print(
+        f"AG-FINANCE chạy — agent={AGENT_ID} DRY_RUN={DRY_RUN} "
+        f"FIN_FAKE_DATA={runtime.fake_mode()} → {PLATFORM}"
+    )
     while True:
         try:
             jobs = api("GET", "/v1/self/jobs?wait=25&max=1")

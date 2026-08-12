@@ -37,12 +37,14 @@ Rồi đọc **[ONBOARDING.md](ONBOARDING.md)**.
 | Phase | Nội dung | Trạng thái |
 |---|---|---|
 | 0 | Scaffold, tài liệu, guardrail, phân quyền fail-closed | ✅ xong |
-| 1 | Google Sheet → Lark Base + hỏi đáp công nợ, doanh thu | ⬜ chờ service account + scope `bitable:app` |
-| 2 | MISA AMIS API + dòng tiền, số dư, lãi lỗ | ⬜ chờ credential MISA |
+| 1 | Chuẩn hoá dữ liệu + hỏi đáp công nợ, doanh thu, chi phí, lãi lỗ | ✅ xong **với dữ liệu giả** |
+| 1b | Cắm nguồn thật vào chỗ đã chừa sẵn | ⬜ chờ service account + scope `bitable:app` |
+| 2 | MISA AMIS API + dòng tiền, số dư | ⬜ chờ credential MISA |
 | 3 | Biên bản họp (text trước, audio sau) | ⬜ chờ xác nhận Whisper server |
 | 4 | Đăng ký platform, publish dev → stg → prod | ⬜ chờ enroll token |
 
-Phần đã chạy thật ở Phase 0: cửa phân quyền squad (mặc định từ chối) và ranh giới phạm vi.
+Phase 1 chỉ còn thiếu phần **đọc dòng thô từ nguồn** (cần credential). Chuẩn hoá, đối chiếu
+hai nguồn, truy vấn và diễn đạt đã chạy và đã test đầy đủ qua `data_hub/sources/fake.py`.
 Phần chưa làm thì trả lời rõ là chưa làm, không trả lời sai.
 
 ## Phạm vi sửa file
@@ -54,9 +56,11 @@ core của platform. Có git hook và CI chặn tự động — xem [CLAUDE.md]
 
 ```bash
 cd agents/AG-FINANCE
-.venv/bin/python -m pytest tests/ -q      # test
-LSR_AGENT_TOKEN=... python3 consumer.py   # chạy agent
-docker compose up                          # hoặc trong container
+.venv/bin/python -m pytest tests/ -q               # test
+FIN_FAKE_DATA=1 .venv/bin/python -m data_hub.runtime   # xem một lượt đồng bộ
+FIN_FAKE_DATA=1 LSR_AGENT_TOKEN=... python3 consumer.py   # chạy agent với số giả
+docker compose up                                   # hoặc trong container
 ```
 
 `DRY_RUN=true` (mặc định) thì không gửi tin thật ra Lark/Telegram.
+`FIN_FAKE_DATA=1` cho phép chạy thử toàn bộ luồng hỏi đáp khi chưa có credential nguồn nào.

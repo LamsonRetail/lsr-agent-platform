@@ -14,6 +14,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from datetime import datetime, timezone
+
+from ..mapping import map_row
+from ..schema import Provenance, SchemaError
 
 
 class SourceError(RuntimeError):
@@ -66,3 +70,35 @@ class Source(ABC):
 
         Gọi trước khi chạy đồng bộ để biết sớm, thay vì phát hiện giữa lúc đang ghi dữ liệu.
         """
+
+
+class TabularSource(Source):
+    """Nguồn dạng bảng (sheet, export CSV, API trả rows). Chỉ cần cấp `read_rows`.
+
+    Phần đọc dòng thô cần credential, phần chuẩn hoá thì không. Tách ra đây để logic
+    chuẩn hoá test được đầy đủ với nguồn giả trước khi có quyền truy cập nguồn thật.
+    """
+
+    #: Cột nào ở nguồn dùng làm source_ref (để đối chiếu ngược). Rỗng thì lấy số dòng.
+    ref_column: str = ""
+
+    @abstractmethod
+    def read_rows(self, table: str) -> list[dict]:
+        """Đọc dòng thô {tên cột: giá trị}. Raise SourceError nếu không tiếp cận được."""
+
+    def fetch(self, table: str) -> FetchResult:
+        if table not in self.supported_tables():
+            raise SourceError(f"{self.name}: không cấp bảng {table!r}")
+
+        synced_at = datetime.now(timezone.utc)
+        records: list[object] = []
+        errors: list[RowError] = []
+        for index, row in enumerate(self.read_rows(table), start=2):   # dòng 1 là header
+            row_ref = str(row.get(self.ref_column) or "").strip() if self.ref_column else ""
+            row_ref = row_ref or f"row{index}"
+            prov = Provenance(source=self.name, source_ref=row_ref, synced_at=synced_at)
+            try:
+                records.append(map_row(table, row, prov=prov))
+            except SchemaError as exc:
+                errors.append(RowError(row_ref=row_ref, reason=str(exc)))
+        return FetchResult(records=records, errors=errors)

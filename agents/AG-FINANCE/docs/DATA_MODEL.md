@@ -126,9 +126,22 @@ Cùng một khoá tự nhiên nhưng hai nguồn ra hai con số khác nhau: **k
 Tự động chọn "nguồn đáng tin hơn" là cách nhanh nhất để một con số sai đi vào báo cáo mà
 không ai biết.
 
+### Cộng tổng khi một hoá đơn có ở nhiều nguồn
+
+Khoá tự nhiên có chứa `source`, nên cùng một hoá đơn ở hai nguồn là hai bản ghi. Lúc **cộng
+tổng** thì phải quy về khoá nghiệp vụ (khoá tự nhiên bỏ `source`):
+
+| Tình huống | Cách xử lý | Case |
+|---|---|---|
+| Hai nguồn khớp nhau từng đồng | Cộng **một lần** | C8 |
+| Hai nguồn lệch nhau | **Loại khỏi tổng**, nói rõ đã loại mấy bản ghi và lệch ở đâu | C9 |
+
+Không cộng cả hai (thổi tổng lên), cũng không lặng lẽ lấy một bên (số sai mà không ai biết).
+Tổng thiếu và có báo thiếu thì kế toán còn đối chiếu được; tổng sai mà im lặng thì không.
+
 ## Chưa quyết
 
-- Ngưỡng bao lâu thì coi dữ liệu là cũ (đề xuất: 24 giờ cho công nợ, 1 tháng cho doanh thu
-  và chi phí) — chốt khi biết tần suất đồng bộ thực tế.
+- ~~Ngưỡng bao lâu thì coi dữ liệu là cũ~~ → đã chốt: cấu hình riêng từng bảng qua
+  `FIN_STALE_HOURS_<BẢNG>`, mặc định 24 giờ. Quá ngưỡng thì vẫn trả lời nhưng kèm cảnh báo.
 - Mã khoản mục chi phí có dùng chung với hệ thống mã của MISA hay tự định nghĩa lại.
 - Lark Base FIN-HUB đặt trong không gian nào, ai được quyền sửa trực tiếp trên đó.

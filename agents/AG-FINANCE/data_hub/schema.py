@@ -64,6 +64,35 @@ def parse_money(raw: object) -> Decimal:
     return -value if negative else value
 
 
+def format_money(value: Decimal) -> str:
+    """1234567 → "1.234.567". Nghịch đảo của parse_money, đặt cạnh nhau để không lệch nhau."""
+    return f"{value:,.0f}".replace(",", ".")
+
+
+_DATE_FORMATS = ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d/%m/%y", "%d.%m.%Y")
+
+
+def parse_date(raw: object) -> date:
+    """Đổi ngày từ nguồn thành date.
+
+    Sheet của người Việt viết ngày kiểu dd/mm/yyyy. Thứ tự thử format cố ý đặt dd/mm
+    trước, vì "01/07/2026" ở đây là 1 tháng 7 chứ không phải 7 tháng 1.
+    """
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    s = str(raw or "").strip()
+    if not s:
+        raise SchemaError("ngày bị rỗng")
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    raise SchemaError(f"không đọc được ngày từ {raw!r} (cần dd/mm/yyyy hoặc yyyy-mm-dd)")
+
+
 @dataclass(frozen=True)
 class Provenance:
     """Số này từ đâu ra và cũ đến mức nào. Bắt buộc với mọi bản ghi."""
