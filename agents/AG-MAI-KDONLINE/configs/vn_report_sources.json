@@ -35,10 +35,17 @@
       "tan_suat": null
     },
     {
-      "ten": "Lark Base",
-      "cach_lay": null,
-      "ai_giu": null,
-      "tan_suat": null
+      "ten": "Lark Base — LSR Control Tower (Dashboard Kinh doanh Online)",
+      "base_token": "Ok4QbTTXiag6iIsW3wylsheqgdh",
+      "page_id": "pgeLl0Q7Eh5ttYU8",
+      "url": "https://o4pvcegwn6b.sg.larksuite.com/app/Ok4QbTTXiag6iIsW3wylsheqgdh?pageId=pgeLl0Q7Eh5ttYU8",
+      "cach_lay": "Lark Bitable API (base +table-list / +record-search / +dashboard-block-get-data)",
+      "ai_giu": "Head of Online Business (minhnd@hapas.vn) — CHƯA phải base admin",
+      "tan_suat": null,
+      "trang_thai": "CHAN",
+      "ly_do_chan": "Base bật QUYỀN NÂNG CAO (is_advanced=true). Identity đang kết nối không có role → API trả 0 bảng. Kiểm chứng 12/08/2026: base +base-get OK (tên 'LSR Control Tower'), base +table-list trả 0 bảng, base +role-list trả 'not admin'.",
+      "can_lam_de_mo": "Base admin vào Base → Quyền nâng cao → cấp role CHỈ ĐỌC cho identity mà MAI dùng (user minhnd@hapas.vn và/hoặc app cli_a9bd0ff8d6619ed1), giới hạn đúng bảng/trường MAI được xem theo role_permissions.",
+      "luu_y": "Chừng nào còn CHAN, MAI phải nói 'chưa đọc được nguồn số' — TUYỆT ĐỐI không suy ra số từ nguồn khác."
     },
     {
       "ten": "Chat group",
