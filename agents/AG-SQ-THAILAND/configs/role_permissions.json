@@ -1,0 +1,18 @@
+{
+  "owner_config": "Vinh",
+  "deny_message": "Phần này em không được chia sẻ, anh/chị hỏi Vinh nhé.",
+  "rules": [
+    "Ai hỏi ngoài quyền → nói rõ không được chia sẻ, KHÔNG lách, KHÔNG trả lời một nửa.",
+    "Số lương và đánh giá cá nhân: không lưu vào bộ nhớ, không trả lời qua chat."
+  ],
+  "roles": [
+    {"role": "CM & Squad lead HAPAS", "people": ["Vinh"], "can_see": "tất cả", "can_do": "tất cả, kể cả giao việc"},
+    {"role": "Squad lead MATE MADE", "people": ["Sơn"], "can_see": "tất cả của squad MM", "can_do": "giao việc trong squad MM"},
+    {"role": "Phó squad MM tại Thái", "people": ["Trang"], "can_see": "số MM", "can_do": "quyết cùng Vinh khi Sơn im 24h"},
+    {"role": "Business Manager HAPAS", "people": ["Hương"], "can_see": "số HAPAS, không xem lương", "can_do": "cập nhật assignment của mình"},
+    {"role": "MKT tại Thái", "people": ["Tùng", "Hạnh", "Nawin", "Chol", "Ice"], "can_see": "DT & traffic, không xem LNĐG / P&L", "can_do": "cập nhật assignment"},
+    {"role": "MKT account VN-based", "people": ["Ngân (HAPAS)", "Yến Nhi (MM)"], "can_see": "DT & traffic brand mình", "can_do": "cập nhật assignment"},
+    {"role": "Sản phẩm", "people": ["Khôi", "T.Dương", "M.Thảo", "P.Thảo"], "can_see": "mốc BST, nghiên cứu, JTBD", "can_do": "cập nhật mốc BST"},
+    {"role": "People Ops", "people": ["[CẦN XÁC NHẬN PIC]"], "can_see": "headcount, tuyển dụng", "can_do": "cập nhật assignment"}
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "owner_config": "Vinh",
+  "trigger_names": ["Ploy", "ploy"],
+  "group_policy": "Trong nhóm: chỉ trả lời khi được @mention hoặc gọi tên trigger.",
+  "p2p_policy": "Chat riêng: trả lời người trong th_p2p_partners.",
+  "thread_policy": "Tag trong thread → trả lời đúng trong thread đó.",
+  "ack_message": "⏳ Em đang xử lý…",
+  "note": "Việc lọc mention/routing nằm ở event gateway + ingress của platform; config này là luật ứng xử để agent tự kiểm."
+}

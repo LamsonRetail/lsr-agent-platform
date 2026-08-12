@@ -1,0 +1,27 @@
+{
+  "owner_config": "People Ops [CẦN XÁC NHẬN PIC] — ai cũng thêm được mục mới",
+  "location": "Lark Drive — Phase 0 tra qua index này; đọc nội dung qua connector platform /v1/lark/* (chưa nối — xem PLOY.md mục 'Cần core')",
+  "master_files": [
+    {
+      "path": "03-San-pham-Kinh-doanh/HAPAS-ThaiLan-SanPham-JTBD-Tong-hop.md",
+      "size": "89KB",
+      "content": "17 mục: P&L, IDI n=10, 5 JTBD, 7 SKU, BST H2, anti-list, lịch mùa vụ 12 tháng, chiến lược giá"
+    },
+    {
+      "path": "04-Con-nguoi/ThaiLan-ConNguoi-ToChuc-DaoTao-Tong-hop.md",
+      "size": "78KB",
+      "content": "Squad model, JD, cơ chế lương, eval, đào tạo"
+    },
+    {
+      "path": "07-LSR-Group-BOD/LSR-NghiDai-ChienLuoc-MoHinhKD-TapDoan.md",
+      "size": "49KB",
+      "content": "Bối cảnh & mô hình kinh doanh tập đoàn ('Nghĩ dài')"
+    }
+  ],
+  "research_folder": {
+    "path": "02-Nghien-cuu-TuiNu-TH/",
+    "count": "~27 file [CẦN ĐẾM LẠI trên Lark Drive]",
+    "content": "Thi-truong-TuiNu/ (Kalodata, Taobao, POP, JTBD, phân khúc, quà tặng) · Competitor-Campaign/ (teardown brand Thái, brand deep-dive dịp lễ)"
+  },
+  "corrections_priority": "4 đính chính ở mục 0 của master file SP+JTBD phải ưu tiên nói ra — vd tỷ trọng kênh LIVE 58–69% / video 16–24%, không dùng bản cũ"
+}

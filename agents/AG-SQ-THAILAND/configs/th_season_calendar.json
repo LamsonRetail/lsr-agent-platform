@@ -1,0 +1,57 @@
+{
+  "owner_config": "Tùng (MKT Manager)",
+  "occasions": [
+    {
+      "id": "noel-newyear",
+      "name": "Noel / Năm mới (T12)",
+      "keywords": ["noel", "năm mới", "nam moi", "tháng 12", "thang 12", "t12", "giáng sinh", "giang sinh", "new year"],
+      "verdict": "LÀM — ưu tiên 1",
+      "notes": [
+        "⚠️ 14–19/12/2026: tắt giọng lễ hội, GIỮ SHOP MỞ — dồn chi tiêu 14/11–13/12, nén lại 20–28/12. [CẦN XÁC NHẬN — chưa có văn bản chính thức về hạn chế tuần đó]",
+        "ปีใหม่ ~111.609 triệu ฿, gấp ~10× Ngày của Mẹ",
+        "62,6% mua cho chính mình",
+        "0/8 brand túi TH có hộp quà → khe trống"
+      ]
+    },
+    {
+      "id": "tet-2027",
+      "name": "Tết Nguyên đán 06/02/2027",
+      "keywords": ["tết", "tet", "nguyên đán", "nguyen dan"],
+      "verdict": "LÀM NHỎ — ưu tiên 2",
+      "notes": [
+        "Năm Đinh Mùi (con Dê) — báo cáo POP con giáp mới ra ~T12/2026, ĐỪNG dùng bản năm Ngựa",
+        "Đỏ hiện đại (rượu/gạch), không đỏ bao lì xì"
+      ]
+    },
+    {
+      "id": "valentine",
+      "name": "Valentine 14/02",
+      "keywords": ["valentine", "14/02", "14-2"],
+      "verdict": "KHÔNG mở dòng riêng",
+      "notes": [
+        "POP không xếp vào dịp lễ ĐNÁ; số Thái 0,80–1,01× = không có mùa",
+        "Cách Tết 8 ngày → nếu phải chọn thì chọn Tết"
+      ]
+    },
+    {
+      "id": "songkran",
+      "name": "Songkran 13–15/04",
+      "keywords": ["songkran", "té nước", "te nuoc"],
+      "verdict": "NÊN CÂN NHẮC",
+      "notes": [
+        "POP gọi là dịp lễ số 1 của Thái, nêu đích danh 'tote chống bắn nước'",
+        "Dịp duy nhất sản phẩm không chết sau lễ (bán tiếp mùa mưa T5–T10)"
+      ]
+    },
+    {
+      "id": "mothers-day",
+      "name": "Ngày của Mẹ 12/08",
+      "keywords": ["ngày của mẹ", "ngay cua me", "mother"],
+      "verdict": "Có playbook 2027",
+      "notes": [
+        "~71% GMV T8 của BST rơi vào 3 ngày 08–10/08 (ước tính)",
+        "Giá thắng 19xx · trục thắng CHỒNG TẶNG VỢ · kick-off từ T2"
+      ]
+    }
+  ]
+}

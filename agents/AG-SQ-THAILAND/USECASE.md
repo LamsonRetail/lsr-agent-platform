@@ -59,6 +59,14 @@ Mọi kênh vào **cùng một hàng đợi** của platform — agent không c�
 **Bắt buộc:** không tạo task, không lưu biên bản chính thức khi **chưa** có confirm của
 chủ trì. Biên bản nháp chỉ tồn tại trong session cho tới khi được chốt.
 
+### Luồng 5 — Bối cảnh thị trường Thái từ config (mở rộng Ploy, 12/08)
+
+Trả lời trực tiếp từ `configs/*.json` qua `thailand_tools.py` (không cần model, không
+cần mạng): lịch mùa vụ kèm kết luận làm/không làm · đếm ngược mốc BST theo ngày tuyệt
+đối · ⭐ cảnh báo 1 mốc có nhiều phiên bản ngày giữa các nguồn · 2 base target song song
+· mục lục kho tri thức. Sửa config là đổi câu trả lời — không deploy. Toàn bộ kế hoạch
+6 tính năng Ploy và mapping vào platform: [PLOY.md](PLOY.md).
+
 ## Ngoài phạm vi (không làm)
 
 - Không tự gửi tin cho người **ngoài** nhóm đang trao đổi.
@@ -72,7 +80,7 @@ chủ trì. Biên bản nháp chỉ tồn tại trong session cho tới khi đư
 
 | Nguồn | Quyền | Trạng thái |
 |---|---|---|
-| Nhóm Lark của squad Thái Lan (tin nhắn, file recording) | qua connector `lark` dùng chung | ⬜ cần admin add bot vào nhóm |
+| Nhóm Lark của squad Thái Lan (tin nhắn, file recording) | qua app riêng **Sawadee HAPAS** (`cli_aaf6d2b3a5b8ded3`) nối vào event gateway | ⬜ cần admin chạy long-connection + gán ingress (PLOY.md §6) |
 | Brain của agent (`/v1/self/brain/*`) | đọc + đề xuất | ✅ có sẵn khi register |
 | Resource index `meeting-notes` (Minh Anh tự share khi register) | đọc/ghi | ✅ tự động |
 | Whisper transcript server (`LSR_TRANSCRIBE_URL`) | POST /transcribe | ✅ server sống (large-v3/CUDA) |

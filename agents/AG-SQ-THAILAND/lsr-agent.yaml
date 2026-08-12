@@ -16,9 +16,11 @@ agent:
 lark:
   connect_mode: bot
   bot:
-    app: platform-shared
+    app: sawadee-hapas      # app Lark riêng của thị trường TH (thay platform-shared, 12/08)
+    app_id: cli_aaf6d2b3a5b8ded3   # app_id KHÔNG phải secret; App Secret chỉ nằm trên VM
+    event_mode: long-connection    # gateway mở long-connection bằng credential trên VM
     chat_ids: []            # admin điền chat_id nhóm squad Thái Lan khi gán ingress
-    event_webhook: https://collector.lsr.internal/lark/events
+    event_webhook: https://collector.lsr.internal/lark/events   # dự phòng nếu đổi webhook mode
 
 runtime:
   sdk: claude-agent-sdk

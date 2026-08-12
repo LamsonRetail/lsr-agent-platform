@@ -26,6 +26,7 @@ import urllib.request
 
 import knowledge
 import minutes
+import thailand_tools
 import transcribe
 
 PLATFORM = os.environ.get("LSR_PLATFORM_URL", "https://platform.34-126-154-135.sslip.io").rstrip("/")
@@ -92,6 +93,11 @@ def answer(q: str, ctx: dict, payload: dict) -> str:
         return CAPABILITY
     if any(w in low for w in GREET_WORDS):
         return INTRO
+
+    # --- Ploy: bối cảnh thị trường Thái từ configs/ (mùa vụ, mốc BST, base target...) ---
+    hit = thailand_tools.route(low)
+    if hit:
+        return hit
 
     # --- Luồng 2: trả lời từ tri thức đã duyệt, luôn có nguồn ---
     hit = knowledge.answer_from_knowledge(ctx)

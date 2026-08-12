@@ -10,6 +10,7 @@ bản, chủ trì chốt rồi mới lưu + đề xuất đầu việc.
 | [TESTCASES.md](TESTCASES.md) | Bảng case theo từng luồng + nhãn tool |
 | [PLAN.md](PLAN.md) | Mục tiêu, kiến trúc, lộ trình 3 phase, việc cần core |
 | [TEAM.md](TEAM.md) | **Hương/Thái đọc trước** — fork + PR, chia file, không đụng core |
+| [PLOY.md](PLOY.md) | **Team Ploy đọc trước** — map kế hoạch Ploy → platform, phân công 8 người, 3 mức sửa hành vi |
 
 ## Thứ tự làm việc (gate tự nhắc nếu bỏ qua)
 
@@ -43,6 +44,9 @@ agents/AG-SQ-THAILAND/
 ├── knowledge.py            # kho dữ liệu chung, có nguồn           (Thái)
 ├── minutes.py              # biên bản + gate confirm               (Hương)
 ├── transcribe.py           # client Whisper                        (Hương)
+├── thailand_tools.py       # Ploy: 6 nhóm tool thị trường TH       (Data/Tech)
+├── configs/                # 13 config key — sửa là đổi hành vi    (mỗi key 1 chủ)
+├── skills/                 # skill .md — 1 người 1 file            (xem skills/README.md)
 ├── tests/agent_tests.yaml  # bộ test có nhãn (6 chỉ số tool)
 ├── tests.jsonl             # case chạy qua Chat API
 └── Dockerfile · docker-compose.yml · .env.example

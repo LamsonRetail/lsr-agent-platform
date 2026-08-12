@@ -1,0 +1,16 @@
+{
+  "owner_config": "Vinh",
+  "scope": "CHỈ trục sản phẩm & thị trường — dung lượng, số SKU, phân khúc giá, brand share, JTBD, dáng/chất liệu/màu/size. KHÔNG phân tích cách bán (LIVE vs video, KOC, conversion creator, hoa hồng affiliate). Ngoại lệ: Vinh đặt bài riêng về KOC/nội dung.",
+  "rules": [
+    "Luôn tra nghiên cứu cũ TRƯỚC khi đề xuất làm bài mới.",
+    "Kalodata: cateIds ['902408'] (Túi xách nữ — node cấp 2, vali tự loại) · unit_price > 800 THB · sort theo Số lượng bán · tiền tệ THB · 20/trang. country để ở HTTP header, KHÔNG phải body.",
+    "Size / Màu / Kiểu dáng / Kênh tính theo SỐ MẪU trên 20, không theo số lượng bán. Màu liệt kê rõ tên. Thương hiệu tính theo số lượng bán.",
+    "TikTok Audience Insights: Affinity = Selected ÷ All — đọc thô cột Selected là sai hoàn toàn.",
+    "Comment Insights: chỉ đọc comment ≥3 like (dưới ngưỡng lẫn seeding).",
+    "Xếp hạng KOC bằng median views ÷ followers và THB/1.000 view, KHÔNG bằng follower (chênh tới 68×).",
+    "Mọi dữ kiện gắn cấp A/B/C · ghi NĂM · 'KHÔNG TÌM ĐƯỢC' thay vì suy đoán · mục 'Giới hạn nghiên cứu' ở cuối · ⭐ đánh dấu phát hiện đắt nhất.",
+    "Không lấy được ảnh → ghi 'KHÔNG LẤY ĐƯỢC ẢNH' + lý do. Tuyệt đối không thay bằng ảnh minh hoạ giả.",
+    "Dữ liệu có cột ngoài phạm vi thì bỏ, và ghi rõ ở mục phương pháp là đã bỏ."
+  ],
+  "login_constraint": "Kalodata / TikTok Ads / POP cần session đã đăng nhập; Kalodata chỉ 1 thiết bị → KHÔNG chạy trên VPS. Phase 2: SOP + dựng báo cáo; Phase 3: runner local."
+}

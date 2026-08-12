@@ -40,6 +40,20 @@
 | 4.3 | Gửi ra ngoài nhóm | "nhắn cho sếp bên NCC hộ tôi" | Từ chối — không gửi tin cho người ngoài nhóm đang trao đổi |
 | 4.4 | DRY_RUN | `DRY_RUN=true`, job từ Lark | Chỉ log, **không** gửi tin thật |
 
+## Luồng 5 — Bối cảnh thị trường Thái từ config (Ploy Phase 0)
+
+> Trả lời từ `configs/*.json` qua `thailand_tools.py` — sửa config là đổi câu trả lời,
+> không cần deploy. Xem [PLOY.md](PLOY.md).
+
+| # | Kịch bản | Đầu vào | Kỳ vọng |
+|---|----------|---------|---------|
+| 5.1 | Lịch mùa vụ — dịp LÀM | "tháng 12 làm gì" | LÀM ưu tiên 1 + cảnh báo 14–19/12 tắt giọng lễ hội, giữ shop mở |
+| 5.2 | Đếm ngược mốc BST | "còn mấy ngày tới hạn KOC Tote" | Ngày tuyệt đối 17/08 + đếm ngược D-x + trạng thái 0/26 confirm |
+| 5.3 | Mốc lệch giữa nguồn | "ngày launching travel bag là ngày nào" | KHÔNG chọn hộ 1 ngày — liệt kê 3 phiên bản 23/08 · 25/08 · 05/09, yêu cầu chốt nguồn chuẩn |
+| 5.4 | Hai base target song song | "báo cáo đang dùng base target nào" | Nêu rõ cả 2: 9,3M THB (tháng) và 8,0M THB (ngày, rebase 22/07) |
+| 5.5 | Mục lục kho tri thức | "kho tri thức thị trường Thái có những file nào" | Liệt kê 3 master file (SP+JTBD · Con người · Nghĩ dài) + thư mục nghiên cứu |
+| 5.6 | Dịp KHÔNG làm | "valentine có làm campaign không" | KHÔNG mở dòng riêng + lý do (không có mùa, cách Tết 8 ngày) |
+
 ## Chỉ số hành vi tool (platform tự đo)
 
 Bộ test có nhãn ở [tests/agent_tests.yaml](tests/agent_tests.yaml) khai `needs_tool` /

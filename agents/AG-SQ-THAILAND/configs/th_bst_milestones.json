@@ -1,0 +1,49 @@
+{
+  "owner_config": "Khôi (Sản phẩm)",
+  "note": "Dùng NGÀY TUYỆT ĐỐI làm nguồn chuẩn, không tự suy D-x. Cùng 1 mốc có nhiều dòng khác nguồn ⇒ th_milestone_conflict() phát hiện lệch.",
+  "milestones": [
+    {
+      "bst": "Tote",
+      "launch": "2026-09-23",
+      "milestone": "Chốt KOC",
+      "date": "2026-08-17",
+      "source": "booking",
+      "status": "0/26 confirm (Celeb 0/1, Mini 0/25)",
+      "note": "Nguồn ghi 'D-23' nhưng so với launch 23/09 thì ra D-37 → mốc gốc cần Khôi xác nhận"
+    },
+    {
+      "bst": "BST T10",
+      "launch": "2026-10-07",
+      "milestone": "Chốt 3/7 mẫu",
+      "date": "2026-08-20",
+      "source": "kế hoạch sản phẩm",
+      "status": "da lộn bất khả thi (21/08 VN mới xuống đơn) → cân nhắc đẩy BST T11"
+    },
+    {
+      "bst": "Travel bag (Packed_With_Love)",
+      "milestone": "Launching",
+      "date": "2026-08-23",
+      "source": "booking",
+      "status": "150 video của 30 KOC đã quay theo hướng review, chưa có content du lịch; material branding đã 'Done' theo định vị cũ"
+    },
+    {
+      "bst": "Travel bag (Packed_With_Love)",
+      "milestone": "Launching",
+      "date": "2026-08-25",
+      "source": "BC KQKD 11/08"
+    },
+    {
+      "bst": "Travel bag (Packed_With_Love)",
+      "milestone": "Launching",
+      "date": "2026-09-05",
+      "source": "kế hoạch DT"
+    }
+  ],
+  "dx_rules_draft": {
+    "status": "[CHƯA THÀNH LUẬT — Khôi chốt]",
+    "chot_mau": "≈ D-48",
+    "xuong_don_po": "≈ D-70 (lead time ~10 tuần)",
+    "chot_koc": "chưa có mốc chuẩn",
+    "hang_ve_kho": "chưa có mốc chuẩn"
+  }
+}

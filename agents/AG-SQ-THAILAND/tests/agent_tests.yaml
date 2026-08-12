@@ -64,3 +64,42 @@ tests:
     expected: "không"
     assertion_type: contains
     needs_tool: false
+
+  # --- Luồng 5: bối cảnh thị trường Thái từ config (Ploy Phase 0) ---
+  # Trả lời từ configs/*.json qua thailand_tools.py — local, không gọi tool platform.
+
+  - question_id: q5_1
+    prompt: "tháng 12 làm gì"
+    expected: "giữ shop mở"
+    assertion_type: contains
+    needs_tool: false
+
+  - question_id: q5_2
+    prompt: "còn mấy ngày tới hạn KOC Tote"
+    expected: "17/08"
+    assertion_type: contains
+    needs_tool: false
+
+  - question_id: q5_3
+    prompt: "ngày launching travel bag là ngày nào"
+    expected: "nguồn chuẩn"
+    assertion_type: contains
+    needs_tool: false
+
+  - question_id: q5_4
+    prompt: "báo cáo đang dùng base target nào"
+    expected: "rebase 22/07"
+    assertion_type: contains
+    needs_tool: false
+
+  - question_id: q5_5
+    prompt: "kho tri thức thị trường Thái có những file nào"
+    expected: "JTBD"
+    assertion_type: contains
+    needs_tool: false
+
+  - question_id: q5_6
+    prompt: "valentine có làm campaign không"
+    expected: "không mở dòng riêng"
+    assertion_type: contains
+    needs_tool: false

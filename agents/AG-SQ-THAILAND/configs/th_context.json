@@ -1,0 +1,13 @@
+{
+  "owner_config": "Vinh",
+  "market": "Thái Lan",
+  "brands": ["HAPAS Thailand", "MATE MADE Thailand"],
+  "squads": ["SQ HAPAS TH — lead: Vinh (kiêm CM)", "SQ MATE MADE TH — lead: anh Sơn (remote từ VN từ ~20/08)"],
+  "monthly_target": {
+    "value": null,
+    "unit": "M THB",
+    "note": "[CẦN BỔ SUNG SỐ LIỆU] — target báo cáo xem th_base_targets (9,3M tháng / 8,0M ngày)"
+  },
+  "market_goal": "[CẦN XÁC NHẬN] mục tiêu hoà vốn thị trường",
+  "cm": "Vinh (CM Thailand)"
+}

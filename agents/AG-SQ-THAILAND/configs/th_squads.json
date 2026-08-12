@@ -1,0 +1,21 @@
+{
+  "owner_config": "Vinh",
+  "squads": [
+    {
+      "id": "SQ-HAPAS-TH",
+      "brand": "HAPAS Thailand",
+      "lead": "Vinh (kiêm CM toàn thị trường)",
+      "members": ["Hương (BM)", "Tùng (MKT Manager)", "Hạnh (Booking)", "Nawin", "Chol", "Ice", "Ngân (MKT account VN-based)", "Khôi (Sản phẩm)", "T.Dương (Sản phẩm)"]
+    },
+    {
+      "id": "SQ-MATEMADE-TH",
+      "brand": "MATE MADE Thailand",
+      "lead": "anh Sơn (remote từ VN từ ~20/08, review cơ chế remote cuối T8)",
+      "deputy": "Trang (Business Manager MM, tại Thái)",
+      "members": ["Trang (BM)", "Yến Nhi (MKT account VN-based)", "M.Thảo (Sản phẩm)", "P.Thảo (Sản phẩm)"]
+    }
+  ],
+  "can_assign": ["Vinh", "Sơn"],
+  "escalation_rule": "Squad lead MM im 24h → escalate cho Trang + Vinh quyết theo khung",
+  "people_ops": "[CẦN XÁC NHẬN PIC] — Ngọc (Pin Muk) xin nghỉ 27/07, dự kiến về VN 09/08; phương án 'giữ vai từ VN' chưa chốt"
+}

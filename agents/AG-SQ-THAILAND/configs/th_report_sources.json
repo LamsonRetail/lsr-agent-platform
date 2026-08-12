@@ -1,0 +1,14 @@
+{
+  "owner_config": "Hương (BM HAPAS)",
+  "note": "8 nguồn cố định của báo cáo tuần — token doc/base/chat KHÔNG phải secret nhưng không đưa ra ngoài công ty.",
+  "sources": [
+    {"content": "DT & LNĐG hàng ngày", "kind": "doc", "token": "RtGZwGfsciypgekQJ9FlHEGpgPf", "name": "BC KQKD Daily", "owner": "KD"},
+    {"content": "Kết quả tuần, các BST", "kind": "doc", "token": "Ivx2wb92piowcKkyXEnlLMlSgmd", "name": "BC KQKD Weekly", "owner": "KD"},
+    {"content": "Tổng hợp tháng + đường dẫn tháng sau", "kind": "doc", "token": "APe4dp38woHEOxxJzZel2smAgOb", "name": "BC tổng hợp tháng", "owner": "KD"},
+    {"content": "Marketing / Booking / Livestream", "kind": "doc", "token": "Wwg9dM4L7okGB3xqhrzlT4MVgcc", "name": "Doc họp 1-1 anh Tùng", "owner": "Tùng"},
+    {"content": "Marketing plan tháng", "kind": "doc", "token": "QPx6wvLpQiJxEukZcialOMdQgDe", "name": "MKT plan tháng", "owner": "Tùng"},
+    {"content": "Verify GMV/AOV/đơn — PHẢI SCREENSHOT, text extract vô dụng", "kind": "base", "token": "Ok4QbTTXiag6iIsW3wylsheqgdh", "name": "Base Hapas Thailand → 1. Overview Dashboard", "owner": "KD"},
+    {"content": "Tuyển dụng", "kind": "chat", "token": "oc_4cb28d18cc9b0f9ea69faf7cc6c438a0", "name": "[TH] PEOPLE OPERATION", "owner": "People Ops"},
+    {"content": "Legal & Finance", "kind": "chat", "token": "oc_ddfbf1bbd02b103b31e0c94bf61a724f", "name": "HQ x TH OPS", "owner": "Ops"}
+  ]
+}
