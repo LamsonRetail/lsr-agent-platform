@@ -915,6 +915,51 @@ def _ensure_schema() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_a2a_caller ON a2a_requests(caller_id, created_at DESC)")
+        # ================= P7: HITL + mart KPI + platform agents =================
+        # Platform agent (AG-OPS/AG-EVAL) ĐỀ XUẤT, con người DUYỆT. Không agent nào
+        # được tự duyệt việc của chính mình (separation of duty).
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS pending_actions (
+                id          bigserial PRIMARY KEY,
+                proposed_by text NOT NULL,
+                action      text NOT NULL,        -- alert|replay_dlq|deactivate_agent|rollback_version|rotate_credential
+                params      jsonb DEFAULT '{}'::jsonb,
+                risk        text DEFAULT 'high',  -- low = tự chạy + log; high = chờ người duyệt
+                reason      text,
+                status      text DEFAULT 'pending', -- pending|approved|rejected|expired|auto
+                approver    text,
+                result      jsonb,
+                reminded    boolean DEFAULT false,
+                expires_at  timestamptz DEFAULT now() + interval '24 hours',
+                created_at  timestamptz DEFAULT now(),
+                decided_at  timestamptz
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_actions_status ON pending_actions(status, expires_at)")
+        conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_platform boolean DEFAULT false")
+        # Mart: rollup ngày × agent × kênh — nguồn cho KPI/chi phí/chất lượng.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mart_daily (
+                day         date NOT NULL,
+                agent_id    text NOT NULL,
+                channel     text NOT NULL DEFAULT '-',
+                version     int,
+                runs        int DEFAULT 0,
+                tokens_in   bigint DEFAULT 0,
+                tokens_out  bigint DEFAULT 0,
+                cost_usd    numeric(12,4) DEFAULT 0,
+                errors      int DEFAULT 0,
+                tool_calls  int DEFAULT 0,
+                a2a_out     int DEFAULT 0,      -- lượt agent này GỌI agent khác (caller-pays)
+                eval_score  numeric(5,4),
+                built_at    timestamptz DEFAULT now(),
+                PRIMARY KEY (day, agent_id, channel)
+            )
+            """
+        )
         # Migrate 1 lần: agent cũ có prompt_version/prompt_ref → sinh version v1 (P3.8.1)
         conn.execute(
             """
@@ -943,8 +988,13 @@ def _reaper_loop() -> None:
             with _db() as conn:
                 _reap_stale(conn)
                 conn.execute("DELETE FROM event_dedupe WHERE seen_at < now() - interval '2 days'")
-                if ticks % 120 == 0:          # ~mỗi giờ: dọn dữ liệu quá TTL
+                _expire_actions(conn)          # P7: hết hạn đề xuất + nhắc 1 lần
+                if ticks % 120 == 0:          # ~mỗi giờ: dọn dữ liệu quá TTL + dựng mart
                     _run_purge(conn)
+                    try:
+                        _build_mart(conn, 30)
+                    except Exception:
+                        pass
                 conn.commit()
         except Exception:
             pass
@@ -3127,6 +3177,336 @@ def a2a_result(req_id: str, authorization: str = Header(default="")) -> dict:
     return {"req_id": req_id, "target_id": r["target_id"], "job_status": status,
             "result": (ev or {}).get("data") or r["result"], "hop": r["hop"],
             "error": (job or {}).get("last_error")}
+
+
+# ==================== P7: HITL + Mart KPI + Platform agents ====================
+# Platform agent quan sát & ĐỀ XUẤT; người DUYỆT (rủi ro cao) hoặc hệ thống tự chạy
+# (rủi ro thấp, vẫn ghi log). Không ai tự duyệt việc mình đề xuất.
+
+_ACTION_OK = {"alert", "replay_dlq", "deactivate_agent", "rollback_version",
+              "cooldown_credential", "pause_routing"}
+
+
+def _execute_action(conn, action: str, params: dict, actor: str) -> dict:
+    """Thực thi 1 action đã được duyệt (hoặc rủi ro thấp). Trả kết quả để ghi lại."""
+    if action == "alert":
+        ok = False
+        if LARK_NOTIFY_CHAT_ID:
+            ok, _ = _lark_send_to(LARK_NOTIFY_CHAT_ID, "chat_id",
+                                  text=f"🔔 [{actor}] {params.get('message', '')}")
+        return {"alerted": ok, "message": params.get("message", "")[:200]}
+    if action == "replay_dlq":
+        n = conn.execute(
+            "UPDATE jobs SET status='queued', attempts=0, run_after=now(), "
+            "locked_by=NULL, locked_at=NULL, updated_at=now() WHERE status='dlq'"
+            + (" AND agent_id=%s" if params.get("agent_id") else ""),
+            ((params["agent_id"],) if params.get("agent_id") else ())).rowcount
+        return {"replayed": n}
+    if action == "deactivate_agent":
+        aid = params.get("agent_id")
+        conn.execute("UPDATE agents SET status='deactivated' WHERE agent_id=%s", (aid,))
+        return {"deactivated": aid}
+    if action == "rollback_version":
+        aid, env = params.get("agent_id"), params.get("env", "prod")
+        cur = _resolve_version(conn, aid, env)
+        prev = conn.execute(
+            "SELECT version FROM agent_versions WHERE agent_id=%s AND published_at IS NOT NULL "
+            "AND version <> %s ORDER BY published_at DESC LIMIT 1",
+            (aid, (cur or {}).get("version") or -1)).fetchone()
+        if not prev:
+            return {"error": "không có version trước"}
+        conn.execute(
+            "INSERT INTO agent_publications(agent_id, env, version, published_by) "
+            "VALUES (%s,%s,%s,%s) ON CONFLICT (agent_id, env) DO UPDATE "
+            "SET version=EXCLUDED.version, published_at=now()", (aid, env, prev["version"], actor))
+        return {"rolled_back_to": prev["version"], "agent_id": aid, "env": env}
+    if action == "cooldown_credential":
+        cid = params.get("credential_id")
+        conn.execute("UPDATE model_credentials SET status='cooldown', "
+                     "cooldown_until=now()+make_interval(secs=>%s), updated_at=now() WHERE id=%s",
+                     (COOLDOWN_SECS, cid))
+        return {"cooldown": cid}
+    if action == "pause_routing":
+        n = conn.execute("UPDATE routing_binding SET active=false WHERE agent_id=%s",
+                         (params.get("agent_id"),)).rowcount
+        return {"paused_bindings": n}
+    return {"error": f"action không hỗ trợ: {action}"}
+
+
+@app.post("/v1/self/actions/propose")
+def action_propose(body: dict, authorization: str = Header(default="")) -> dict:
+    """Platform agent đề xuất hành động. risk=low tự chạy + log; risk=high chờ người duyệt."""
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    action = (body.get("action") or "").strip()
+    if action not in _ACTION_OK:
+        raise HTTPException(status_code=400, detail=f"action phải thuộc {sorted(_ACTION_OK)}")
+    risk = (body.get("risk") or "high").strip()
+    params = body.get("params") or {}
+    reason = (body.get("reason") or "").strip()
+    with _db() as conn:
+        plat = conn.execute("SELECT is_platform FROM agents WHERE agent_id=%s",
+                            (agent_id,)).fetchone()
+        if not (plat or {}).get("is_platform"):
+            raise HTTPException(status_code=403,
+                                detail="chỉ platform agent (AG-OPS/AG-EVAL) được đề xuất hành động")
+        if risk == "low":
+            res = _execute_action(conn, action, params, agent_id)
+            row = conn.execute(
+                "INSERT INTO pending_actions(proposed_by, action, params, risk, reason, "
+                "status, result, decided_at) VALUES (%s,%s,%s,'low',%s,'auto',%s, now()) RETURNING id",
+                (agent_id, action, Json(params), reason, Json(res))).fetchone()
+            _audit(conn, agent_id, "action_auto", "action", str(row["id"]),
+                   {"action": action, "result": res})
+            conn.commit()
+            return {"id": row["id"], "status": "auto", "result": res}
+        row = conn.execute(
+            "INSERT INTO pending_actions(proposed_by, action, params, risk, reason, expires_at) "
+            "VALUES (%s,%s,%s,'high',%s, now() + make_interval(hours => %s)) RETURNING id",
+            (agent_id, action, Json(params), reason, int(body.get("expires_hours", 24)))).fetchone()
+        _audit(conn, agent_id, "action_propose", "action", str(row["id"]),
+               {"action": action, "params": params, "reason": reason})
+        # Card Lark cho người vận hành duyệt.
+        if LARK_NOTIFY_CHAT_ID:
+            _lark_send_to(LARK_NOTIFY_CHAT_ID, "chat_id", markdown=(
+                f"**⚠️ Đề xuất cần duyệt #{row['id']}**\n"
+                f"- Đề xuất bởi: `{agent_id}`\n- Hành động: `{action}`\n"
+                f"- Tham số: `{json.dumps(params, ensure_ascii=False)[:200]}`\n"
+                f"- Lý do: {reason or '(không ghi)'}\n\n"
+                f"Duyệt/Từ chối tại Console → Duyệt việc"))
+        conn.commit()
+    return {"id": row["id"], "status": "pending", "action": action}
+
+
+@app.get("/v1/actions")
+def actions_list(authorization: str = Header(default=""), status: str | None = None,
+                 limit: int = 50) -> list[dict]:
+    _require_admin(authorization)
+    _ensure_schema()
+    q = ("SELECT id, proposed_by, action, params, risk, reason, status, approver, result, "
+         "expires_at, created_at, decided_at FROM pending_actions")
+    args: list = []
+    if status:
+        q += " WHERE status=%s"; args.append(status)
+    q += " ORDER BY id DESC LIMIT %s"; args.append(min(limit, 200))
+    with _db() as conn:
+        rows = conn.execute(q, tuple(args)).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/v1/actions/{action_id}/decide")
+def action_decide(action_id: int, body: dict, authorization: str = Header(default=""),
+                  x_actor: str = Header(default="", alias="X-Actor")) -> dict:
+    """Người duyệt: approve → thực thi; reject → bỏ. Không được tự duyệt việc mình đề xuất."""
+    _require_admin(authorization)
+    _ensure_schema()
+    decision = (body.get("decision") or "").strip()
+    if decision not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="decision phải là approve|reject")
+    approver = x_actor or body.get("approver") or "admin"
+    with _db() as conn:
+        a = conn.execute("SELECT * FROM pending_actions WHERE id=%s", (action_id,)).fetchone()
+        if not a:
+            raise HTTPException(status_code=404, detail="không thấy đề xuất")
+        if a["status"] != "pending":
+            raise HTTPException(status_code=409, detail=f"đề xuất đã ở trạng thái {a['status']}")
+        # Separation of duty: người/agent đề xuất KHÔNG được tự duyệt.
+        if approver == a["proposed_by"]:
+            _audit(conn, approver, "action_self_approve_blocked", "action", str(action_id), {})
+            conn.commit()
+            raise HTTPException(status_code=403,
+                                detail="không được tự duyệt hành động do chính mình đề xuất")
+        if decision == "reject":
+            conn.execute("UPDATE pending_actions SET status='rejected', approver=%s, "
+                         "decided_at=now() WHERE id=%s", (approver, action_id))
+            _audit(conn, approver, "action_reject", "action", str(action_id),
+                   {"proposed_by": a["proposed_by"], "action": a["action"]})
+            conn.commit()
+            return {"id": action_id, "status": "rejected"}
+        res = _execute_action(conn, a["action"], a["params"] or {}, approver)
+        conn.execute("UPDATE pending_actions SET status='approved', approver=%s, "
+                     "result=%s, decided_at=now() WHERE id=%s", (approver, Json(res), action_id))
+        _audit(conn, approver, "action_approve", "action", str(action_id),
+               {"proposed_by": a["proposed_by"], "action": a["action"], "result": res})
+        conn.commit()
+    return {"id": action_id, "status": "approved", "result": res}
+
+
+def _expire_actions(conn) -> int:
+    """Hết hạn đề xuất chưa ai duyệt; nhắc 1 lần trước khi hết hạn."""
+    due = conn.execute(
+        "SELECT id, proposed_by, action FROM pending_actions "
+        "WHERE status='pending' AND reminded=false AND expires_at < now() + interval '2 hours'"
+    ).fetchall()
+    for d in due:
+        if LARK_NOTIFY_CHAT_ID:
+            _lark_send_to(LARK_NOTIFY_CHAT_ID, "chat_id",
+                          text=f"⏰ Nhắc lần cuối: đề xuất #{d['id']} ({d['action']}) sắp hết hạn.")
+        conn.execute("UPDATE pending_actions SET reminded=true WHERE id=%s", (d["id"],))
+    n = conn.execute(
+        "UPDATE pending_actions SET status='expired', decided_at=now() "
+        "WHERE status='pending' AND expires_at < now()").rowcount
+    return n
+
+
+# -------- Ops snapshot: platform agent đọc sức khoẻ hệ thống --------
+
+@app.get("/v1/self/ops/snapshot")
+def ops_snapshot(authorization: str = Header(default="")) -> dict:
+    """Số liệu vận hành cho AG-OPS: DLQ, queue, pool credential, agent im lặng, chi phí."""
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        plat = conn.execute("SELECT is_platform FROM agents WHERE agent_id=%s",
+                            (agent_id,)).fetchone()
+        if not (plat or {}).get("is_platform"):
+            raise HTTPException(status_code=403, detail="chỉ platform agent được xem snapshot")
+        jobs = conn.execute(
+            "SELECT status, count(*) n FROM jobs GROUP BY status").fetchall()
+        dlq_by_agent = conn.execute(
+            "SELECT agent_id, count(*) n FROM jobs WHERE status='dlq' GROUP BY agent_id "
+            "ORDER BY n DESC LIMIT 10").fetchall()
+        pool = conn.execute(
+            f"SELECT kind, count(*) FILTER (WHERE {_USABLE}) usable, count(*) total "
+            "FROM model_credentials GROUP BY kind").fetchall()
+        silent = conn.execute(
+            "SELECT a.agent_id, max(t.received_at) last_seen FROM agents a "
+            "LEFT JOIN agent_traces t ON t.agent_id=a.agent_id "
+            "WHERE a.status='active' GROUP BY a.agent_id "
+            "HAVING max(t.received_at) IS NULL OR max(t.received_at) < now() - interval '24 hours'"
+        ).fetchall()
+        errs = conn.execute(
+            "SELECT connector_id, count(*) n FROM tool_usage "
+            "WHERE ok=false AND created_at > now() - interval '1 day' "
+            "GROUP BY connector_id ORDER BY n DESC LIMIT 5").fetchall()
+        pending = conn.execute(
+            "SELECT count(*) n FROM pending_actions WHERE status='pending'").fetchone()["n"]
+    return {
+        "jobs": {r["status"]: r["n"] for r in jobs},
+        "dlq_by_agent": [dict(r) for r in dlq_by_agent],
+        "credential_pool": [dict(r) for r in pool],
+        "silent_agents": [dict(r) for r in silent],
+        "connector_errors_24h": [dict(r) for r in errs],
+        "pending_actions": pending,
+    }
+
+
+# -------- Mart: rollup KPI (nguồn cho dashboard + đối soát) --------
+
+def _build_mart(conn, days: int = 30) -> int:
+    """Dựng lại mart_daily từ dữ liệu thô. A2A tính chi phí cho agent GỌI (caller-pays)."""
+    conn.execute("DELETE FROM mart_daily WHERE day >= current_date - %s", (days,))
+    # Nguồn chính: agent_traces (token/chi phí/lỗi) — quy chiếu kênh qua jobs nếu có.
+    conn.execute(
+        """
+        INSERT INTO mart_daily(day, agent_id, channel, runs, tokens_in, tokens_out, errors)
+        SELECT date(received_at) AS day, agent_id, '-' AS channel,
+               count(*), sum(coalesce(input_tokens,0)), sum(coalesce(output_tokens,0)),
+               sum(CASE WHEN status='error' THEN 1 ELSE 0 END)
+        FROM agent_traces
+        WHERE agent_id IS NOT NULL AND received_at >= current_date - %s
+        GROUP BY 1,2
+        ON CONFLICT (day, agent_id, channel) DO UPDATE SET
+          runs=EXCLUDED.runs, tokens_in=EXCLUDED.tokens_in,
+          tokens_out=EXCLUDED.tokens_out, errors=EXCLUDED.errors, built_at=now()
+        """, (days,))
+    # Job theo kênh (gồm a2a) — caller-pays: lượt a2a tính cho agent GỌI.
+    # Dòng theo kênh chỉ mang SỐ LƯỢT YÊU CẦU (không mang token/chi phí) để tránh đếm trùng.
+    conn.execute(
+        """
+        INSERT INTO mart_daily(day, agent_id, channel, runs)
+        SELECT date(created_at),
+               CASE WHEN channel='a2a' THEN coalesce(payload->>'from_agent', agent_id)
+                    ELSE agent_id END,
+               channel, count(*)
+        FROM jobs
+        WHERE agent_id IS NOT NULL AND created_at >= current_date - %s
+        GROUP BY 1,2,3
+        ON CONFLICT (day, agent_id, channel) DO UPDATE SET runs=EXCLUDED.runs, built_at=now()
+        """, (days,))
+    # Bảo đảm mỗi (ngày, agent) có ĐÚNG MỘT dòng tổng hợp channel='-' để gắn các
+    # chỉ số cấp agent (tool_calls, a2a_out, eval) — nếu gắn vào mọi dòng kênh thì
+    # tổng theo agent sẽ ĐẾM TRÙNG.
+    conn.execute(
+        """
+        INSERT INTO mart_daily(day, agent_id, channel)
+        SELECT DISTINCT day, agent_id, '-' FROM mart_daily
+        WHERE day >= current_date - %s
+        ON CONFLICT (day, agent_id, channel) DO NOTHING
+        """, (days,))
+    # Lượt A2A đi ra (caller-pays) — CHỈ ghi vào dòng tổng hợp.
+    conn.execute(
+        """
+        UPDATE mart_daily m SET a2a_out = s.n FROM (
+            SELECT date(created_at) d, caller_id, count(*) n FROM a2a_requests
+            WHERE created_at >= current_date - %s GROUP BY 1,2
+        ) s WHERE m.day=s.d AND m.agent_id=s.caller_id AND m.channel='-'
+        """, (days,))
+    # Tool calls — CHỈ ghi vào dòng tổng hợp.
+    conn.execute(
+        """
+        UPDATE mart_daily m SET tool_calls = s.n FROM (
+            SELECT date(created_at) d, agent_id, count(*) n FROM tool_usage
+            WHERE created_at >= current_date - %s GROUP BY 1,2
+        ) s WHERE m.day=s.d AND m.agent_id=s.agent_id AND m.channel='-'
+        """, (days,))
+    # Điểm eval mới nhất trong ngày — CHỈ ghi vào dòng tổng hợp.
+    conn.execute(
+        """
+        UPDATE mart_daily m SET eval_score = s.score FROM (
+            SELECT date(at) d, target_id, max(score) score FROM regression_runs
+            WHERE at >= current_date - %s GROUP BY 1,2
+        ) s WHERE m.day=s.d AND m.agent_id=s.target_id AND m.channel='-'
+        """, (days,))
+    # Chi phí ước tính theo giá công khai (token chỉ nằm ở dòng tổng hợp).
+    conn.execute(
+        "UPDATE mart_daily SET cost_usd = round((tokens_in * %s + tokens_out * %s)::numeric, 4) "
+        "WHERE day >= current_date - %s", (3.0 / 1e6, 15.0 / 1e6, days))
+    return conn.execute("SELECT count(*) n FROM mart_daily").fetchone()["n"]
+
+
+@app.post("/v1/mart/rebuild")
+def mart_rebuild(authorization: str = Header(default=""), days: int = 30) -> dict:
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        n = _build_mart(conn, min(days, 365))
+        _audit(conn, "system", "mart_rebuild", "mart", "daily", {"rows": n, "days": days})
+        conn.commit()
+    return {"rows": n, "days": days}
+
+
+@app.get("/v1/mart/kpi")
+def mart_kpi(authorization: str = Header(default=""), days: int = 7) -> dict:
+    """KPI theo agent (và theo kênh) trong N ngày — nguồn cho dashboard BOD."""
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        # Chỉ số cấp agent nằm ở dòng tổng hợp (channel='-'); số lượt theo kênh lấy riêng
+        # → không đếm trùng khi cộng.
+        by_agent = conn.execute(
+            """
+            SELECT m.agent_id,
+                   sum(m.runs) runs, sum(m.tokens_in + m.tokens_out) tokens,
+                   sum(m.cost_usd) cost_usd, sum(m.errors) errors,
+                   sum(m.tool_calls) tool_calls, sum(m.a2a_out) a2a_out,
+                   max(m.eval_score) eval_score,
+                   coalesce((SELECT sum(j.runs) FROM mart_daily j
+                             WHERE j.agent_id=m.agent_id AND j.channel <> '-'
+                               AND j.day >= current_date - %s), 0) AS requests
+            FROM mart_daily m
+            WHERE m.day >= current_date - %s AND m.channel = '-'
+            GROUP BY m.agent_id ORDER BY tokens DESC
+            """, (days, days)).fetchall()
+        by_day = conn.execute(
+            "SELECT day, sum(runs) runs, sum(cost_usd) cost_usd, sum(errors) errors "
+            "FROM mart_daily WHERE day >= current_date - %s AND channel='-' "
+            "GROUP BY day ORDER BY day", (days,)).fetchall()
+        by_channel = conn.execute(
+            "SELECT channel, sum(runs) runs FROM mart_daily WHERE day >= current_date - %s "
+            "AND channel <> '-' GROUP BY channel ORDER BY runs DESC", (days,)).fetchall()
+    return {"days": days, "by_agent": [dict(r) for r in by_agent],
+            "by_day": [dict(r) for r in by_day], "by_channel": [dict(r) for r in by_channel]}
 
 
 def _audit(conn, actor: str, action: str, target_type: str, target_id: str,

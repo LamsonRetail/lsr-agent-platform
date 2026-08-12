@@ -277,18 +277,42 @@
 | P6.5 | Target đang deactivate | A gọi B | 409 **và KHÔNG enqueue** (không rác queue) | ✅ 08-12 |
 | P6.6 | Lượt A2A tiêu tốn token | — | Chi phí tính cho agent **GỌI** (caller-pays) trong mart | ⏳ P7 (mart) |
 
-## 11. P7 — Platform agents + HITL + Mart (⏳ kế hoạch)
+## 11. P7 — Platform agents + HITL + Mart (✅ 08-12, 14/14 pass)
 
-| ID | Kịch bản | Kỳ vọng |
-|----|----------|---------|
-| P7.1 | DLQ vượt ngưỡng | AG-OPS alert Lark ≤5 phút kèm chẩn đoán |
-| P7.2 | Đề xuất deactive agent lỗi (risk=high) | Card Lark → Duyệt thì thực thi; Từ chối thì thôi; audit đủ |
-| P7.3 | Action quá expires_at | Tự expire + nhắc lại 1 lần |
-| P7.4 | Điểm prod giảm sau publish | AG-EVAL cảnh báo + đề xuất rollback qua HITL |
-| P7.5 | Đối chiếu mart 1 tuần với dữ liệu thô | Lệch ≤1% |
-| P7.6 | Platform agent tự duyệt việc của mình | Bị chặn (separation of duty) + audit attempt |
-| P7.7 | Pool credential còn 1 account | Cảnh báo sớm trước khi rơi xuống API |
+> Lần chạy đầu bắt **1 bug số liệu thật**: `a2a_out`/`tool_calls` ghi vào **mọi dòng kênh**
+> của cùng agent/ngày → KPI **đếm trùng**. Vá bằng mô hình mart: chỉ số cấp agent chỉ nằm ở
+> dòng tổng hợp (`channel='-'`), số lượt theo kênh tách riêng.
+
+### 11.1 Phân quyền đề xuất
+
+| ID | Tiền đề | Thao tác | Kỳ vọng | Trạng thái |
+|----|---------|----------|---------|-----------|
+| P7.a | Agent thường (không phải platform agent) | `POST /v1/self/actions/propose` | 403 — chỉ AG-OPS/AG-EVAL được đề xuất | ✅ 08-12 |
+| P7.a2 | AG-OPS | Đề xuất action ngoài danh sách cho phép | 400 | ✅ 08-12 |
+| P7.1b | AG-OPS | `GET /v1/self/ops/snapshot` | Đủ trường: jobs, dlq_by_agent, credential_pool, silent_agents, pending_actions | ✅ 08-12 |
+| P7.1c | Agent thường | Xem snapshot | 403 | ✅ 08-12 |
+
+### 11.2 HITL — rủi ro thấp tự chạy, rủi ro cao phải duyệt
+
+| ID | Tiền đề | Thao tác | Kỳ vọng | Trạng thái |
+|----|---------|----------|---------|-----------|
+| P7.1 | AG-OPS phát hiện DLQ vượt ngưỡng | Đề xuất `alert` risk=**low** | **Tự chạy** (status=auto) + audit `action_auto` | ✅ 08-12 |
+| P7.2 | AG-OPS đề xuất `replay_dlq` risk=**high** | — | Vào hàng chờ duyệt + card Lark | ✅ 08-12 |
+| P7.2b | Đang chờ duyệt | — | **CHƯA thực thi** (DLQ chưa đổi) | ✅ 08-12 |
+| P7.2c | Người vận hành bấm Duyệt | — | Thực thi **thật** (DLQ→queued), `approver` ghi đúng người | ✅ 08-12 |
+| P7.2d | Đã duyệt | Duyệt lại lần 2 | 409 — không thực thi trùng | ✅ 08-12 |
+| P7.2e | AG-OPS đề xuất `deactivate_agent` | Người bấm **Từ chối** | Agent **KHÔNG** bị tắt; action=rejected | ✅ 08-12 |
+| P7.3 | Đề xuất quá `expires_at`, không ai duyệt | Chờ job nền | Tự chuyển `expired` (+ nhắc 1 lần trước hạn) | ✅ 08-12 |
+| P7.6 | AG-OPS đề xuất | **AG-OPS tự duyệt** | 403 + audit `action_self_approve_blocked` (separation of duty) | ✅ 08-12 |
+
+### 11.3 Mart KPI + caller-pays
+
+| ID | Tiền đề | Thao tác | Kỳ vọng | Trạng thái |
+|----|---------|----------|---------|-----------|
+| P7.5 | Có trace (1500 token) + 1 lượt A2A đi ra | `POST /v1/mart/rebuild` → `GET /v1/mart/kpi` | Token/chi phí đúng, `a2a_out=1` tính cho agent **GỌI**, **không đếm trùng** | ✅ 08-12 |
+| P7.4 | Điểm eval prod tụt ≥10% sau publish | AG-EVAL quét định kỳ | Đề xuất `rollback_version` qua HITL | ⏳ nghiệm thu khi có 2 lần regression thật |
+| P7.7 | Pool subscription còn ≤1 account | AG-OPS quét | Cảnh báo sớm trước khi rơi xuống API | ⏳ nghiệm thu khi pool có credential thật |
 
 ---
 
-**Tổng:** 14 CORE + 6 Brain + 6 Lark + 8 P1 + 9 P2 + 8 Stable + 33 P3 + 30 P4 + 9 P5 + 10 P6 = **133 case đã có** (116 ✅ nghiệm thu, 17 ⏳ chờ điều kiện ngoài/UI thủ công) · P7 = **7 case kế hoạch**. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.
+**Tổng:** 14 CORE + 6 Brain + 6 Lark + 8 P1 + 9 P2 + 8 Stable + 33 P3 + 30 P4 + 9 P5 + 10 P6 + 15 P7 = **148 case** — **130 ✅ đã nghiệm thu**, 18 ⏳ chờ điều kiện ngoài (Lark app range, agent thật, UI thủ công). Toàn bộ P1–P7 đã triển khai và verify trên VM. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.

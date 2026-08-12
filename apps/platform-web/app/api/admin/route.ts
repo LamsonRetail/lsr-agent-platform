@@ -31,6 +31,9 @@ const ALLOWED = [
   // P5/P6: cấp-thu quyền connector và quyền gọi agent-agent
   /^\/v1\/connectors\/grant$/,
   /^\/v1\/a2a\/grant$/,
+  // P7: duyệt/từ chối đề xuất của platform agent + dựng lại mart
+  /^\/v1\/actions\/[0-9]+\/decide$/,
+  /^\/v1\/mart\/rebuild$/,
 ];
 
 export async function POST(req: Request) {
