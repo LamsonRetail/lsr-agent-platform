@@ -1,5 +1,6 @@
 // Server-only client tới Platform API + Collector. Admin token KHÔNG bao giờ ra client.
 import "server-only";
+import { authHeaders } from "@/lib/session";
 
 const P = process.env.LSR_PLATFORM_URL || "http://localhost:8090";
 const C = process.env.LSR_COLLECTOR || "http://localhost:8081";
@@ -11,7 +12,9 @@ const ACTOR = process.env.PLATFORM_ACTOR || "web-admin";
 
 // Header gateway (Caddy) — bắt buộc khi gọi qua public HTTPS; rỗng khi dev qua tunnel.
 function gwHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  return GATEWAY ? { "X-Gateway-Token": GATEWAY, ...extra } : extra;
+  // P8: mọi lời gọi mang PHIÊN của người đang đăng nhập → API tự kiểm quyền và
+  // audit ghi đúng email người thật (không còn hằng số web-admin).
+  return authHeaders(extra);
 }
 
 async function jget(url: string) {
@@ -56,7 +59,7 @@ export async function brainLinks(qs = "") { return safe(() => jget(`${P}/v1/brai
 
 // --- P1: Ingress (routing + jobs/DLQ) — cần admin token ---
 async function jgetAdmin(url: string) {
-  const r = await fetch(url, { cache: "no-store", headers: gwHeaders({ Authorization: `Bearer ${ADMIN}` }) });
+  const r = await fetch(url, { cache: "no-store", headers: gwHeaders() });
   if (!r.ok) throw new Error(`${url} -> ${r.status}`);
   return r.json();
 }
@@ -68,6 +71,8 @@ export async function versionResolve(id: string, env = "prod") {
   return safe(() => jgetAdmin(`${P}/v1/agents/${id}/versions/resolve?env=${env}`),
     { agent_id: id, env, version: null, config: null });
 }
+// P8: tài khoản console
+export async function accountsList() { return safe(() => jgetAdmin(`${P}/v1/accounts`), []); }
 // P7: HITL actions + mart KPI + admin channel
 export async function adminsList() { return safe(() => jgetAdmin(`${P}/v1/admins`), []); }
 export async function pendingActions(qs = "") { return safe(() => jgetAdmin(`${P}/v1/actions${qs}`), []); }
@@ -92,7 +97,7 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 export async function adminPost(path: string, body: any) {
   const r = await fetch(`${P}${path}`, {
     method: "POST",
-    headers: gwHeaders({ "Content-Type": "application/json", Authorization: `Bearer ${ADMIN}`, "X-Actor": ACTOR }),
+    headers: gwHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body ?? {}),
   });
   const text = await r.text();
@@ -112,7 +117,7 @@ export const PLATFORM_URL = P;
 export async function adminForm(path: string, form: FormData) {
   const r = await fetch(`${P}${path}`, {
     method: "POST",
-    headers: gwHeaders({ Authorization: `Bearer ${ADMIN}`, "X-Actor": ACTOR }),
+    headers: gwHeaders(),
     body: form,
   });
   const data = await r.json().catch(() => ({}));

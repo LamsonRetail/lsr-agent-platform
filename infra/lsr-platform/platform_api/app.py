@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 
 import psycopg
 import requests
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from psycopg.rows import dict_row
 from psycopg.types.json import Json
@@ -129,6 +129,102 @@ _READY = False
 
 def _db() -> psycopg.Connection:
     return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+
+
+# ==================== P8: tài khoản console + RBAC ====================
+# Mật khẩu băm bằng PBKDF2 của stdlib (không thêm dependency).
+_PW_ITER = 200_000
+_ROLE_RANK = {"user": 1, "moderator": 2, "admin": 3}
+SESSION_HOURS = int(os.environ.get("WEB_SESSION_HOURS", "12"))
+LOGIN_MAX_FAIL = int(os.environ.get("LOGIN_MAX_FAIL", "5"))
+LOGIN_LOCK_MINUTES = int(os.environ.get("LOGIN_LOCK_MINUTES", "15"))
+
+
+def _hash_pw(password: str, salt: str | None = None) -> str:
+    salt = salt or secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), _PW_ITER)
+    return f"pbkdf2${_PW_ITER}${salt}${dk.hex()}"
+
+
+def _verify_pw(password: str, stored: str) -> bool:
+    try:
+        algo, iters, salt, want = (stored or "").split("$")
+        if algo != "pbkdf2":
+            return False
+        dk = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), int(iters))
+        return secrets.compare_digest(dk.hex(), want)
+    except Exception:
+        return False
+
+
+def _bearer(authorization: str) -> str:
+    return authorization[7:] if (authorization or "").startswith("Bearer ") else ""
+
+
+def _session_email(conn, token: str) -> str | None:
+    if not token:
+        return None
+    h = hashlib.sha256(token.encode()).hexdigest()
+    row = conn.execute(
+        "SELECT s.email FROM web_sessions s JOIN accounts a ON a.email = s.email "
+        "WHERE s.token_hash=%s AND s.revoked_at IS NULL AND s.expires_at > now() "
+        "  AND a.status='active'", (h,)).fetchone()
+    return row["email"] if row else None
+
+
+def _effective_role(conn, email: str, agent_id: str | None = None) -> str | None:
+    """Quyền hiệu lực = CAO HƠN giữa quyền platform và quyền trên chính agent đó."""
+    rows = conn.execute(
+        "SELECT scope_type, scope_id, role FROM role_bindings WHERE email=%s", (email,)).fetchall()
+    best = None
+    for r in rows:
+        if r["scope_type"] == "platform" or (agent_id and r["scope_type"] == "agent"
+                                             and r["scope_id"] == agent_id):
+            if best is None or _ROLE_RANK.get(r["role"], 0) > _ROLE_RANK.get(best, 0):
+                best = r["role"]
+    return best
+
+
+def _principal(authorization: str, agent_id: str | None = None) -> dict:
+    """Nhận diện người/dịch vụ đang gọi.
+
+    - admin token (service-to-service: gateway, bot, CI) → quyền admin, actor='service'
+    - session token của người dùng   → quyền theo role_bindings, actor=email
+    """
+    tok = _bearer(authorization)
+    if not tok:
+        return {"kind": "none", "actor": None, "role": None}
+    if ADMIN_TOKEN and tok == ADMIN_TOKEN:
+        return {"kind": "admin_token", "actor": "service", "role": "admin"}
+    try:
+        with _db() as conn:
+            email = _session_email(conn, tok)
+            if email:
+                return {"kind": "session", "actor": email,
+                        "role": _effective_role(conn, email, agent_id)}
+    except Exception:
+        pass
+    return {"kind": "unknown", "actor": None, "role": None}
+
+
+def _require_role(authorization: str, need: str, agent_id: str | None = None) -> dict:
+    """Chặn ở API — KHÔNG dựa vào việc UI có ẩn nút hay không."""
+    p = _principal(authorization, agent_id)
+    # Phân biệt rõ: CHƯA đăng nhập → 401 (console đưa về trang login);
+    # ĐÃ đăng nhập nhưng không đủ quyền trên phạm vi này → 403 (không đá người dùng ra).
+    if p["kind"] not in ("session", "admin_token"):
+        raise HTTPException(status_code=401, detail="cần đăng nhập console")
+    if not p["role"]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"bạn không có quyền trên agent {agent_id}" if agent_id
+                   else "tài khoản chưa được cấp vai trò nào")
+    if _ROLE_RANK.get(p["role"], 0) < _ROLE_RANK.get(need, 99):
+        raise HTTPException(
+            status_code=403,
+            detail=f"cần quyền '{need}'" + (f" trên agent {agent_id}" if agent_id else "")
+                   + f" — bạn đang là '{p['role']}'")
+    return p
 
 
 def _ensure_schema() -> None:
@@ -960,6 +1056,73 @@ def _ensure_schema() -> None:
                 "INSERT INTO platform_admins(email, name, role) VALUES (%s,%s,%s) "
                 "ON CONFLICT (email) DO UPDATE SET name=EXCLUDED.name, role=EXCLUDED.role",
                 (em, nm, ro))
+        # ============ P8: tài khoản console + phân quyền (platform & theo agent) ============
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS accounts (
+                email          text PRIMARY KEY,
+                name           text,
+                password_hash  text,
+                must_change_pw boolean DEFAULT true,
+                status         text DEFAULT 'active',   -- active | disabled
+                telegram_chat_id text,
+                last_login_at  timestamptz,
+                created_by     text,
+                created_at     timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS role_bindings (
+                id         bigserial PRIMARY KEY,
+                email      text NOT NULL REFERENCES accounts(email) ON DELETE CASCADE,
+                scope_type text NOT NULL,          -- platform | agent
+                scope_id   text NOT NULL DEFAULT '*',
+                role       text NOT NULL,          -- admin | moderator | user
+                granted_by text,
+                granted_at timestamptz DEFAULT now(),
+                UNIQUE (email, scope_type, scope_id)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS web_sessions (
+                token_hash text PRIMARY KEY,
+                email      text NOT NULL,
+                created_at timestamptz DEFAULT now(),
+                expires_at timestamptz NOT NULL,
+                ip         text,
+                user_agent text,
+                revoked_at timestamptz
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_sess_email ON web_sessions(email)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                id    bigserial PRIMARY KEY,
+                email text, ip text, ok boolean, at timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_login_recent ON login_attempts(email, at DESC)")
+        # Seed 2 admin đầu tiên — mật khẩu tạm in ra LOG của platform_api (không vào git/DB rõ).
+        for em, nm in (("thint@hapas.vn", "Nguyễn Trần Thi - BOD"),
+                       ("thienlq@hapas.vn", "Lê Quý Thiện")):
+            exists = conn.execute("SELECT 1 FROM accounts WHERE email=%s", (em,)).fetchone()
+            if not exists:
+                tmp = secrets.token_urlsafe(12)
+                conn.execute(
+                    "INSERT INTO accounts(email, name, password_hash, must_change_pw, created_by) "
+                    "VALUES (%s,%s,%s,true,'seed')", (em, nm, _hash_pw(tmp)))
+                print(f"[LSR-SEED] tài khoản console {em} — mật khẩu tạm: {tmp} "
+                      f"(đổi ngay lần đăng nhập đầu)", flush=True)
+            conn.execute(
+                "INSERT INTO role_bindings(email, scope_type, scope_id, role, granted_by) "
+                "VALUES (%s,'platform','*','admin','seed') ON CONFLICT DO NOTHING", (em,))
         conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_platform boolean DEFAULT false")
         # Mart: rollup ngày × agent × kênh — nguồn cho KPI/chi phí/chất lượng.
         conn.execute(
@@ -1035,8 +1198,240 @@ def _startup() -> None:
 
 
 def _require_admin(authorization: str) -> None:
-    if not ADMIN_TOKEN or authorization != f"Bearer {ADMIN_TOKEN}":
-        raise HTTPException(status_code=401, detail="admin token required")
+    """Admin: token dịch vụ HOẶC phiên console của người có vai trò admin (P8)."""
+    if ADMIN_TOKEN and authorization == f"Bearer {ADMIN_TOKEN}":
+        return
+    p = _principal(authorization)
+    if p.get("role") == "admin":
+        return
+    if p.get("kind") == "session":
+        raise HTTPException(status_code=403, detail="cần quyền admin")
+    raise HTTPException(status_code=401, detail="admin token required")
+
+
+def _actor_of(authorization: str, x_actor: str = "") -> str:
+    """Danh tính ghi vào audit: ưu tiên người đăng nhập thật, không tin header."""
+    p = _principal(authorization)
+    if p.get("kind") == "session" and p.get("actor"):
+        return p["actor"]
+    return x_actor or "service"
+
+
+# ---------------- Auth API (đăng nhập console) ----------------
+
+@app.post("/v1/auth/login")
+def auth_login(body: dict, request: Request) -> dict:
+    _ensure_schema()
+    email = (body.get("email") or "").strip().lower()
+    pw = body.get("password") or ""
+    ip = (request.client.host if request.client else "") or ""
+    ua = request.headers.get("user-agent", "")[:200]
+    if not (email and pw):
+        raise HTTPException(status_code=400, detail="cần email và password")
+    with _db() as conn:
+        # Khoá tạm khi sai nhiều lần (chống dò mật khẩu).
+        n_fail = conn.execute(
+            "SELECT count(*) c FROM login_attempts WHERE email=%s AND ok=false "
+            "AND at > now() - make_interval(mins => %s)", (email, LOGIN_LOCK_MINUTES)).fetchone()["c"]
+        if n_fail >= LOGIN_MAX_FAIL:
+            conn.execute("INSERT INTO login_attempts(email, ip, ok) VALUES (%s,%s,false)", (email, ip))
+            conn.commit()
+            raise HTTPException(status_code=429,
+                                detail=f"sai quá {LOGIN_MAX_FAIL} lần — thử lại sau {LOGIN_LOCK_MINUTES} phút")
+        a = conn.execute("SELECT email, name, password_hash, status, must_change_pw "
+                         "FROM accounts WHERE email=%s", (email,)).fetchone()
+        ok = bool(a) and a["status"] == "active" and _verify_pw(pw, a["password_hash"])
+        conn.execute("INSERT INTO login_attempts(email, ip, ok) VALUES (%s,%s,%s)", (email, ip, ok))
+        if not ok:
+            _audit(conn, email, "login_failed", "account", email, {"ip": ip})
+            conn.commit()
+            raise HTTPException(status_code=401, detail="email hoặc mật khẩu không đúng")
+        token = secrets.token_urlsafe(32)
+        conn.execute(
+            "INSERT INTO web_sessions(token_hash, email, expires_at, ip, user_agent) "
+            "VALUES (%s,%s, now() + make_interval(hours => %s), %s,%s)",
+            (hashlib.sha256(token.encode()).hexdigest(), email, SESSION_HOURS, ip, ua))
+        conn.execute("UPDATE accounts SET last_login_at=now() WHERE email=%s", (email,))
+        role = _effective_role(conn, email)
+        _audit(conn, email, "login", "account", email, {"ip": ip})
+        conn.commit()
+    return {"token": token, "email": email, "name": a["name"], "role": role,
+            "must_change_pw": a["must_change_pw"], "expires_hours": SESSION_HOURS}
+
+
+@app.post("/v1/auth/logout")
+def auth_logout(authorization: str = Header(default="")) -> dict:
+    tok = _bearer(authorization)
+    if tok:
+        with _db() as conn:
+            conn.execute("UPDATE web_sessions SET revoked_at=now() WHERE token_hash=%s",
+                         (hashlib.sha256(tok.encode()).hexdigest(),))
+            conn.commit()
+    return {"ok": True}
+
+
+@app.get("/v1/auth/me")
+def auth_me(authorization: str = Header(default="")) -> dict:
+    """Người đang đăng nhập + vai trò (platform và theo từng agent)."""
+    tok = _bearer(authorization)
+    with _db() as conn:
+        email = _session_email(conn, tok)
+        if not email:
+            raise HTTPException(status_code=401, detail="chưa đăng nhập")
+        a = conn.execute("SELECT email, name, must_change_pw FROM accounts WHERE email=%s",
+                         (email,)).fetchone()
+        rows = conn.execute("SELECT scope_type, scope_id, role FROM role_bindings WHERE email=%s",
+                            (email,)).fetchall()
+    plat = next((r["role"] for r in rows if r["scope_type"] == "platform"), None)
+    agents = {r["scope_id"]: r["role"] for r in rows if r["scope_type"] == "agent"}
+    return {"email": a["email"], "name": a["name"], "must_change_pw": a["must_change_pw"],
+            "platform_role": plat, "agent_roles": agents,
+            "can_manage_accounts": plat == "admin",
+            "can_create_agent": _ROLE_RANK.get(plat or "", 0) >= 2 or bool(
+                [r for r in rows if _ROLE_RANK.get(r["role"], 0) >= 2])}
+
+
+@app.post("/v1/auth/change-password")
+def auth_change_pw(body: dict, authorization: str = Header(default="")) -> dict:
+    tok = _bearer(authorization)
+    new = body.get("new_password") or ""
+    if len(new) < 10:
+        raise HTTPException(status_code=400, detail="mật khẩu tối thiểu 10 ký tự")
+    with _db() as conn:
+        email = _session_email(conn, tok)
+        if not email:
+            raise HTTPException(status_code=401, detail="chưa đăng nhập")
+        a = conn.execute("SELECT password_hash, must_change_pw FROM accounts WHERE email=%s",
+                         (email,)).fetchone()
+        # Lần đầu (mật khẩu tạm) không cần nhập mật khẩu cũ.
+        if not a["must_change_pw"] and not _verify_pw(body.get("old_password") or "", a["password_hash"]):
+            raise HTTPException(status_code=403, detail="mật khẩu cũ không đúng")
+        conn.execute("UPDATE accounts SET password_hash=%s, must_change_pw=false WHERE email=%s",
+                     (_hash_pw(new), email))
+        _audit(conn, email, "change_password", "account", email, {})
+        conn.commit()
+    return {"ok": True}
+
+
+# ---------------- Quản lý tài khoản (chỉ admin) ----------------
+
+@app.get("/v1/accounts")
+def accounts_list(authorization: str = Header(default="")) -> list[dict]:
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT a.email, a.name, a.status, a.must_change_pw, a.last_login_at, a.created_at, "
+            "coalesce(json_agg(json_build_object('scope_type', r.scope_type, 'scope_id', r.scope_id, "
+            "  'role', r.role) ORDER BY r.scope_type) FILTER (WHERE r.id IS NOT NULL), '[]') AS roles "
+            "FROM accounts a LEFT JOIN role_bindings r ON r.email=a.email "
+            "GROUP BY a.email ORDER BY a.email").fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/v1/accounts")
+def account_create(body: dict, authorization: str = Header(default="")) -> dict:
+    """Tạo tài khoản + sinh mật khẩu tạm (hiện MỘT LẦN cho admin chuyển cho người dùng)."""
+    _require_admin(authorization)
+    _ensure_schema()
+    email = (body.get("email") or "").strip().lower()
+    if "@" not in email:
+        raise HTTPException(status_code=400, detail="email không hợp lệ")
+    actor = _actor_of(authorization)
+    tmp = secrets.token_urlsafe(9)
+    with _db() as conn:
+        if conn.execute("SELECT 1 FROM accounts WHERE email=%s", (email,)).fetchone():
+            raise HTTPException(status_code=409, detail="tài khoản đã tồn tại")
+        conn.execute(
+            "INSERT INTO accounts(email, name, password_hash, must_change_pw, created_by) "
+            "VALUES (%s,%s,%s,true,%s)", (email, body.get("name") or email, _hash_pw(tmp), actor))
+        role = body.get("role") or "user"
+        scope_type = body.get("scope_type") or "platform"
+        scope_id = body.get("scope_id") or "*"
+        if role in _ROLE_RANK:
+            conn.execute(
+                "INSERT INTO role_bindings(email, scope_type, scope_id, role, granted_by) "
+                "VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+                (email, scope_type, scope_id, role, actor))
+        _audit(conn, actor, "account_create", "account", email,
+               {"role": role, "scope": f"{scope_type}:{scope_id}"})
+        conn.commit()
+    return {"email": email, "temp_password": tmp,
+            "note": "Mật khẩu tạm chỉ hiện MỘT LẦN — người dùng phải đổi khi đăng nhập."}
+
+
+@app.post("/v1/accounts/{email}/roles")
+def account_roles(email: str, body: dict, authorization: str = Header(default="")) -> dict:
+    """Gán/thu vai trò theo platform hoặc theo TỪNG agent."""
+    _require_admin(authorization)
+    email = email.lower()
+    scope_type = body.get("scope_type") or "platform"
+    scope_id = body.get("scope_id") or "*"
+    role = body.get("role")
+    revoke = bool(body.get("revoke"))
+    if scope_type not in ("platform", "agent"):
+        raise HTTPException(status_code=400, detail="scope_type: platform|agent")
+    if not revoke and role not in _ROLE_RANK:
+        raise HTTPException(status_code=400, detail="role: admin|moderator|user")
+    actor = _actor_of(authorization)
+    with _db() as conn:
+        if not conn.execute("SELECT 1 FROM accounts WHERE email=%s", (email,)).fetchone():
+            raise HTTPException(status_code=404, detail="tài khoản không tồn tại")
+        if revoke:
+            conn.execute("DELETE FROM role_bindings WHERE email=%s AND scope_type=%s AND scope_id=%s",
+                         (email, scope_type, scope_id))
+        else:
+            conn.execute(
+                "INSERT INTO role_bindings(email, scope_type, scope_id, role, granted_by) "
+                "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (email, scope_type, scope_id) "
+                "DO UPDATE SET role=EXCLUDED.role, granted_by=EXCLUDED.granted_by, granted_at=now()",
+                (email, scope_type, scope_id, role, actor))
+        _audit(conn, actor, "role_revoke" if revoke else "role_grant", "account", email,
+               {"scope": f"{scope_type}:{scope_id}", "role": role})
+        conn.commit()
+    return {"ok": True, "email": email, "scope": f"{scope_type}:{scope_id}", "role": None if revoke else role}
+
+
+@app.post("/v1/accounts/{email}/status")
+def account_status(email: str, body: dict, authorization: str = Header(default="")) -> dict:
+    """Bật/tắt tài khoản. Tắt → mọi phiên đang mở bị vô hiệu NGAY."""
+    _require_admin(authorization)
+    email = email.lower()
+    st = body.get("status")
+    if st not in ("active", "disabled"):
+        raise HTTPException(status_code=400, detail="status: active|disabled")
+    actor = _actor_of(authorization)
+    if st == "disabled" and email == actor:
+        raise HTTPException(status_code=400, detail="không tự tắt tài khoản của chính mình")
+    with _db() as conn:
+        n = conn.execute("UPDATE accounts SET status=%s WHERE email=%s RETURNING email",
+                         (st, email)).fetchone()
+        if not n:
+            raise HTTPException(status_code=404, detail="tài khoản không tồn tại")
+        if st == "disabled":
+            conn.execute("UPDATE web_sessions SET revoked_at=now() "
+                         "WHERE email=%s AND revoked_at IS NULL", (email,))
+        _audit(conn, actor, "account_status", "account", email, {"status": st})
+        conn.commit()
+    return {"email": email, "status": st}
+
+
+@app.post("/v1/accounts/{email}/reset-password")
+def account_reset_pw(email: str, authorization: str = Header(default="")) -> dict:
+    _require_admin(authorization)
+    email = email.lower()
+    tmp = secrets.token_urlsafe(9)
+    actor = _actor_of(authorization)
+    with _db() as conn:
+        n = conn.execute("UPDATE accounts SET password_hash=%s, must_change_pw=true "
+                         "WHERE email=%s RETURNING email", (_hash_pw(tmp), email)).fetchone()
+        if not n:
+            raise HTTPException(status_code=404, detail="tài khoản không tồn tại")
+        conn.execute("UPDATE web_sessions SET revoked_at=now() WHERE email=%s AND revoked_at IS NULL",
+                     (email,))
+        _audit(conn, actor, "account_reset_pw", "account", email, {})
+        conn.commit()
+    return {"email": email, "temp_password": tmp}
 
 
 def agent_schema(agent_id: str) -> str:
@@ -2244,12 +2639,12 @@ def routing_list(authorization: str = Header(default="")) -> list[dict]:
 
 @app.post("/v1/routing")
 def routing_add(body: dict, authorization: str = Header(default="")) -> dict:
-    _require_admin(authorization)
     _ensure_schema()
     agent_id = body.get("agent_id")
     channel = body.get("channel") or "lark"
     if not agent_id:
         raise HTTPException(status_code=400, detail="thiếu agent_id")
+    p = _require_role(authorization, "moderator", agent_id)
     with _db() as conn:
         if not conn.execute("SELECT 1 FROM agents WHERE agent_id=%s", (agent_id,)).fetchone():
             raise HTTPException(status_code=404, detail="agent không tồn tại")
@@ -2257,8 +2652,8 @@ def routing_add(body: dict, authorization: str = Header(default="")) -> dict:
             "INSERT INTO routing_binding(channel, app_id, chat_id, agent_id, created_by) "
             "VALUES (%s,%s,%s,%s,%s) RETURNING id",
             (channel, body.get("app_id"), body.get("chat_id"), agent_id,
-             body.get("created_by") or "admin")).fetchone()
-        _audit(conn, body.get("created_by") or "admin", "routing_add", "routing",
+             p["actor"] or "admin")).fetchone()
+        _audit(conn, p["actor"] or "admin", "routing_add", "routing",
                str(row["id"]), {"channel": channel, "agent_id": agent_id})
         conn.commit()
     return {"id": row["id"], "ok": True}
@@ -2330,7 +2725,7 @@ def job_replay(job_id: int, authorization: str = Header(default="")) -> dict:
 # FE KHÔNG bao giờ gọi thẳng agent_runner.
 
 def _chat_auth(authorization: str, token_qs: str | None, agent_id: str) -> None:
-    """Cho phép: agent token của CHÍNH agent đó, hoặc admin token."""
+    """Cho phép: agent token của CHÍNH agent đó · admin token · phiên console từ moderator trở lên."""
     auth = authorization
     if token_qs and not auth:
         auth = f"Bearer {token_qs}"
@@ -2338,7 +2733,12 @@ def _chat_auth(authorization: str, token_qs: str | None, agent_id: str) -> None:
         return
     if _agent_from_token(auth) == agent_id:
         return
-    raise HTTPException(status_code=401, detail="cần agent token của agent này hoặc admin token")
+    p = _principal(auth, agent_id)
+    if p["kind"] == "session":
+        # user chỉ được xem, không được chat thử (theo ma trận quyền P8)
+        _require_role(auth, "moderator", agent_id)
+        return
+    raise HTTPException(status_code=401, detail="cần agent token của agent này hoặc đăng nhập console")
 
 
 @app.post("/v1/chat/{agent_id}/messages")
@@ -2600,7 +3000,7 @@ def _pub_envs(conn, agent_id: str) -> dict:
 def version_create(agent_id: str, body: dict, authorization: str = Header(default=""),
                    x_actor: str = Header(default="", alias="X-Actor")) -> dict:
     """Tạo version mới (luôn ở trạng thái draft). Không bao giờ ghi đè version cũ."""
-    _require_admin(authorization)
+    p = _require_role(authorization, "moderator", agent_id)   # P8: moderator sửa được agent trong phạm vi
     _ensure_schema()
     instruction = (body.get("instruction_block") or "").strip()
     if not instruction:
@@ -2618,8 +3018,8 @@ def version_create(agent_id: str, body: dict, authorization: str = Header(defaul
             """,
             (agent_id, nxt, instruction, Json(body.get("skills") or []), body.get("model"),
              body.get("model_fallback"), Json(body.get("tool_grants") or {}),
-             body.get("note"), x_actor or body.get("created_by") or "admin"))
-        _audit(conn, x_actor or "admin", "version_create", "agent_version",
+             body.get("note"), p["actor"] or x_actor or "admin"))
+        _audit(conn, p["actor"] or x_actor or "admin", "version_create", "agent_version",
                f"{agent_id}:v{nxt}", {"agent_id": agent_id, "version": nxt})
         conn.commit()
     return {"agent_id": agent_id, "version": nxt, "publication": "draft"}
@@ -2627,7 +3027,7 @@ def version_create(agent_id: str, body: dict, authorization: str = Header(defaul
 
 @app.get("/v1/agents/{agent_id}/versions")
 def version_list(agent_id: str, authorization: str = Header(default="")) -> list[dict]:
-    _require_admin(authorization)
+    _require_role(authorization, "user", agent_id)       # xem: mọi vai trò
     _ensure_schema()
     with _db() as conn:
         rows = conn.execute(
@@ -2643,7 +3043,7 @@ def version_list(agent_id: str, authorization: str = Header(default="")) -> list
 def version_resolve(agent_id: str, env: str = "prod",
                     authorization: str = Header(default="")) -> dict:
     """Version đang chạy ở một môi trường (rỗng nếu chưa publish gì)."""
-    _require_admin(authorization)
+    _require_role(authorization, "user", agent_id)
     _ensure_schema()
     if env not in _ENVS:
         raise HTTPException(status_code=400, detail=f"env phải thuộc {_ENVS}")
@@ -2678,14 +3078,35 @@ def _eval_gate(conn, agent_id: str, version: int) -> dict:
 def version_publish(agent_id: str, version: int, body: dict,
                     authorization: str = Header(default=""),
                     x_actor: str = Header(default="", alias="X-Actor")) -> dict:
-    """Publish version vào môi trường. PROD phải qua eval gate (trừ khi force + lý do)."""
-    _require_admin(authorization)
+    """Publish version. dev/stg: moderator. prod: admin — moderator chỉ TẠO YÊU CẦU chờ duyệt."""
     _ensure_schema()
     env = (body.get("env") or "dev").strip()
     if env not in ("dev", "stg", "prod"):
         raise HTTPException(status_code=400, detail="env phải là dev|stg|prod")
+    p = _require_role(authorization, "moderator", agent_id)
     force = bool(body.get("force"))
-    actor = x_actor or body.get("published_by") or "admin"
+    actor = p["actor"] or x_actor or body.get("published_by") or "admin"
+    # P8/P9: moderator publish PROD -> không publish ngay mà tạo việc chờ admin duyệt.
+    if env == "prod" and p["role"] != "admin":
+        with _db() as conn:
+            if not _version_row(conn, agent_id, version):
+                raise HTTPException(status_code=404, detail="version không tồn tại")
+            row = conn.execute(
+                "INSERT INTO pending_actions(proposed_by, action, params, risk, reason) "
+                "VALUES (%s,'publish_version',%s,'high',%s) RETURNING id",
+                (actor, Json({"agent_id": agent_id, "version": version, "env": "prod"}),
+                 body.get("reason") or f"{actor} xin publish {agent_id} v{version} lên prod")).fetchone()
+            _audit(conn, actor, "publish_request", "agent_version", f"{agent_id}:v{version}",
+                   {"action_id": row["id"]})
+            _notify_admins(conn,
+                           f"📤 *Xin duyệt publish* #{row['id']}\n"
+                           f"• Người đề xuất: `{actor}`\n• Agent: `{agent_id}` v{version} → **prod**\n"
+                           f"• Lý do: {body.get('reason') or '(không ghi)'}",
+                           action_id=row["id"])
+            conn.commit()
+        return {"agent_id": agent_id, "version": version, "publication": "pending_approval",
+                "action_id": row["id"],
+                "note": "Đã gửi admin duyệt — prod chưa đổi."}
     with _db() as conn:
         v = _version_row(conn, agent_id, version)
         if not v:
@@ -2740,9 +3161,21 @@ def version_publish(agent_id: str, version: int, body: dict,
 def version_rollback(agent_id: str, body: dict, authorization: str = Header(default=""),
                      x_actor: str = Header(default="", alias="X-Actor")) -> dict:
     """Trỏ môi trường về version ĐÃ TỪNG publish trước đó — không tạo version mới."""
-    _require_admin(authorization)
     _ensure_schema()
     env = (body.get("env") or "prod").strip()
+    pr = _require_role(authorization, "moderator", agent_id)
+    if env == "prod" and pr["role"] != "admin":
+        with _db() as conn:
+            row = conn.execute(
+                "INSERT INTO pending_actions(proposed_by, action, params, risk, reason) "
+                "VALUES (%s,'rollback_version',%s,'high',%s) RETURNING id",
+                (pr["actor"], Json({"agent_id": agent_id, "env": "prod"}),
+                 body.get("reason") or f"{pr['actor']} xin rollback {agent_id}")).fetchone()
+            _notify_admins(conn, f"↩️ *Xin duyệt rollback* #{row['id']} — `{agent_id}` (prod) "
+                                 f"bởi `{pr['actor']}`", action_id=row["id"])
+            conn.commit()
+        return {"agent_id": agent_id, "env": env, "status": "pending_approval",
+                "action_id": row["id"], "note": "Đã gửi admin duyệt — prod chưa đổi."}
     if env not in ("dev", "stg", "prod"):
         raise HTTPException(status_code=400, detail="env phải là dev|stg|prod")
     with _db() as conn:
@@ -3255,7 +3688,7 @@ def a2a_result(req_id: str, authorization: str = Header(default="")) -> dict:
 # (rủi ro thấp, vẫn ghi log). Không ai tự duyệt việc mình đề xuất.
 
 _ACTION_OK = {"alert", "replay_dlq", "deactivate_agent", "rollback_version",
-              "cooldown_credential", "pause_routing"}
+              "cooldown_credential", "pause_routing", "publish_version"}
 
 # --- Kênh admin: Telegram (dùng được ngay) + Lark DM (khi app mở available-range) ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -3383,6 +3816,27 @@ def _execute_action(conn, action: str, params: dict, actor: str) -> dict:
         aid = params.get("agent_id")
         conn.execute("UPDATE agents SET status='deactivated' WHERE agent_id=%s", (aid,))
         return {"deactivated": aid}
+    if action == "publish_version":
+        aid, ver, env = params.get("agent_id"), params.get("version"), params.get("env", "prod")
+        gate = _eval_gate(conn, aid, ver)
+        if not gate["ok"]:
+            # Eval gate vẫn áp: admin duyệt nhưng golden fail thì KHÔNG publish.
+            return {"error": "eval gate chặn", **gate}
+        conn.execute(
+            "INSERT INTO agent_publications(agent_id, env, version, published_by) "
+            "VALUES (%s,%s,%s,%s) ON CONFLICT (agent_id, env) DO UPDATE "
+            "SET version=EXCLUDED.version, published_by=EXCLUDED.published_by, published_at=now()",
+            (aid, env, ver, actor))
+        conn.execute(
+            """
+            UPDATE agent_versions v SET publication = coalesce((
+                SELECT p.env FROM agent_publications p
+                WHERE p.agent_id=v.agent_id AND p.version=v.version
+                ORDER BY CASE p.env WHEN 'prod' THEN 1 WHEN 'stg' THEN 2 ELSE 3 END LIMIT 1
+            ), 'draft'), published_at = CASE WHEN v.version=%s THEN now() ELSE v.published_at END
+            WHERE v.agent_id=%s
+            """, (ver, aid))
+        return {"published": f"{aid} v{ver} → {env}", "gate": gate}
     if action == "rollback_version":
         aid, env = params.get("agent_id"), params.get("env", "prod")
         cur = _resolve_version(conn, aid, env)

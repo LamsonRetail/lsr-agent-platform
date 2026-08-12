@@ -34,6 +34,11 @@ const ALLOWED = [
   // P7: duyệt/từ chối đề xuất của platform agent + dựng lại mart
   /^\/v1\/actions\/[0-9]+\/decide$/,
   /^\/v1\/mart\/rebuild$/,
+  // P8: quản lý tài khoản + phân quyền (API tự kiểm quyền admin)
+  /^\/v1\/accounts$/,
+  /^\/v1\/accounts\/[^/]+\/roles$/,
+  /^\/v1\/accounts\/[^/]+\/status$/,
+  /^\/v1\/accounts\/[^/]+\/reset-password$/,
 ];
 
 export async function POST(req: Request) {

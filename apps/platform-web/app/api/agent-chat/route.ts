@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminPost, PLATFORM_URL } from "@/lib/platform";
+import { authHeaders } from "@/lib/session";
 
 // Chat thử với agent NGAY TRONG console — dùng admin token server-side, người dùng
 // không cần token agent. Đi qua đúng ingress chung (Chat API) nên vẫn có
@@ -18,14 +19,14 @@ export async function POST(req: Request) {
       await new Promise((r) => setTimeout(r, 1000));
       const r = await fetch(`${PLATFORM_URL}/v1/jobs?agent_id=${agent_id}&limit=5`, {
         cache: "no-store",
-        headers: { Authorization: `Bearer ${process.env.PLATFORM_ADMIN_TOKEN || ""}` },
+        headers: authHeaders(),
       });
       const jobs = await r.json().catch(() => []);
       const job = (jobs || []).find((j: any) => j.session_id === sid);
       if (job && ["done", "failed", "dlq"].includes(job.status)) {
         const ev = await fetch(`${PLATFORM_URL}/v1/jobs/${job.id}/events`, {
           cache: "no-store",
-          headers: { Authorization: `Bearer ${process.env.PLATFORM_ADMIN_TOKEN || ""}` },
+          headers: authHeaders(),
         }).then((x) => x.json()).catch(() => []);
         const msg = (ev || []).filter((e: any) => e.kind === "message").pop();
         return NextResponse.json({
