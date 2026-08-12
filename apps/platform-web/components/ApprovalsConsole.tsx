@@ -8,7 +8,7 @@ const ST: Record<string, string> = {
 };
 const RISK: Record<string, string> = { high: "#d1495b", low: "#4a7edb" };
 
-export default function ApprovalsConsole({ actions, kpi }: { actions: any[]; kpi: any }) {
+export default function ApprovalsConsole({ actions, kpi, admins = [] }: { actions: any[]; kpi: any; admins?: any[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const pending = actions.filter((a: any) => a.status === "pending");
@@ -78,6 +78,30 @@ export default function ApprovalsConsole({ actions, kpi }: { actions: any[]; kpi
                 <td>{a.tool_calls ?? 0}</td>
                 <td>{a.a2a_out ?? 0}</td>
                 <td>{a.eval_score != null ? Number(a.eval_score).toFixed(2) : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      <section className="card">
+        <h2 style={{ marginTop: 0 }}>Kênh admin (nhận cảnh báo &amp; duyệt việc)</h2>
+        <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
+          Admin mở chat với bot Telegram <b>@LSRAdminBot</b> rồi gửi <code>/dangky &lt;email&gt; &lt;mã&gt;</code> để nối.
+          Nối xong sẽ nhận cảnh báo của AG-OPS/AG-EVAL kèm nút Duyệt/Từ chối ngay trong chat.
+        </p>
+        <table>
+          <thead><tr><th>Admin</th><th>Email</th><th>Vai trò</th><th>Telegram</th><th>Lark</th><th>Nối lúc</th></tr></thead>
+          <tbody>
+            {admins.length === 0 && <tr><td colSpan={6} className="muted">Chưa cấu hình admin.</td></tr>}
+            {admins.map((a: any) => (
+              <tr key={a.email}>
+                <td>{a.name}</td><td className="mono" style={{ fontSize: 12 }}>{a.email}</td>
+                <td>{a.role}</td>
+                <td>{a.telegram_linked ? "✅ đã nối" : <span className="muted">chưa nối</span>}</td>
+                <td>{a.lark_linked ? "✅ đã nối" : <span className="muted">chưa nối</span>}</td>
+                <td className="muted" style={{ fontSize: 12 }}>
+                  {a.linked_at ? new Date(a.linked_at).toLocaleString("vi") : "—"}</td>
               </tr>
             ))}
           </tbody>

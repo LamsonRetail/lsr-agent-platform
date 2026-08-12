@@ -62,6 +62,18 @@ services:
       LARK_DOMAIN_CONST: LARK
     restart: unless-stopped
 
+  # Bot admin Telegram: kênh AG-OPS/AG-EVAL ↔ admin (cảnh báo + nút duyệt việc).
+  telegram_bot:
+    build: ./telegram_bot
+    depends_on: [platform_api]
+    environment:
+      PLATFORM_URL: http://platform_api:8090
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_LINK_CODE: ${TELEGRAM_LINK_CODE:-}
+    restart: unless-stopped
+
   # P7: platform agents — quan sát & ĐỀ XUẤT, người duyệt (HITL).
   ag_ops:
     build: ./platform_agents
@@ -128,6 +140,7 @@ services:
       AGENT_DOCKER_HOST: ${AGENT_DOCKER_HOST:-tcp://docker_proxy:2375}
       # P2 Model Auth: thư mục secrets trên VM (host path) để mount ro vào agent_runner.
       SECRETS_HOST_DIR: ${SECRETS_HOST_DIR:-/opt/lsr-platform/secrets}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       LSR_DEFAULT_FALLBACK_MODEL: ${LSR_DEFAULT_FALLBACK_MODEL:-claude-sonnet-4-5}
     ports:
       - "127.0.0.1:8090:8090"

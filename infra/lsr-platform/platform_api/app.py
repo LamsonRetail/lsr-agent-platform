@@ -938,6 +938,27 @@ def _ensure_schema() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_actions_status ON pending_actions(status, expires_at)")
+        # Admin nhận thông báo/duyệt việc từ platform agent (Lark DM và/hoặc Telegram).
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS platform_admins (
+                email            text PRIMARY KEY,
+                name             text,
+                role             text DEFAULT 'admin',
+                lark_open_id     text,
+                telegram_chat_id text,
+                active           boolean DEFAULT true,
+                linked_at        timestamptz,
+                created_at       timestamptz DEFAULT now()
+            )
+            """
+        )
+        for em, nm, ro in (("thint@hapas.vn", "Nguyễn Trần Thi - BOD", "bod"),
+                           ("thienlq@hapas.vn", "Lê Quý Thiện", "admin")):
+            conn.execute(
+                "INSERT INTO platform_admins(email, name, role) VALUES (%s,%s,%s) "
+                "ON CONFLICT (email) DO UPDATE SET name=EXCLUDED.name, role=EXCLUDED.role",
+                (em, nm, ro))
         conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS is_platform boolean DEFAULT false")
         # Mart: rollup ngày × agent × kênh — nguồn cho KPI/chi phí/chất lượng.
         conn.execute(
@@ -2384,9 +2405,8 @@ def model_auth_lease(authorization: str = Header(default=""), body: dict | None 
             # ④ cạn hoàn toàn → alert + 503
             _audit(conn, agent_id, "model_auth_exhausted", "agent", agent_id, {})
             try:
-                if LARK_NOTIFY_CHAT_ID:
-                    _lark_send_to(LARK_NOTIFY_CHAT_ID, "chat_id",
-                                  text=f"⚠️ Model Auth CẠN: agent {agent_id} không còn credential nào (pool + API đều hết).")
+                _notify_admins(conn, f"⚠️ *Model Auth CẠN*: agent `{agent_id}` không còn "
+                                     f"credential nào (pool + API đều hết).")
             except Exception:
                 pass
             conn.commit()
@@ -3186,15 +3206,121 @@ def a2a_result(req_id: str, authorization: str = Header(default="")) -> dict:
 _ACTION_OK = {"alert", "replay_dlq", "deactivate_agent", "rollback_version",
               "cooldown_credential", "pause_routing"}
 
+# --- Kênh admin: Telegram (dùng được ngay) + Lark DM (khi app mở available-range) ---
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_API = "https://api.telegram.org"
+
+
+def _tg_send(chat_id: str, text: str, buttons: list | None = None) -> bool:
+    """Gửi tin Telegram cho 1 admin. buttons = [[{text, callback_data}], ...]"""
+    if not (TELEGRAM_TOKEN and chat_id):
+        return False
+    payload = {"chat_id": chat_id, "text": text[:4000], "parse_mode": "Markdown"}
+    if buttons:
+        payload["reply_markup"] = {"inline_keyboard": buttons}
+    try:
+        r = requests.post(f"{TELEGRAM_API}/bot{TELEGRAM_TOKEN}/sendMessage",
+                          json=payload, timeout=10)
+        return bool(r.json().get("ok"))
+    except Exception:
+        return False
+
+
+def _notify_admins(conn, text: str, *, action_id: int | None = None,
+                   markdown: str = "") -> dict:
+    """Gửi cho MỌI admin đang bật: ưu tiên Telegram (có nút duyệt), kèm Lark DM nếu có open_id.
+
+    Trả thống kê để soi kênh nào tới được — không raise (thông báo không được làm hỏng luồng).
+    """
+    sent = {"telegram": 0, "lark": 0, "none": 0}
+    try:
+        admins = conn.execute(
+            "SELECT email, name, lark_open_id, telegram_chat_id FROM platform_admins "
+            "WHERE active").fetchall()
+    except Exception:
+        return sent
+    buttons = None
+    if action_id:
+        buttons = [[{"text": "✅ Duyệt", "callback_data": f"approve:{action_id}"},
+                    {"text": "❌ Từ chối", "callback_data": f"reject:{action_id}"}]]
+    for a in admins:
+        ok_any = False
+        if a["telegram_chat_id"] and _tg_send(a["telegram_chat_id"], text, buttons):
+            sent["telegram"] += 1; ok_any = True
+        if a["lark_open_id"]:
+            ok, _ = _lark_send_to(a["lark_open_id"], "open_id",
+                                  text=text if not markdown else "", markdown=markdown)
+            if ok:
+                sent["lark"] += 1; ok_any = True
+        if not ok_any:
+            sent["none"] += 1
+    # Chưa admin nào nối kênh → rơi về nhóm Lark chung để không mất cảnh báo.
+    if sent["telegram"] + sent["lark"] == 0 and LARK_NOTIFY_CHAT_ID:
+        _lark_send_to(LARK_NOTIFY_CHAT_ID, "chat_id", text=text)
+    return sent
+
+
+@app.get("/v1/admins")
+def admins_list(authorization: str = Header(default="")) -> list[dict]:
+    """Danh sách admin + kênh đã nối (không lộ chat_id đầy đủ)."""
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT email, name, role, active, linked_at, "
+            "(lark_open_id IS NOT NULL) AS lark_linked, "
+            "(telegram_chat_id IS NOT NULL) AS telegram_linked "
+            "FROM platform_admins ORDER BY role, email").fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/v1/admins/link")
+def admin_link(body: dict, authorization: str = Header(default="")) -> dict:
+    """Nối kênh cho admin. Dùng bởi bot Telegram (ingest token) hoặc admin thủ công."""
+    tok = authorization[7:] if authorization.startswith("Bearer ") else ""
+    if not (tok and tok in (ADMIN_TOKEN, GATEWAY_INGEST_TOKEN)):
+        raise HTTPException(status_code=401, detail="cần admin/ingest token")
+    _ensure_schema()
+    email = (body.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="thiếu email")
+    with _db() as conn:
+        row = conn.execute("SELECT email FROM platform_admins WHERE lower(email)=%s",
+                           (email,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="email không nằm trong danh sách admin")
+        if body.get("telegram_chat_id"):
+            conn.execute("UPDATE platform_admins SET telegram_chat_id=%s, linked_at=now() "
+                         "WHERE lower(email)=%s", (str(body["telegram_chat_id"]), email))
+        if body.get("lark_open_id"):
+            conn.execute("UPDATE platform_admins SET lark_open_id=%s, linked_at=now() "
+                         "WHERE lower(email)=%s", (body["lark_open_id"], email))
+        _audit(conn, email, "admin_link", "admin", email,
+               {"telegram": bool(body.get("telegram_chat_id")),
+                "lark": bool(body.get("lark_open_id"))})
+        conn.commit()
+    return {"ok": True, "email": email}
+
+
+@app.get("/v1/admins/by-telegram/{chat_id}")
+def admin_by_telegram(chat_id: str, authorization: str = Header(default="")) -> dict:
+    """Bot Telegram tra admin theo chat_id (để biết ai đang bấm nút duyệt)."""
+    tok = authorization[7:] if authorization.startswith("Bearer ") else ""
+    if not (tok and tok in (ADMIN_TOKEN, GATEWAY_INGEST_TOKEN)):
+        raise HTTPException(status_code=401, detail="cần admin/ingest token")
+    with _db() as conn:
+        r = conn.execute("SELECT email, name, role FROM platform_admins "
+                         "WHERE telegram_chat_id=%s AND active", (str(chat_id),)).fetchone()
+    if not r:
+        raise HTTPException(status_code=404, detail="chat_id chưa nối với admin nào")
+    return dict(r)
+
 
 def _execute_action(conn, action: str, params: dict, actor: str) -> dict:
     """Thực thi 1 action đã được duyệt (hoặc rủi ro thấp). Trả kết quả để ghi lại."""
     if action == "alert":
-        ok = False
-        if LARK_NOTIFY_CHAT_ID:
-            ok, _ = _lark_send_to(LARK_NOTIFY_CHAT_ID, "chat_id",
-                                  text=f"🔔 [{actor}] {params.get('message', '')}")
-        return {"alerted": ok, "message": params.get("message", "")[:200]}
+        sent = _notify_admins(conn, f"🔔 *[{actor}]* {params.get('message', '')}")
+        return {"sent": sent, "message": params.get("message", "")[:200]}
     if action == "replay_dlq":
         n = conn.execute(
             "UPDATE jobs SET status='queued', attempts=0, run_after=now(), "
@@ -3266,16 +3392,16 @@ def action_propose(body: dict, authorization: str = Header(default="")) -> dict:
             (agent_id, action, Json(params), reason, int(body.get("expires_hours", 24)))).fetchone()
         _audit(conn, agent_id, "action_propose", "action", str(row["id"]),
                {"action": action, "params": params, "reason": reason})
-        # Card Lark cho người vận hành duyệt.
-        if LARK_NOTIFY_CHAT_ID:
-            _lark_send_to(LARK_NOTIFY_CHAT_ID, "chat_id", markdown=(
-                f"**⚠️ Đề xuất cần duyệt #{row['id']}**\n"
-                f"- Đề xuất bởi: `{agent_id}`\n- Hành động: `{action}`\n"
-                f"- Tham số: `{json.dumps(params, ensure_ascii=False)[:200]}`\n"
-                f"- Lý do: {reason or '(không ghi)'}\n\n"
-                f"Duyệt/Từ chối tại Console → Duyệt việc"))
+        # Gửi thẳng cho ADMIN (Telegram có nút Duyệt/Từ chối; Lark DM nếu đã nối).
+        body_txt = (f"⚠️ *Đề xuất cần duyệt #{row['id']}*\n"
+                    f"• Đề xuất bởi: `{agent_id}`\n"
+                    f"• Hành động: `{action}`\n"
+                    f"• Tham số: `{json.dumps(params, ensure_ascii=False)[:200]}`\n"
+                    f"• Lý do: {reason or '(không ghi)'}")
+        sent = _notify_admins(conn, body_txt, action_id=row["id"],
+                              markdown=body_txt.replace("*", "**"))
         conn.commit()
-    return {"id": row["id"], "status": "pending", "action": action}
+    return {"id": row["id"], "status": "pending", "action": action, "notified": sent}
 
 
 @app.get("/v1/actions")
@@ -3339,9 +3465,8 @@ def _expire_actions(conn) -> int:
         "WHERE status='pending' AND reminded=false AND expires_at < now() + interval '2 hours'"
     ).fetchall()
     for d in due:
-        if LARK_NOTIFY_CHAT_ID:
-            _lark_send_to(LARK_NOTIFY_CHAT_ID, "chat_id",
-                          text=f"⏰ Nhắc lần cuối: đề xuất #{d['id']} ({d['action']}) sắp hết hạn.")
+        _notify_admins(conn, f"⏰ Nhắc lần cuối: đề xuất #{d['id']} (`{d['action']}`) sắp hết hạn.",
+                       action_id=d["id"])
         conn.execute("UPDATE pending_actions SET reminded=true WHERE id=%s", (d["id"],))
     n = conn.execute(
         "UPDATE pending_actions SET status='expired', decided_at=now() "

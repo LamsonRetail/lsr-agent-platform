@@ -68,7 +68,8 @@ export async function versionResolve(id: string, env = "prod") {
   return safe(() => jgetAdmin(`${P}/v1/agents/${id}/versions/resolve?env=${env}`),
     { agent_id: id, env, version: null, config: null });
 }
-// P7: HITL actions + mart KPI
+// P7: HITL actions + mart KPI + admin channel
+export async function adminsList() { return safe(() => jgetAdmin(`${P}/v1/admins`), []); }
 export async function pendingActions(qs = "") { return safe(() => jgetAdmin(`${P}/v1/actions${qs}`), []); }
 export async function martKpi(days = 7) {
   return safe(() => jgetAdmin(`${P}/v1/mart/kpi?days=${days}`), { days, by_agent: [], by_day: [], by_channel: [] });
