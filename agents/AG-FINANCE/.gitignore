@@ -1,0 +1,22 @@
+# Bí mật và dữ liệu tài chính thật KHÔNG bao giờ vào git.
+.env
+.venv/
+secrets/
+*.json.key
+
+# Dữ liệu số liệu thật — test phải dùng dữ liệu giả đặt trong tests/
+data/
+*.csv
+*.xlsx
+*.xls
+
+# Recording và transcript cuộc họp
+recordings/
+*.mp3
+*.mp4
+*.wav
+*.m4a
+
+__pycache__/
+*.py[cod]
+.pytest_cache/

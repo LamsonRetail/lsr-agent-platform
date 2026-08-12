@@ -1,0 +1,51 @@
+apiVersion: lsr/v1
+agent:
+  id: AG-FINANCE
+  name: Trợ lý Tài chính - Kế toán
+  version: 0.1.0
+  owner: finance@lamsonretail.vn      # TODO: đổi thành email owner thật trước khi đăng ký
+  squad: SQ-FINANCE-ACCOUNTING
+  is_squad_agent: true                # phục vụ riêng squad Finance-Accounting
+  connect_mode: bot
+  description: >
+    Trợ lý của squad Finance-Accounting. Hai việc: (1) tổng hợp số liệu từ Google Sheet,
+    MISA AMIS và Lark Base về một Lark Base chung (FIN-HUB) rồi trả lời câu hỏi công nợ,
+    doanh thu, chi phí, dòng tiền; (2) dựng biên bản họp từ recording, xin người chủ trì
+    chốt rồi tạo task. Chỉ đọc, không ghi vào MISA, không phê duyệt chi.
+
+lark:
+  connect_mode: bot
+  bot:
+    app: platform-shared              # dùng app chung — agent KHÔNG cầm app_secret
+    chat_ids: []                      # điền chat_id nhóm squad khi bot được add
+    event_webhook: https://collector.lsr.internal/lark/events
+
+runtime:
+  sdk: claude-agent-sdk
+  auth: subscription
+  model: claude-sonnet-5
+
+prompt:
+  path: system_prompt.md
+  version: 0.1.0
+  ref: main
+
+skills:
+  - {name: lark-bitable,   type: mcp}      # đọc/ghi Lark Base FIN-HUB
+  - {name: lark-im,        type: mcp}      # gửi tin trong nhóm squad
+  - {name: lark-task,      type: mcp}      # tạo task sau khi chốt biên bản
+  - {name: lark-docx,      type: mcp}      # lưu biên bản họp
+  - {name: resource-index, type: builtin}  # tra lại biên bản & tài liệu đã lưu
+
+telemetry:
+  enabled: true
+  collector: https://collector.lsr.internal
+
+# Whitelist squad nằm ở shared/auth.py + biến môi trường FIN_SQUAD_EMAILS.
+# KHÔNG hardcode email vào file này vì manifest là public trong repo.
+
+tests:
+  suite: tests/agent_tests.yaml
+
+schedule: []                          # Phase 1 chạy đồng bộ theo yêu cầu.
+                                      # Bật lịch khi luồng đồng bộ đã ổn định.

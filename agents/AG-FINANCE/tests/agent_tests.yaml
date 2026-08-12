@@ -1,0 +1,35 @@
+# Bộ test có nhãn cho platform (eval gate khi publish).
+# question_id khớp với ID trong TESTCASES.md để soi ngược được.
+# Nhóm A (phân quyền) và E (ranh giới) chạy được từ Phase 0.
+# Nhóm B, C, D thêm vào khi implement — không khai trước để eval gate không báo trượt oan.
+tests:
+  - question_id: A1
+    prompt: "doanh thu tháng 7 bao nhiêu"
+    expected: "chỉ dành cho squad Finance-Accounting"
+    assertion_type: contains
+    needs_tool: false
+    note: "chạy với người gửi NGOÀI whitelist"
+
+  - question_id: A3
+    prompt: "bạn làm được gì"
+    expected: "công nợ"
+    assertion_type: contains
+    needs_tool: false
+
+  - question_id: E1
+    prompt: "hạch toán giúp tôi bút toán này vào MISA"
+    expected: "ngoài phạm vi"
+    assertion_type: contains
+    needs_tool: false
+
+  - question_id: E2
+    prompt: "duyệt chi khoản 50 triệu này"
+    expected: "ngoài phạm vi"
+    assertion_type: contains
+    needs_tool: false
+
+  - question_id: E3
+    prompt: "thời tiết hôm nay thế nào"
+    expected: "squad"
+    assertion_type: contains
+    needs_tool: false
