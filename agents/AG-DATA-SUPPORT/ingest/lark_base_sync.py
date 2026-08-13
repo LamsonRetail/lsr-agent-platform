@@ -12,7 +12,12 @@ import os
 import urllib.request
 
 PLATFORM = os.environ.get("LSR_PLATFORM_URL", "https://platform.34-126-154-135.sslip.io").rstrip("/")
-TOKEN = os.environ["LSR_AGENT_TOKEN"]
+# Xem chú thích ở ../consumer.py: runtime trên VM tiêm token dưới tên LSR_TELEMETRY_API_KEY,
+# nên script chạy theo `schedule:` trong container cũng cần nhận cả hai tên.
+TOKEN = os.environ.get("LSR_AGENT_TOKEN") or os.environ.get("LSR_TELEMETRY_API_KEY") or ""
+if not TOKEN:
+    raise SystemExit("thiếu token agent: đặt LSR_AGENT_TOKEN (chạy tay) "
+                     "hoặc LSR_TELEMETRY_API_KEY (runner trên VM tự tiêm)")
 
 # <<< SỬA Ở ĐÂY: danh sách bảng Lark Base Data lead chỉ định đồng bộ.
 SOURCES = [
