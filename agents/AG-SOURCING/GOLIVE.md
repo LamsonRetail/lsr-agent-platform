@@ -33,6 +33,20 @@ Kết luận: **bước 1 và bước 5 buộc phải có người.** Không có
 
 ## Chuỗi golive — ai làm gì
 
+### Bước 0 — Kiểm regex trước khi làm phiền người khác (em làm được, offline)
+```bash
+cd agents/AG-SOURCING && python3 golden_selfcheck.py    # không token, không model, không gọi API
+```
+Chấm 4 regex active bằng **đúng** hàm platform dùng (`_assert_answer`, `app.py:5038` →
+`re.search`, không IGNORECASE) trên hai bộ câu: câu mà `INSTRUCTION.md` **bắt** agent nói (phải
+khớp) và câu trả lời **sai** kiểu điển hình — đã xoá NCC, đọc dữ liệu BST, nêu nguồn rỗng (phải
+KHÔNG khớp). Đã chạy: 4/4 case qua cả hai chiều.
+
+Lý do có bước này: `--run` ở bước 4 cần **admin token** nên phải nhờ ntranthi. Regex viết sai thì
+lần chạy đó fail vì lỗi mình, tốn một lượt nhờ người và để lại một dòng fail trong
+`regression_runs`. Nhưng nó **không** thay được bước 4: ở đây câu trả lời do em viết theo
+instruction, chạy thật là model viết.
+
 ### Bước 1 — Tạo version (chủ agent, cần `moderator`) — Console
 `https://app.34-126-154-135.sslip.io/agent/AG-SOURCING` → **Version** → New version →
 dán **toàn bộ** nội dung `INSTRUCTION.md` vào `instruction_block` → Save (version ở `draft`).
