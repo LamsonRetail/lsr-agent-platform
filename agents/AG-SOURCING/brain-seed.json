@@ -1,0 +1,132 @@
+{
+  "_nguon": "Lark Doc của team Sourcing — chỉ 2 tài liệu, cả hai thuộc phạm vi Sourcing.",
+  "_nguyen_tac": [
+    "Nội dung LẤY NGUYÊN VĂN (có rút gọn câu, KHÔNG thêm số liệu/tên NCC/giá nào không có trong doc).",
+    "Mỗi item = 1 mục của doc để RAG trả về đúng đoạn cần, vì /v1/self/context chỉ trả CTX_RAG_K=4 hit.",
+    "source_url trỏ đúng doc để agent trích dẫn được (INSTRUCTION.md > Nguồn sự thật).",
+    "Hợp đồng khung: CHỈ nạp bản mô tả điều khoản + link, KHÔNG nạp toàn văn — xem _tai_sao ở item đó."
+  ],
+  "items": [
+    {
+      "item_id": "ak_srcE2E_00_tongquan",
+      "kind": "process",
+      "domain": "sourcing",
+      "tags": ["quy-trinh", "sourcing", "e2e", "tong-quan"],
+      "title": "Quy trình Sourcing end-to-end — tổng quan 7 bước",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/EavZdocTpoEF46x0gEWlV9rTgfh",
+      "source_ref": "QUY TRÌNH SOURCING E2E > mục 1. Sơ đồ tổng quan",
+      "content": "Phạm vi áp dụng: Túi xách, Trang sức, Nước hoa và các ngành hàng mở rộng trong tương lai. Mục tiêu: chuẩn hoá cách tìm, đánh giá, dựng mẫu và onboard nhà cung cấp (NCC) mới — dùng chung một khung quy trình và một bộ form cho mọi ngành hàng, chỉ khác nhau ở tiêu chí chi tiết theo đặc thù sản phẩm.\n7 bước: (1) Giao target sourcing theo quý → (2) Sourcing, tìm nguồn hàng → (3) Sàng lọc & phân loại xưởng → (4) Thăm xưởng & đánh giá → (5) Dựng mẫu & chốt mẫu → (6) Đàm phán thương mại & Onboard NCC → (7) Bàn giao Thu mua & theo dõi đơn hàng đầu tiên.\nVòng lặp: sau mỗi quý, kết quả ở bước 7 (hiệu suất NCC) phản hồi ngược lại bước 1 để điều chỉnh target quý sau."
+    },
+    {
+      "item_id": "ak_srcE2E_01_target",
+      "kind": "process",
+      "domain": "sourcing",
+      "tags": ["quy-trinh", "buoc-1", "target", "quy"],
+      "title": "Bước 1 — Giao target sourcing theo quý",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/EavZdocTpoEF46x0gEWlV9rTgfh",
+      "source_ref": "QUY TRÌNH SOURCING E2E > Bước 1",
+      "content": "PIC: Trưởng nhóm Sourcing / Category Manager.\nĐầu vào: kế hoạch sản phẩm, nhu cầu NVL/phụ kiện theo ngành hàng, số liệu NCC hiện có.\nĐầu ra: số lượng NCC mới cần tìm mỗi quý, phân theo ngành hàng – danh mục con.\nCông cụ: bảng \"Giao target sourcing theo quý\".\nTiêu chí hoàn thành: target được duyệt và giao cho từng PIC sourcing trước ngày làm việc đầu tiên của quý."
+    },
+    {
+      "item_id": "ak_srcE2E_02_timnguon",
+      "kind": "process",
+      "domain": "sourcing",
+      "tags": ["quy-trinh", "buoc-2", "tim-nguon", "1688", "alibaba", "data-sourcing"],
+      "title": "Bước 2 — Sourcing, tìm nguồn hàng",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/EavZdocTpoEF46x0gEWlV9rTgfh",
+      "source_ref": "QUY TRÌNH SOURCING E2E > Bước 2",
+      "content": "PIC: Nhân viên Sourcing.\nĐầu vào: target quý, tiêu chí sản phẩm/NVL cần tìm.\nHoạt động: tìm trên sàn TMĐT (1688, Alibaba...), triển lãm, giới thiệu, chợ đầu mối.\nĐầu ra: thông tin xưởng được nhập đầy đủ vào bảng DATA SOURCING (tên, khu vực, sản phẩm, MOQ, giá sơ bộ, ảnh/catalog...).\nTiêu chí hoàn thành: đủ số lượng xưởng tiềm năng theo target; thông tin tối thiểu bắt buộc không bỏ trống."
+    },
+    {
+      "item_id": "ak_srcE2E_03_sangloc",
+      "kind": "process",
+      "domain": "sourcing",
+      "tags": ["quy-trinh", "buoc-3", "sang-loc", "phan-loai-xuong", "moq"],
+      "title": "Bước 3 — Sàng lọc & phân loại xưởng",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/EavZdocTpoEF46x0gEWlV9rTgfh",
+      "source_ref": "QUY TRÌNH SOURCING E2E > Bước 3",
+      "content": "PIC: Nhân viên Sourcing thực hiện, Trưởng nhóm duyệt.\nHoạt động: loại xưởng không phù hợp (giá, MOQ, năng lực không đạt); phân loại xưởng còn lại theo quy mô/năng lực (A/B/C hoặc theo phân khúc).\nĐầu ra: danh sách rút gọn xưởng ưu tiên đi khảo sát.\nCông cụ: bảng \"PHÂN LOẠI XƯỞNG\".\nTiêu chí hoàn thành: có danh sách ưu tiên kèm lý do loại/giữ."
+    },
+    {
+      "item_id": "ak_srcE2E_04_thamxuong",
+      "kind": "process",
+      "domain": "sourcing",
+      "tags": ["quy-trinh", "buoc-4", "tham-xuong", "danh-gia-xuong", "qc", "cham-diem"],
+      "title": "Bước 4 — Thăm xưởng & đánh giá (5 nhóm tiêu chí có trọng số)",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/EavZdocTpoEF46x0gEWlV9rTgfh",
+      "source_ref": "QUY TRÌNH SOURCING E2E > Bước 4",
+      "content": "PIC: Nhân viên Sourcing khảo sát, QC hỗ trợ nếu cần.\nHoạt động: khảo sát thực tế hoặc online, chấm điểm theo 5 nhóm tiêu chí có trọng số: Quy mô, Năng lực sản xuất, QC & phòng mẫu, Kho, Tài chính.\nĐầu ra: điểm tổng + phân loại (AS/A/B/C...) + kết luận đề xuất.\nCông cụ: bảng \"ĐÁNH GIÁ XƯỞNG\" (mẫu chung mọi ngành hàng).\nTiêu chí hoàn thành: mọi xưởng trong danh sách ưu tiên đều có bảng đánh giá hoàn chỉnh, kết luận rõ ràng (Tiếp tục / Loại)."
+    },
+    {
+      "item_id": "ak_srcE2E_05_dungmau",
+      "kind": "process",
+      "domain": "sourcing",
+      "tags": ["quy-trinh", "buoc-5", "dung-mau", "chot-mau", "lead-time", "sampling"],
+      "title": "Bước 5 — Dựng mẫu & chốt mẫu",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/EavZdocTpoEF46x0gEWlV9rTgfh",
+      "source_ref": "QUY TRÌNH SOURCING E2E > Bước 5",
+      "content": "PIC: Nhân viên Sourcing phối hợp NCC; Thiết kế/R&D duyệt mẫu.\nHoạt động: gửi yêu cầu dựng mẫu, theo dõi lead time mẫu, nhận và đánh giá mẫu (đạt/không đạt), chốt mẫu cuối.\nĐầu ra: mẫu được chốt, ghi nhận ngày dựng mẫu, ảnh mẫu, nhận xét, lý do loại (nếu có).\nCông cụ: bảng \"DATA SOURCING\" (các trường TK chọn mẫu, nhận xét mẫu, chốt/loại mẫu).\nTiêu chí hoàn thành: mẫu được bên duyệt (Thiết kế/Category) xác nhận đạt bằng văn bản hoặc ghi nhận trên hệ thống."
+    },
+    {
+      "item_id": "ak_srcE2E_06_onboard",
+      "kind": "process",
+      "domain": "sourcing",
+      "tags": ["quy-trinh", "buoc-6", "dam-phan", "bao-gia", "onboard-ncc", "hop-dong-khung", "duyet"],
+      "title": "Bước 6 — Đàm phán thương mại & Onboard NCC (ai duyệt giá/hồ sơ NCC)",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/EavZdocTpoEF46x0gEWlV9rTgfh",
+      "source_ref": "QUY TRÌNH SOURCING E2E > Bước 6",
+      "content": "PIC: Nhân viên Sourcing lập hồ sơ; Trưởng nhóm/Quản lý phê duyệt; Pháp lý/Kế toán hỗ trợ.\nHoạt động: đàm phán giá, MOQ, thanh toán, lead time đại trà; thu thập hồ sơ pháp lý NCC (giấy phép kinh doanh, thông tin ngân hàng, người đại diện); ký Hợp đồng khung (áp dụng chung, kèm phụ lục giá/sản phẩm riêng từng đơn hàng); điền đầy đủ bảng ONBOARD NCC.\nĐầu ra: NCC được duyệt onboard, có hợp đồng khung ký kết, mã NCC được tạo trong hệ thống.\nTiêu chí hoàn thành: đủ hồ sơ, hợp đồng đã ký, trạng thái NCC = HỢP TÁC."
+    },
+    {
+      "item_id": "ak_srcE2E_07_bangiao",
+      "kind": "process",
+      "domain": "sourcing",
+      "tags": ["quy-trinh", "buoc-7", "ban-giao", "thu-mua", "don-hang-dau-tien"],
+      "title": "Bước 7 — Bàn giao Thu mua & theo dõi đơn hàng đầu tiên",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/EavZdocTpoEF46x0gEWlV9rTgfh",
+      "source_ref": "QUY TRÌNH SOURCING E2E > Bước 7",
+      "content": "PIC: Nhân viên Sourcing bàn giao, Thu mua tiếp nhận.\nHoạt động: bàn giao toàn bộ thông tin NCC (giá, MOQ, lead time, liên hệ, phương thức thanh toán) cho team Thu mua; theo dõi đơn hàng đại trà đầu tiên để xác nhận chất lượng ổn định.\nĐầu ra: file bàn giao Sourcing → Thu mua hoàn chỉnh.\nCông cụ: bảng \"ONBOARD NCC\" (mục Bàn giao thu mua).\nTiêu chí hoàn thành: Thu mua xác nhận đã nhận đủ thông tin và có thể đặt hàng độc lập không cần Sourcing hỗ trợ."
+    },
+    {
+      "item_id": "ak_srcE2E_08_raci",
+      "kind": "definition",
+      "domain": "sourcing",
+      "tags": ["raci", "phan-quyen", "ai-duyet", "trach-nhiem"],
+      "title": "Phân quyền trách nhiệm Sourcing (RACI rút gọn) — ai làm, ai duyệt",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/EavZdocTpoEF46x0gEWlV9rTgfh",
+      "source_ref": "QUY TRÌNH SOURCING E2E > mục 3. Bảng phân quyền trách nhiệm",
+      "content": "R = Thực hiện, A = Phê duyệt, C = Tư vấn, I = Được thông báo.\nBước 1 Giao target: Sourcing (C), Trưởng nhóm/QLDA (A/R).\nBước 2 Tìm nguồn: Sourcing (R), Trưởng nhóm (I).\nBước 3 Phân loại: Sourcing (R), Trưởng nhóm (A), QC/R&D (C).\nBước 4 Thăm xưởng: Sourcing (R), Trưởng nhóm (I), QC/R&D (C).\nBước 5 Dựng mẫu: Sourcing (R), Trưởng nhóm (A), QC/R&D (R).\nBước 6 Onboard NCC: Sourcing (R), Trưởng nhóm (A), QC/R&D (I), Thu mua (I), Pháp lý/Kế toán (C).\nBước 7 Bàn giao: Sourcing (R), Trưởng nhóm (I), Thu mua (A/R)."
+    },
+    {
+      "item_id": "ak_srcE2E_09_form",
+      "kind": "knowledge",
+      "domain": "sourcing",
+      "tags": ["form", "bang-bieu", "cong-cu", "data-sourcing", "onboard-ncc"],
+      "title": "Bộ form/công cụ dùng chung của quy trình Sourcing",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/EavZdocTpoEF46x0gEWlV9rTgfh",
+      "source_ref": "QUY TRÌNH SOURCING E2E > mục 4. Bộ form/công cụ dùng chung",
+      "content": "Bước 1: bảng \"Giao target sourcing theo quý\". Bước 2: bảng \"DATA SOURCING\". Bước 3: bảng \"PHÂN LOẠI XƯỞNG\". Bước 4: bảng \"ĐÁNH GIÁ XƯỞNG\". Bước 5: bảng \"DATA SOURCING\" (mục mẫu). Bước 6: bảng \"ONBOARD NCC\" + file \"Hợp đồng khung\". Bước 7: bảng \"ONBOARD NCC\" (mục bàn giao)."
+    },
+    {
+      "item_id": "ak_srcE2E_10_nganhhangmoi",
+      "kind": "process",
+      "domain": "sourcing",
+      "tags": ["nganh-hang-moi", "mo-rong", "nguyen-tac", "trang-suc", "nuoc-hoa"],
+      "title": "Nguyên tắc áp dụng quy trình cho ngành hàng mới",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/EavZdocTpoEF46x0gEWlV9rTgfh",
+      "source_ref": "QUY TRÌNH SOURCING E2E > mục 5. Nguyên tắc áp dụng cho ngành hàng mới",
+      "content": "Khi mở rộng sang ngành hàng mới chỉ cần: (a) thêm giá trị mới vào trường \"Ngành hàng/Danh mục\" trong các bảng hiện có — KHÔNG tạo bảng mới; (b) điều chỉnh trọng số/tiêu chí phụ trong bảng ĐÁNH GIÁ XƯỞNG nếu đặc thù sản xuất khác biệt (ví dụ trang sức cần thêm tiêu chí kim loại quý/kiểm định; nước hoa cần thêm tiêu chí giấy phép hoá chất/an toàn); (c) giữ nguyên toàn bộ 7 bước và bộ form."
+    },
+    {
+      "item_id": "ak_srcHDK_00_hopdongkhung",
+      "kind": "knowledge",
+      "domain": "sourcing",
+      "tags": ["hop-dong-khung", "template", "phap-ly", "dieu-khoan", "po", "phu-luc"],
+      "title": "Hợp đồng khung mua bán/gia công với NCC — mẫu dùng chung (chỉ mục điều khoản + link)",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/XvBJdz0SYoyRQYxXX5jl4mYfgDg",
+      "source_ref": "HỢP ĐỒNG KHUNG (TEMPLATE) — bản mẫu, mọi giá trị cụ thể để trống [___]",
+      "_tai_sao_chi_nap_mo_ta": "Toàn văn hợp đồng là 'điều khoản hợp đồng' — INSTRUCTION.md mục Giới hạn #3 xếp vào loại phải xác nhận vai trò trước khi trả lời. Brain này ai trong TEAM S / SOURCING MM hỏi cũng đọc được, nên chỉ nạp CHỈ MỤC điều khoản + link; ai cần toàn văn thì mở doc (Lark tự kiểm quyền xem). Bản gốc là template rỗng, không chứa giá hay tên NCC nào.",
+      "content": "Mẫu hợp đồng khung dùng chung mọi ngành hàng (túi xách, trang sức, nước hoa...); mọi giá trị cụ thể để trống [___] điền theo từng NCC. Số hiệu: [SỐ HĐ]/[NĂM]/HĐK-HAPAS.\n12 điều: 1 Phạm vi & đối tượng (chi tiết từng đơn hàng xác lập bằng PO/Phụ lục, là bộ phận không tách rời; xung đột thì Hợp đồng khung ưu tiên) — 2 Giá & phương thức thanh toán (đơn giá theo báo giá Bên B và Bên A xác nhận cho từng đơn; đổi giá phải thông báo bằng văn bản trước tối thiểu [__] ngày và Bên A chấp thuận mới có hiệu lực) — 3 MOQ & thời gian giao hàng — 4 Chất lượng & QC (giao đúng approved sample; Bên B tự FQC 100%; Bên A được kiểm trước xuất xưởng) — 5 Đóng gói, giao hàng, chuyển rủi ro — 6 Bảo hành, đổi trả, khiếu nại — 7 Phạt vi phạm & bồi thường — 8 Bảo mật & sở hữu trí tuệ (thiết kế/khuôn mẫu thuộc Bên A) — 9 Thời hạn, sửa đổi, chấm dứt — 10 Bất khả kháng — 11 Giải quyết tranh chấp — 12 Điều khoản chung.\nNgành hàng có yêu cầu pháp lý đặc thù (nước hoa: công bố mỹ phẩm/MSDS; trang sức: kiểm định kim loại quý) thì bổ sung Phụ lục riêng, không sửa điều khoản gốc.\nToàn văn: xem doc nguồn."
+    }
+  ]
+}
