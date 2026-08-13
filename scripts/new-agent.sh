@@ -58,7 +58,8 @@ EOF
 cat > "$DIR/consumer.py" <<'EOF'
 """Consumer mẫu — poll job từ platform, dựng ngữ cảnh, trả lời, ghi nhớ.
 
-Chạy: LSR_AGENT_TOKEN=... python3 consumer.py   (token nhận khi enroll)
+Chạy tay: LSR_AGENT_TOKEN=... python3 consumer.py   (token nhận khi enroll)
+Chạy trên VM qua POST /v1/self/deploy: runner tự tiêm token dưới tên LSR_TELEMETRY_API_KEY.
 Job đến từ MỌI kênh (Lark/web chat/cron) qua cùng một queue — sửa answer() là đủ.
 
 Ngữ cảnh do PLATFORM giữ (không nằm ở model): mỗi lượt gọi /v1/self/context để lấy
@@ -68,7 +69,13 @@ tri thức liên quan (có nguồn). Nhờ vậy đổi model/credential hay res
 import json, os, time, urllib.parse, urllib.request, urllib.error
 
 PLATFORM = os.environ.get("LSR_PLATFORM_URL", "https://platform.34-126-154-135.sslip.io").rstrip("/")
-TOKEN = os.environ["LSR_AGENT_TOKEN"]
+# Hai tên, vì có hai đường chạy: docker-compose/chạy tay truyền LSR_AGENT_TOKEN, còn runtime
+# trên VM (POST /v1/self/deploy) tiêm token agent dưới tên LSR_TELEMETRY_API_KEY
+# (platform_api/app.py:1693 — entrypoint.sh:10 cũng đọc thứ tự này).
+TOKEN = os.environ.get("LSR_AGENT_TOKEN") or os.environ.get("LSR_TELEMETRY_API_KEY") or ""
+if not TOKEN:
+    raise SystemExit("thiếu token agent: đặt LSR_AGENT_TOKEN (chạy tay) "
+                     "hoặc LSR_TELEMETRY_API_KEY (runner trên VM tự tiêm)")
 
 def api(method, path, payload=None, timeout=40):
     data = json.dumps(payload).encode() if payload is not None else None
