@@ -10,7 +10,14 @@ tri thức liên quan (có nguồn). Nhờ vậy đổi model/credential hay res
 import json, os, subprocess, time, urllib.parse, urllib.request, urllib.error
 
 PLATFORM = os.environ.get("LSR_PLATFORM_URL", "https://platform.34-126-154-135.sslip.io").rstrip("/")
-TOKEN = os.environ["LSR_AGENT_TOKEN"]
+# Chạy tay thì đặt LSR_AGENT_TOKEN. Nhưng runtime chính thức trên VM (`POST /v1/self/deploy`)
+# tiêm token agent vào container dưới tên **LSR_TELEMETRY_API_KEY**, không phải LSR_AGENT_TOKEN
+# (app.py:1697 `"LSR_TELEMETRY_API_KEY": tok`; entrypoint.sh:10 cũng đọc thứ tự này). Mẫu gốc
+# `os.environ["LSR_AGENT_TOKEN"]` nên chết KeyError ngay dòng import khi deploy — nhận cả hai tên.
+TOKEN = os.environ.get("LSR_AGENT_TOKEN") or os.environ.get("LSR_TELEMETRY_API_KEY") or ""
+if not TOKEN:
+    raise SystemExit("thiếu token agent: đặt LSR_AGENT_TOKEN (chạy tay) "
+                     "hoặc LSR_TELEMETRY_API_KEY (runner trên VM tự tiêm)")
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() == "true"
 # Môi trường đọc instruction: /v1/self/context mặc định env=prod (platform_api/app.py:3448).
 # Chạy LSR_ENV=dev để thử version draft TRƯỚC khi publish prod — cần cho eval gate, xem

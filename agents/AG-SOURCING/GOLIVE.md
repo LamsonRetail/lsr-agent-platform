@@ -57,19 +57,44 @@ Ghi lại số version N. Kiểm: `GET /v1/self/version` phải thấy nó.
 Console → Version → Publish → env `dev`. `dev`/`stg` **không** qua eval gate
 (`app.py:3272` chỉ gate khi `env == "prod"`), nên bước này chạy được ngay.
 
-### Bước 3 — Hỏi agent bằng instruction MỚI (em làm được)
+### Bước 3 — Hỏi agent bằng instruction MỚI
+Cần một chỗ **thật sự gọi được model**. `GET /v1/self/deploy/status` hiện trả `not_deployed`, và
+máy đang dùng **không có** `claude` CLI (`which claude` → not found) → nếu chạy ngay thì
+`consumer.py > answer()` trả `"(lỗi gọi model: …)"` cho cả 4 câu, `--run` fail sạch. Hai đường:
+
+**(A) Chạy tay ở máy mình** — phải cài `@anthropic-ai/claude-code` và đăng nhập subscription trước.
 ```bash
 cd agents/AG-SOURCING
 LSR_ENV=dev DRY_RUN=true python3 consumer.py     # terminal 1
 LSR_AGENT_TOKEN=... python3 golden_run.py --ask  # terminal 2
 ```
-`LSR_ENV=dev` là bắt buộc: `/v1/self/context` mặc định `env=prod` (`app.py:3448`), bỏ nó là đang
-chấm instruction **cũ** rồi gắn kết quả cho version **mới** — gate xanh mà chưa kiểm gì.
+
+**(B) Runtime chính thức trên VM — `POST /v1/self/deploy`.** Endpoint này dùng `_require_self`
+(`app.py:1667`) và nằm trong allowlist `/v1/self/*` của Caddy → **token agent là đủ, KHÔNG cần
+ntranthi**. Thứ duy nhất thiếu là `oauth_token` = output của `claude setup-token`, chỉ **chủ
+subscription** (anh/chị owner) tạo được; đừng dán nó vào issue/PR/log, chỉ truyền thẳng vào body.
+```bash
+curl -s -X POST -H "Authorization: Bearer $LSR_AGENT_TOKEN" -H "Content-Type: application/json" \
+  -d '{"oauth_token":"<claude setup-token>","repo":"<git url>","start_cmd":"LSR_ENV=dev DRY_RUN=true python3 agents/AG-SOURCING/consumer.py"}' \
+  "$LSR_PLATFORM_URL/v1/self/deploy"
+```
+Image `lsr-agent-runner` đã bake sẵn `claude` CLI, và entrypoint còn tự `lease` credential từ pool
+chung (`/v1/self/model-auth/lease`) — `oauth_token` chỉ là fallback. Hai chỗ dễ vấp, đã đọc code
+chứ không đoán:
+- runner tiêm token agent dưới tên **`LSR_TELEMETRY_API_KEY`**, không phải `LSR_AGENT_TOKEN`
+  (`app.py:1697`). `consumer.py` đã sửa để nhận cả hai — bản gốc chết `KeyError` ngay khi khởi động.
+- `git clone --depth 1 "$AGENT_REPO"` chạy **không có credential** (`entrypoint.sh:54`) và nuốt lỗi;
+  repo private thì container vẫn sống nhưng không có code. Đây là phần core, agent không sửa được.
+
+`LSR_ENV=dev` là bắt buộc ở cả hai đường: `/v1/self/context` mặc định `env=prod` (`app.py:3448`),
+bỏ nó là đang chấm instruction **cũ** rồi gắn kết quả cho version **mới** — gate xanh mà chưa kiểm gì.
 
 ⚠️ **Cảnh báo tác dụng phụ, phải quyết trước khi chạy:** `consumer.py` poll `/v1/self/jobs` —
 **một queue dùng chung mọi kênh**. Nó không phân biệt job của `golden_run.py` với tin nhắn thật
 trong TEAM S / SOURCING MM, và `/reply` gửi thẳng vào nhóm. Nên bật consumer = agent bắt đầu trả
-lời người thật. `DRY_RUN=true` **không** chặn việc này (chỉ chặn ghi brain). Hai lựa chọn:
+lời người thật. `DRY_RUN=true` **không** chặn việc này (chỉ chặn ghi brain). Đường (B) còn dai hơn:
+container đặt `restart_policy: unless-stopped` (`app.py:1713`) nên tắt terminal không dừng nó —
+phải gọi lại `/v1/self/deploy` hoặc nhờ ops stop container `lsr-agent-ag-sourcing`. Hai lựa chọn:
 - (an toàn hơn) nhờ ntranthi tạm `pause_routing` 2 chat_id, chạy `--ask`, rồi bật lại;
 - (nhanh hơn) chấp nhận: sau bước 2 agent đã có policy nên trả lời có kiểm soát.
 

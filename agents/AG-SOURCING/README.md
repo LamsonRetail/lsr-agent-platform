@@ -79,11 +79,17 @@ nguồn), trả lời qua `/v1/self/jobs/{id}/reply` → platform tự chọn **
 `instruction_block: null` và `version: null` → agent **chưa có chính sách nào**, sẽ trả lời cả câu
 đáng phải từ chối (TESTCASE 4 — dữ liệu dự án BST).
 
-1. Publish version với nội dung `INSTRUCTION.md` ở Console → Version. Cần role `moderator`
-   (token agent trả `403`), nên chủ agent hoặc maintainer làm.
-2. Chủ agent dán setup-token của Claude subscription qua `/v1/self/deploy` (`runtime.auth:
-   subscription` — không dùng api key).
+1. Publish version với nội dung `INSTRUCTION.md` ở Console → Version. Cần role `moderator`.
+   Token agent trả `403` và **không thể** đủ tư cách: `_require_role` (`app.py:227`) đòi
+   `kind in ("session","admin_token")`, token agent không thuộc loại nào → quyền phải cấp cho
+   **tài khoản Console** của chủ agent, cấp cho token là vô nghĩa. Chi tiết ở `GOLIVE.md`.
+2. Chạy được runtime thật — `GET /v1/self/deploy/status` đang `not_deployed`. `POST /v1/self/deploy`
+   dùng `_require_self` nên **token agent là đủ, không cần admin**; thứ duy nhất thiếu là
+   `oauth_token` từ `claude setup-token`, chỉ chủ subscription tạo được (đừng dán vào issue/PR/log).
 3. `bash scripts/agent-test.sh AG-SOURCING`.
+
+Kiểm được ngay, không chờ ai: `python3 golden_selfcheck.py` — chấm 4 regex golden bằng đúng hàm
+platform dùng (`_assert_answer`, `app.py:5038`), cả chiều phải-khớp lẫn chiều không-được-khớp.
 
 ## Brain riêng — tri thức nạp từ Lark Doc
 Đã nạp **12 item** (`status: approved`, `scope: agent`) từ 2 Lark Doc của team Sourcing:
