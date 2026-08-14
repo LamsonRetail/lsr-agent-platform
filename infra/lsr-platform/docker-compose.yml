@@ -192,6 +192,11 @@ services:
                          "${DATA_LARK_APP_ID:-}": "${DATA_LARK_APP_SECRET:-}"}'
       LARK_NOTIFY_CHAT_ID: ${LARK_NOTIFY_CHAT_ID:-}
       LARK_DOMAIN: ${LARK_DOMAIN:-https://open.larksuite.com}
+      # P10: đăng nhập console qua Lark OAuth + kiểm tra ORG + quyền mặc định
+      CONSOLE_BASE_URL: ${CONSOLE_BASE_URL:-https://app.34-126-154-135.sslip.io}
+      ALLOWED_LOGIN_DOMAINS: ${ALLOWED_LOGIN_DOMAINS:-hapas.vn}
+      LARK_TENANT_KEY: ${LARK_TENANT_KEY:-}
+      DEFAULT_LOGIN_ROLE: ${DEFAULT_LOGIN_ROLE:-user}
       AGENT_RUNNER_IMAGE: ${AGENT_RUNNER_IMAGE:-lsr-agent-runner:latest}
       LSR_AGENT_NETWORK: ${LSR_AGENT_NETWORK:-lsr-platform_default}
       # Nơi chạy agent GĐ này = docker-socket-proxy trên VM chung (quyền hạn chế).

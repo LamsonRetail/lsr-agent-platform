@@ -54,6 +54,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         ["/connectors", "🔌 Connectors", isAdmin],
         ["/model-auth", "🔑 Model Auth", isAdmin],
         ["/accounts", "👥 Tài khoản", !!u?.can_manage_accounts],
+        ["/request-access", "🙋 Xin quyền", !isAdmin],
         ["/audit", "📜 Audit", true],
       ],
     },

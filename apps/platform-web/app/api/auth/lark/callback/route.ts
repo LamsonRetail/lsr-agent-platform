@@ -1,0 +1,35 @@
+import { NextResponse } from "next/server";
+import { SESSION_COOKIE } from "@/lib/session";
+
+const P = process.env.LSR_PLATFORM_URL || "http://localhost:8090";
+const GATEWAY = process.env.LSR_GATEWAY_TOKEN || "";
+
+// Lark redirect về đây sau khi người dùng đồng ý. Đổi code lấy phiên (server-to-server —
+// session token không bao giờ xuất hiện trên URL trình duyệt), set cookie httpOnly.
+export async function GET(req: Request) {
+  const u = new URL(req.url);
+  const code = u.searchParams.get("code") || "";
+  const state = u.searchParams.get("state") || "";
+  try {
+    const r = await fetch(`${P}/v1/auth/lark/callback`, {
+      method: "POST", cache: "no-store",
+      headers: { "Content-Type": "application/json", ...(GATEWAY ? { "X-Gateway-Token": GATEWAY } : {}) },
+      body: JSON.stringify({ code, state }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const msg = encodeURIComponent(d?.detail || "đăng nhập Lark thất bại");
+      return NextResponse.redirect(new URL(`/login?err=${msg}`, req.url));
+    }
+    // Tài khoản mới (hoặc chưa được cấp vai trò riêng) → đưa đến trang xin quyền.
+    const dest = d.provisioned || !d.has_roles ? "/request-access?moi=1" : "/";
+    const res = NextResponse.redirect(new URL(dest, req.url));
+    res.cookies.set(SESSION_COOKIE, d.token, {
+      httpOnly: true, sameSite: "lax", secure: true, path: "/",
+      maxAge: (d.expires_hours || 12) * 3600,
+    });
+    return res;
+  } catch {
+    return NextResponse.redirect(new URL("/login?err=" + encodeURIComponent("không gọi được platform"), req.url));
+  }
+}

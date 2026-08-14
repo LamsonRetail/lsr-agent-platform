@@ -63,6 +63,19 @@ export default function LoginForm({ next }: { next: string }) {
       {err && <p className="err">{err}</p>}
       <button className="btn btn-p" onClick={login} disabled={busy || !email || !pw}
               style={{ width: "100%" }}>{busy ? "Đang kiểm tra…" : "Đăng nhập"}</button>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0" }}>
+        <hr style={{ flex: 1, border: "none", borderTop: "1px solid #8884" }} />
+        <span className="muted" style={{ fontSize: 11 }}>hoặc</span>
+        <hr style={{ flex: 1, border: "none", borderTop: "1px solid #8884" }} />
+      </div>
+      <a className="btn" href="/api/auth/lark/start"
+         style={{ width: "100%", display: "block", textAlign: "center", boxSizing: "border-box" }}>
+        🔵 Đăng nhập bằng Lark
+      </a>
+      <p className="muted" style={{ fontSize: 11, marginTop: 8, marginBottom: 0 }}>
+        Đăng nhập Lark bằng tài khoản công ty — hệ thống tự tạo tài khoản console
+        (quyền user) và kiểm tra đúng tổ chức.
+      </p>
     </div>
   );
 }

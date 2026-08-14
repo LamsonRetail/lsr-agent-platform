@@ -377,12 +377,43 @@
 | TH.7c | Tải resource không token | 401 | ✅ |
 | TH.8 | Container gateway_sawadee chưa có secret | Idle an toàn + log cảnh báo rõ | ✅ |
 
+## 15. P10 — Đăng nhập Lark OAuth + quyền mặc định + xin quyền per-agent (✅ 08-14, 21/21 pass)
+
+> Mọi tài khoản đăng nhập (mật khẩu hoặc Lark) mặc định có quyền **user trên tất cả agent**;
+> quyền moderator/admin cấp theo **từng agent** — một người giữ nhiều vai trò cùng lúc.
+> Đăng nhập Lark: kiểm tra ĐÚNG ORG (tenant_key + domain email) rồi mới tự mở tài khoản.
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| P10.1a | Account A (user platform + admin AG-MINH-ANH + moderator AG-SOURCING) login | Có phiên | ✅ |
+| P10.1b | `/v1/auth/me` của A | Trả **cả 3 vai trò cùng lúc** — đa agent/account | ✅ |
+| P10.1c | A sửa routing AG-SOURCING (vai moderator) | 200 | ✅ |
+| P10.1d | A sửa routing AG-MINH-ANH (vai admin) | 200 | ✅ |
+| P10.1e | A sửa routing AG-BI (chỉ user mặc định) | 403 | ✅ |
+| P10.1f | A gọi API quản lý tài khoản | 403 (không phải admin platform) | ✅ |
+| P10.2a | Account B không có binding nào | DB xác nhận 0 binding | ✅ |
+| P10.2b | Catalog của B | effective_role = **user trên TẤT CẢ agent** (mặc định) | ✅ |
+| P10.2c | B sửa config | 403 — mặc định chỉ xem | ✅ |
+| P10.3a | `/v1/auth/lark/start` | URL authorize Lark (app_id + redirect console + state ký HMAC) | ✅ |
+| P10.3b | Callback với state giả | 400 (chống CSRF, TTL 10') | ✅ |
+| P10.3c | Callback state đúng + code giả | 401 — Lark từ chối, không tạo phiên | ✅ |
+| P10.4 | Đăng nhập Lark thật + kiểm org (tenant/domain) + auto tạo tài khoản + trang xin quyền | Cần người thật bấm trên trình duyệt | ⏳ |
+| P10.5a | B xin moderator AG-SOURCING | Tạo yêu cầu + notify admin (Telegram/Lark) | ✅ |
+| P10.5b | Xin trùng khi đang pending | 409 | ✅ |
+| P10.5c | Xin quyền 'user' | 400 — user là mặc định, không cần xin | ✅ |
+| P10.5d | B tự duyệt yêu cầu của mình | 403 | ✅ |
+| P10.5e | Admin xem danh sách chờ | Thấy yêu cầu (Console → Tài khoản) | ✅ |
+| P10.5f | Admin duyệt | Ghi role_binding + báo người xin | ✅ |
+| P10.5g | Sau duyệt B sửa AG-SOURCING | 200 — quyền hiệu lực ngay | ✅ |
+| P10.5h | Duyệt lại yêu cầu đã chốt | 409 | ✅ |
+| P10.6 | Admin TỪ CHỐI yêu cầu lên admin | Quyền giữ nguyên moderator | ✅ |
+
 ---
 
-**Tổng: 192 case — 185 ✅ đã nghiệm thu (96%).**
+**Tổng: 214 case — 206 ✅ đã nghiệm thu (96%).**
 
-**7 case còn lại, chia 2 nhóm:**
-- **Cần bạn xử lý (3):** `LK.5`, `P1.1` — Lark app chưa mở available-range và bot chưa ở nhóm nào (resolve trả `null`, `/v1/lark/chats` rỗng); `ST.8` — cần team thật cùng push 1 branch.
+**8 case còn lại, chia 2 nhóm:**
+- **Cần bạn xử lý (4):** `LK.5`, `P1.1` — Lark app chưa mở available-range và bot chưa ở nhóm nào (resolve trả `null`, `/v1/lark/chats` rỗng); `ST.8` — cần team thật cùng push 1 branch; `P10.4` — đăng nhập Lark thật trên trình duyệt (cần khai redirect URI trong Lark Developer Console trước).
 - **Chỉ kiểm bằng mắt trên UI (4):** `P3.7.1`–`P3.7.5` Builder (các API bên dưới đã pass, trang render 200).
 
 Toàn bộ P1–P7 đã triển khai và verify trên VM. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.
