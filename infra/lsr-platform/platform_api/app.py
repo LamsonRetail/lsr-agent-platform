@@ -1651,7 +1651,7 @@ def accounts_list(authorization: str = Header(default="")) -> list[dict]:
     with _db() as conn:
         rows = conn.execute(
             "SELECT a.email, a.name, a.status, a.must_change_pw, a.last_login_at, a.created_at, "
-            "a.telegram_chat_id, "
+            "a.telegram_chat_id, a.auth_via, (a.lark_open_id IS NOT NULL) AS lark_linked, "
             "coalesce(json_agg(json_build_object('scope_type', r.scope_type, 'scope_id', r.scope_id, "
             "  'role', r.role) ORDER BY r.scope_type) FILTER (WHERE r.id IS NOT NULL), '[]') AS roles "
             "FROM accounts a LEFT JOIN role_bindings r ON r.email=a.email "
