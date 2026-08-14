@@ -3039,16 +3039,36 @@ def self_job_reply(job_id: int, body: dict, authorization: str = Header(default=
 
 @app.post("/v1/self/jobs/{job_id}/complete")
 def self_job_complete(job_id: int, body: dict, authorization: str = Header(default="")) -> dict:
+    """Báo job xong. body.usage {input_tokens, output_tokens, model, duration_ms} nếu có.
+
+    Platform TỰ ghi 1 trace tối thiểu cho mỗi job xong → Runs/Token trên dashboard
+    không còn phụ thuộc việc team nhớ cài plugin telemetry (bài học AG-BI).
+    Consumer đã dùng plugin thì KHÔNG tự post thêm trace cho job để tránh đếm đôi.
+    """
     agent_id = _require_self(authorization)
+    usage = body.get("usage") or {}
     with _db() as conn:
         n = conn.execute(
             "UPDATE jobs SET status='done', updated_at=now(), last_error=NULL "
-            "WHERE id=%s AND agent_id=%s AND status='running' RETURNING id",
+            "WHERE id=%s AND agent_id=%s AND status='running' RETURNING id, channel, session_id",
             (job_id, agent_id)).fetchone()
         if not n:
             raise HTTPException(status_code=409, detail="job không ở trạng thái running của agent")
         conn.execute("INSERT INTO job_events(job_id, kind, data) VALUES (%s,'done',%s)",
                      (job_id, Json(body.get("result") or {})))
+        try:
+            ti = int(usage.get("input_tokens") or 0)
+            to = int(usage.get("output_tokens") or 0)
+            conn.execute(
+                "INSERT INTO agent_traces (run_id, agent_id, task_id, source, input_tokens, "
+                " output_tokens, total_tokens, tool_calls, duration_ms, status, raw) "
+                "VALUES (%s,%s,%s,'job_auto',%s,%s,%s,%s,%s,'ok',%s)",
+                (f"job-{job_id}", agent_id, n["session_id"], ti, to, ti + to,
+                 int(usage.get("tool_calls") or 0),
+                 int(usage.get("duration_ms") or 0) or None,
+                 Json({"channel": n["channel"], "model": usage.get("model"), "job_id": job_id})))
+        except Exception:
+            pass    # đếm run là best-effort — không được làm hỏng complete
         conn.commit()
     return {"ok": True}
 
