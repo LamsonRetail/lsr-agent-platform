@@ -260,6 +260,8 @@ services:
       LSR_PLATFORM_URL: http://platform_api:8090   # gọi nội bộ (bỏ qua Caddy/token)
       LSR_COLLECTOR: http://collector:8081
       PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      # Gốc PUBLIC để dựng redirect trình duyệt (OAuth) — không dùng hostname container.
+      LSR_APP_PUBLIC: ${LSR_APP_PUBLIC:-https://app.34-126-154-135.sslip.io}
     restart: unless-stopped
 
   caddy:

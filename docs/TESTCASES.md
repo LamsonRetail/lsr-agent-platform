@@ -397,7 +397,7 @@
 | P10.3a | `/v1/auth/lark/start` | URL authorize Lark (app_id + redirect console + state ký HMAC) | ✅ |
 | P10.3b | Callback với state giả | 400 (chống CSRF, TTL 10') | ✅ |
 | P10.3c | Callback state đúng + code giả | 401 — Lark từ chối, không tạo phiên | ✅ |
-| P10.4 | Đăng nhập Lark thật + kiểm org (tenant/domain) + auto tạo tài khoản + trang xin quyền | Cần người thật bấm trên trình duyệt | ⏳ |
+| P10.4 | Đăng nhập Lark thật + kiểm org (tenant/domain) + auto tạo tài khoản + trang xin quyền | ✅ 08-14 — thint@hapas.vn login OK (audit #396); fix redirect dùng hostname container → publicBase(); siết LARK_TENANT_KEY | ✅ |
 | P10.5a | B xin moderator AG-SOURCING | Tạo yêu cầu + notify admin (Telegram/Lark) | ✅ |
 | P10.5b | Xin trùng khi đang pending | 409 | ✅ |
 | P10.5c | Xin quyền 'user' | 400 — user là mặc định, không cần xin | ✅ |
@@ -429,10 +429,10 @@ harness trả lời nhầm — xem báo cáo 08-14.)
 
 ---
 
-**Tổng: 219 case — 212 ✅ đã nghiệm thu (97%).**
+**Tổng: 219 case — 213 ✅ đã nghiệm thu (97%).**
 
 **7 case còn lại, chia 2 nhóm:**
-- **Cần bạn xử lý (3):** `P1.1` — bot Admin App chưa được add vào nhóm nào (`/v1/lark/chats` rỗng — add bot vào 1 nhóm là xong); `ST.8` — cần team thật cùng push 1 branch; `P10.4` — đăng nhập Lark thật trên trình duyệt (redirect URI + scope đã publish trên Admin App).
+- **Cần bạn xử lý (2):** `P1.1` — bot Admin App chưa được add vào nhóm nào (`/v1/lark/chats` rỗng — add bot vào 1 nhóm là xong); `ST.8` — cần team thật cùng push 1 branch.
 - **Chỉ kiểm bằng mắt trên UI (4):** `P3.7.1`–`P3.7.5` Builder (các API bên dưới đã pass, trang render 200).
 
 Toàn bộ P1–P7 đã triển khai và verify trên VM. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.

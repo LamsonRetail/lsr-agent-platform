@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/session";
+import { publicBase } from "@/lib/url";
 
 const P = process.env.LSR_PLATFORM_URL || "http://localhost:8090";
 const GATEWAY = process.env.LSR_GATEWAY_TOKEN || "";
@@ -8,6 +9,7 @@ const GATEWAY = process.env.LSR_GATEWAY_TOKEN || "";
 // session token không bao giờ xuất hiện trên URL trình duyệt), set cookie httpOnly.
 export async function GET(req: Request) {
   const u = new URL(req.url);
+  const base = publicBase(req);
   const code = u.searchParams.get("code") || "";
   const state = u.searchParams.get("state") || "";
   try {
@@ -19,17 +21,17 @@ export async function GET(req: Request) {
     const d = await r.json().catch(() => ({}));
     if (!r.ok) {
       const msg = encodeURIComponent(d?.detail || "đăng nhập Lark thất bại");
-      return NextResponse.redirect(new URL(`/login?err=${msg}`, req.url));
+      return NextResponse.redirect(`${base}/login?err=${msg}`);
     }
     // Tài khoản mới (hoặc chưa được cấp vai trò riêng) → đưa đến trang xin quyền.
     const dest = d.provisioned || !d.has_roles ? "/request-access?moi=1" : "/";
-    const res = NextResponse.redirect(new URL(dest, req.url));
+    const res = NextResponse.redirect(`${base}${dest}`);
     res.cookies.set(SESSION_COOKIE, d.token, {
       httpOnly: true, sameSite: "lax", secure: true, path: "/",
       maxAge: (d.expires_hours || 12) * 3600,
     });
     return res;
   } catch {
-    return NextResponse.redirect(new URL("/login?err=" + encodeURIComponent("không gọi được platform"), req.url));
+    return NextResponse.redirect(`${base}/login?err=` + encodeURIComponent("không gọi được platform"));
   }
 }
