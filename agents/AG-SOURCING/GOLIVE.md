@@ -10,7 +10,61 @@ Trạng thái lúc viết (đã kiểm live, không suy đoán):
 | Golden set | ✅ 4 case active trong `golden-cases.json` (chưa upload lên platform) |
 | **Instruction** | ❌ `GET /v1/self/context` → `instruction_block: null`, `version: null` |
 
-→ Bot đang online trong TEAM S + SOURCING MM mà **không có refusal policy nào**.
+→ `routing_binding` đã trỏ TEAM S + SOURCING MM vào AG-SOURCING mà agent **chưa có refusal policy
+nào**. Nói cho đúng mức độ: rủi ro này đang **tiềm ẩn, chưa xảy ra** — chưa có runtime nào chạy
+(`/v1/self/deploy/status` → `not_deployed`) nên tin nhắn chỉ nằm trong queue, agent chưa trả lời ai.
+Nó thành rủi ro thật vào đúng lúc có người bật consumer/deploy trong khi `instruction_block` còn
+`null`. Vì vậy thứ tự trong runbook này là bắt buộc, không phải cho đẹp.
+
+## Việc CHỈ chủ agent làm được (không nhờ maintainer, không tự động hoá được)
+
+Ba việc dưới đây độc lập với nhau và độc lập với `moderator` mà ntranthi đang giữ — làm sớm được
+thì làm, không phải chờ ai.
+
+- [ ] **1. Verify tài khoản GitHub cho `linhntt@hapas.vn`.**
+      Vercel đỏ ở **cả** PR #18, #20, #22, #23 với đúng một lý do:
+      `GitHub couldn't verify an account for the commit`. Không phải lỗi code — `test` và
+      `scope-guard` đều xanh. Sửa ở GitHub → Settings → Emails (thêm/verify email đang dùng để
+      commit), hoặc đổi `git config user.email` sang email đã verify.
+      *Tác dụng:* dọn sạch nhiễu đỏ trên mọi PR sau này, để lần nào đỏ là đỏ thật.
+
+- [ ] **2. `claude setup-token` → deploy runtime.**
+      `GET /v1/self/deploy/status` đang `not_deployed`, nên bước 3 của runbook chưa chạy được.
+      `POST /v1/self/deploy` dùng `_require_self` (`app.py:1667`) → **token agent là đủ, không cần
+      admin**; thứ duy nhất thiếu là `oauth_token`, mà chỉ chủ subscription tạo được:
+      ```bash
+      claude setup-token          # in ra token — KHÔNG dán vào issue/PR/chat/log
+      ```
+      Rồi truyền thẳng vào body `/v1/self/deploy` (xem bước 3, đường B).
+      *Lưu ý thứ tự:* deploy xong là agent bắt đầu trả lời người thật, và container đặt
+      `restart_policy: unless-stopped` nên không tự tắt. **Đừng deploy trước khi publish
+      instruction** — làm bước 1→2 trước.
+
+- [ ] **3. Bật Event Subscription trong Lark Developer Console.**
+      App **Nihao Sourcing** (`cli_aaf6ce7c8d38deed`): event `im.message.receive_v1` + 4 scope
+      `im:message`, `im:message:send_as_bot`, `im:chat:readonly`, `contact:user.id:readonly`.
+      *Chưa xác nhận được bật hay chưa* — xem ghi chú ngay dưới.
+
+### Vì sao không tự kiểm hộ được việc 3
+
+Cách hiển nhiên là "gọi `/v1/self/jobs` xem có tin nào từ 2 nhóm chảy vào không". **Không được** —
+endpoint đó không phải chỉ đọc, nó **giành job**:
+
+```sql
+-- app.py:2645  (GET /v1/self/jobs)
+UPDATE jobs SET status='running', locked_by=%s, locked_at=now(),
+                attempts=attempts+1, updated_at=now()
+WHERE id = (SELECT id FROM jobs WHERE agent_id=%s AND status='queued' ...)
+```
+
+Gọi thử một lần là lấy tin nhắn thật của người ta ra khỏi queue, đánh `running` và tăng
+`attempts`; không ai `reply/complete` thì nó chờ `_reap_stale` trả về, mỗi lần thử lại tốn một
+`attempt` tới `max_attempts` rồi rơi vào `dlq`. Tức "xem thử" = làm mất tin nhắn của đồng nghiệp.
+
+Đường chỉ-đọc thì đóng: `/v1/self/ops/snapshot` (`app.py:4332`) có đếm job theo status nhưng đòi
+`is_platform=true`, AG-SOURCING nhận 403.
+
+→ Trạng thái việc 3 chỉ anh/chị xác nhận được bằng mắt trong Lark Developer Console.
 
 ## Vì sao token agent không tự chạy được chuỗi này
 
