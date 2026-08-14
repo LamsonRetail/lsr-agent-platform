@@ -21,7 +21,14 @@ import urllib.parse
 import urllib.request
 
 PLATFORM = os.environ.get("LSR_PLATFORM_URL", "https://platform.34-126-154-135.sslip.io").rstrip("/")
-TOKEN = os.environ["LSR_AGENT_TOKEN"]
+# Hai tên, vì có hai đường chạy: docker-compose/chạy tay truyền LSR_AGENT_TOKEN, còn runtime
+# trên VM (POST /v1/self/deploy) tiêm token agent dưới tên LSR_TELEMETRY_API_KEY.
+# Xem dòng `"LSR_TELEMETRY_API_KEY": tok` trong handler /v1/self/deploy của
+# platform_api/app.py — agent_runner/entrypoint.sh:10 cũng đọc theo đúng thứ tự này.
+TOKEN = os.environ.get("LSR_AGENT_TOKEN") or os.environ.get("LSR_TELEMETRY_API_KEY") or ""
+if not TOKEN:
+    raise SystemExit("thiếu token agent: đặt LSR_AGENT_TOKEN (chạy tay) "
+                     "hoặc LSR_TELEMETRY_API_KEY (runner trên VM tự tiêm)")
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() != "false"
 
 CONFIRM_WORDS = ("chốt", "duyệt", "confirm", "ok chốt", "đồng ý")
