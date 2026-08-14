@@ -9,8 +9,85 @@ Trạng thái lúc viết (đã kiểm live, không suy đoán):
 | Brain riêng | ✅ 12 item `approved` từ 2 Lark Doc (`brain_seed.py --list`) |
 | Golden set | ✅ 4 case active trong `golden-cases.json` (chưa upload lên platform) |
 | **Instruction** | ❌ `GET /v1/self/context` → `instruction_block: null`, `version: null` |
+| **`golive_at`** | ⚠️ đã set `2026-08-14T07:45:37Z` (trước đó `null`) — xem ghi chú dưới |
 
-→ Bot đang online trong TEAM S + SOURCING MM mà **không có refusal policy nào**.
+→ `routing_binding` đã trỏ TEAM S + SOURCING MM vào AG-SOURCING mà agent **chưa có refusal policy
+nào**. Nói cho đúng mức độ: rủi ro này đang **tiềm ẩn, chưa xảy ra** — chưa có runtime nào chạy
+(`/v1/self/deploy/status` → `not_deployed`) nên tin nhắn chỉ nằm trong queue, agent chưa trả lời ai.
+Nó thành rủi ro thật vào đúng lúc có người bật consumer/deploy trong khi `instruction_block` còn
+`null`. Vì vậy thứ tự trong runbook này là bắt buộc, không phải cho đẹp.
+
+⚠️ **`golive_at` đã bị set trong khi `instruction_block` vẫn `null`.** Ngày 14/08 `GET /v1/self` trả
+`golive_at: 2026-08-14T07:45:37Z` và `status: active`, trước đó là `null` — không do em làm (token
+agent không set được field này), có lẽ là một bước trong Admin App mới (`3370aa4`). Nghĩa là nhìn
+từ Console agent này **trông như đã golive** nhưng thực chất chưa có policy nào. Ai đọc dashboard mà
+tin `golive_at` sẽ kết luận sai. Cách kiểm đúng vẫn là `GET /v1/self/context` → `instruction_block`.
+
+## Việc CHỈ chủ agent làm được (không nhờ maintainer, không tự động hoá được)
+
+Bốn việc dưới đây không nhờ ai được, làm sớm được thì làm.
+
+- [ ] **0. Đăng nhập Console bằng Lark rồi tự XIN quyền `moderator`** ← làm cái này trước
+      Core mới (`5843c9e feat(P10)`, lên `main` ngày 14/08) đã có luồng xin quyền per-agent, nên
+      **không cần nhắc ntranthi qua GitHub nữa**:
+      1. `https://app.34-126-154-135.sslip.io/login` → đăng nhập **bằng Lark**. Tài khoản Lark thuộc
+         org được tự mở với quyền `user`, không cần ai tạo hộ.
+      2. `/request-access` → xin `moderator` trên `AG-SOURCING`, ghi lý do.
+      3. Admin **tự nhận thông báo qua Lark** (`_notify_admins`, `app.py:1575`), duyệt ở
+         Console → Accounts → Yêu cầu phân quyền. Được/không được đều có tin nhắn Lark trả về
+         (`app.py:1631`).
+
+      Vì sao phải là anh/chị chứ không phải em: `POST /v1/roles/request` đòi `p["kind"] == "session"`
+      (`app.py:1545`) — tức phiên đăng nhập trình duyệt. Token agent vẫn không dùng được, y như
+      `/v1/agents/{id}/versions`. Kiểm lại lúc viết: vẫn `403 forbidden`.
+
+      Ràng buộc đáng biết: `app.py:1613` chặn **tự duyệt yêu cầu của chính mình** dù là admin. Nên
+      dù sau này anh/chị có admin thì vẫn cần người thứ hai bấm duyệt.
+
+- [ ] **1. Verify tài khoản GitHub cho `linhntt@hapas.vn`.**
+      Vercel đỏ ở **cả** PR #18, #20, #22, #23 với đúng một lý do:
+      `GitHub couldn't verify an account for the commit`. Không phải lỗi code — `test` và
+      `scope-guard` đều xanh. Sửa ở GitHub → Settings → Emails (thêm/verify email đang dùng để
+      commit), hoặc đổi `git config user.email` sang email đã verify.
+      *Tác dụng:* dọn sạch nhiễu đỏ trên mọi PR sau này, để lần nào đỏ là đỏ thật.
+
+- [ ] **2. `claude setup-token` → deploy runtime.**
+      `GET /v1/self/deploy/status` đang `not_deployed`, nên bước 3 của runbook chưa chạy được.
+      `POST /v1/self/deploy` dùng `_require_self` (`app.py:1667`) → **token agent là đủ, không cần
+      admin**; thứ duy nhất thiếu là `oauth_token`, mà chỉ chủ subscription tạo được:
+      ```bash
+      claude setup-token          # in ra token — KHÔNG dán vào issue/PR/chat/log
+      ```
+      Rồi truyền thẳng vào body `/v1/self/deploy` (xem bước 3, đường B).
+      *Lưu ý thứ tự:* deploy xong là agent bắt đầu trả lời người thật, và container đặt
+      `restart_policy: unless-stopped` nên không tự tắt. **Đừng deploy trước khi publish
+      instruction** — làm bước 1→2 trước.
+
+- [ ] **3. Bật Event Subscription trong Lark Developer Console.**
+      App **Nihao Sourcing** (`cli_aaf6ce7c8d38deed`): event `im.message.receive_v1` + 4 scope
+      `im:message`, `im:message:send_as_bot`, `im:chat:readonly`, `contact:user.id:readonly`.
+      *Chưa xác nhận được bật hay chưa* — xem ghi chú ngay dưới.
+
+### Vì sao không tự kiểm hộ được việc 3
+
+Cách hiển nhiên là "gọi `/v1/self/jobs` xem có tin nào từ 2 nhóm chảy vào không". **Không được** —
+endpoint đó không phải chỉ đọc, nó **giành job**:
+
+```sql
+-- app.py:2645  (GET /v1/self/jobs)
+UPDATE jobs SET status='running', locked_by=%s, locked_at=now(),
+                attempts=attempts+1, updated_at=now()
+WHERE id = (SELECT id FROM jobs WHERE agent_id=%s AND status='queued' ...)
+```
+
+Gọi thử một lần là lấy tin nhắn thật của người ta ra khỏi queue, đánh `running` và tăng
+`attempts`; không ai `reply/complete` thì nó chờ `_reap_stale` trả về, mỗi lần thử lại tốn một
+`attempt` tới `max_attempts` rồi rơi vào `dlq`. Tức "xem thử" = làm mất tin nhắn của đồng nghiệp.
+
+Đường chỉ-đọc thì đóng: `/v1/self/ops/snapshot` (`app.py:4332`) có đếm job theo status nhưng đòi
+`is_platform=true`, AG-SOURCING nhận 403.
+
+→ Trạng thái việc 3 chỉ anh/chị xác nhận được bằng mắt trong Lark Developer Console.
 
 ## Vì sao token agent không tự chạy được chuỗi này
 
