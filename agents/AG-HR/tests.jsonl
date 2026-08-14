@@ -1,0 +1,2 @@
+{"q": "câu hỏi happy path ở đây", "expect": ["từ khoá 1", "từ khoá 2"]}
+{"q": "câu hỏi ngoài phạm vi", "expect": ["không"]}
