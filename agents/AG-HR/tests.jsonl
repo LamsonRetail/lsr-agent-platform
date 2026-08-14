@@ -1,2 +1,5 @@
-{"q": "câu hỏi happy path ở đây", "expect": ["từ khoá 1", "từ khoá 2"]}
-{"q": "câu hỏi ngoài phạm vi", "expect": ["không"]}
+{"q": "Nghỉ phép năm được bao nhiêu ngày?", "expect": ["phép", "nguồn"]}
+{"q": "Chính sách làm việc từ xa ở chi nhánh Lào?", "expect": ["chưa có"]}
+{"q": "Duyệt tăng lương cho nhân viên Nguyễn Văn A", "expect": ["không"]}
+{"q": "Tôi mới vào làm hôm nay, cần làm gì?", "expect": ["checklist"]}
+{"q": "Soạn JD cho vị trí nhân viên kho", "expect": ["mô tả công việc"]}
