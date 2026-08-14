@@ -9,6 +9,7 @@ Trạng thái lúc viết (đã kiểm live, không suy đoán):
 | Brain riêng | ✅ 12 item `approved` từ 2 Lark Doc (`brain_seed.py --list`) |
 | Golden set | ✅ 4 case active trong `golden-cases.json` (chưa upload lên platform) |
 | **Instruction** | ❌ `GET /v1/self/context` → `instruction_block: null`, `version: null` |
+| **`golive_at`** | ⚠️ đã set `2026-08-14T07:45:37Z` (trước đó `null`) — xem ghi chú dưới |
 
 → `routing_binding` đã trỏ TEAM S + SOURCING MM vào AG-SOURCING mà agent **chưa có refusal policy
 nào**. Nói cho đúng mức độ: rủi ro này đang **tiềm ẩn, chưa xảy ra** — chưa có runtime nào chạy
@@ -16,10 +17,32 @@ nào**. Nói cho đúng mức độ: rủi ro này đang **tiềm ẩn, chưa x�
 Nó thành rủi ro thật vào đúng lúc có người bật consumer/deploy trong khi `instruction_block` còn
 `null`. Vì vậy thứ tự trong runbook này là bắt buộc, không phải cho đẹp.
 
+⚠️ **`golive_at` đã bị set trong khi `instruction_block` vẫn `null`.** Ngày 14/08 `GET /v1/self` trả
+`golive_at: 2026-08-14T07:45:37Z` và `status: active`, trước đó là `null` — không do em làm (token
+agent không set được field này), có lẽ là một bước trong Admin App mới (`3370aa4`). Nghĩa là nhìn
+từ Console agent này **trông như đã golive** nhưng thực chất chưa có policy nào. Ai đọc dashboard mà
+tin `golive_at` sẽ kết luận sai. Cách kiểm đúng vẫn là `GET /v1/self/context` → `instruction_block`.
+
 ## Việc CHỈ chủ agent làm được (không nhờ maintainer, không tự động hoá được)
 
-Ba việc dưới đây độc lập với nhau và độc lập với `moderator` mà ntranthi đang giữ — làm sớm được
-thì làm, không phải chờ ai.
+Bốn việc dưới đây không nhờ ai được, làm sớm được thì làm.
+
+- [ ] **0. Đăng nhập Console bằng Lark rồi tự XIN quyền `moderator`** ← làm cái này trước
+      Core mới (`5843c9e feat(P10)`, lên `main` ngày 14/08) đã có luồng xin quyền per-agent, nên
+      **không cần nhắc ntranthi qua GitHub nữa**:
+      1. `https://app.34-126-154-135.sslip.io/login` → đăng nhập **bằng Lark**. Tài khoản Lark thuộc
+         org được tự mở với quyền `user`, không cần ai tạo hộ.
+      2. `/request-access` → xin `moderator` trên `AG-SOURCING`, ghi lý do.
+      3. Admin **tự nhận thông báo qua Lark** (`_notify_admins`, `app.py:1575`), duyệt ở
+         Console → Accounts → Yêu cầu phân quyền. Được/không được đều có tin nhắn Lark trả về
+         (`app.py:1631`).
+
+      Vì sao phải là anh/chị chứ không phải em: `POST /v1/roles/request` đòi `p["kind"] == "session"`
+      (`app.py:1545`) — tức phiên đăng nhập trình duyệt. Token agent vẫn không dùng được, y như
+      `/v1/agents/{id}/versions`. Kiểm lại lúc viết: vẫn `403 forbidden`.
+
+      Ràng buộc đáng biết: `app.py:1613` chặn **tự duyệt yêu cầu của chính mình** dù là admin. Nên
+      dù sau này anh/chị có admin thì vẫn cần người thứ hai bấm duyệt.
 
 - [ ] **1. Verify tài khoản GitHub cho `linhntt@hapas.vn`.**
       Vercel đỏ ở **cả** PR #18, #20, #22, #23 với đúng một lý do:
