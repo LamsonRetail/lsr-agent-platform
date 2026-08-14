@@ -1,0 +1,55 @@
+# Chủ sở hữu từng agent — dùng cho CI `scope-guard` (option A của issue #24).
+#
+# Định dạng:  <AGENT_ID>  <github-username> [github-username-2 ...]
+#   - Cột 2 trở đi là **GitHub username**, KHÔNG phải email. Xem "Vì sao username" bên dưới.
+#   - Nhiều người cùng giữ 1 agent thì ghi nhiều username, cách nhau bằng khoảng trắng.
+#   - Dòng bắt đầu bằng `#` là chú thích. Phân biệt hoa/thường (giống maintainers.txt).
+#
+# Ai sửa được file này: chỉ maintainer (file nằm trong .github/, scope-guard chặn người khác).
+# Cố ý như vậy — nếu người dùng tự khai được owner thì cái chốt này vô nghĩa.
+#
+# Agent nền tảng (AG-LSR-BRAIN, minh-anh) KHÔNG khai ở đây: chúng là CORE, đã do
+# maintainer giữ qua maintainers.txt + CODEOWNERS.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Vì sao cột 2 là username mà không phải email
+# ─────────────────────────────────────────────────────────────────────────────
+# Manifest `lsr-agent.yaml` ghi `owner:` bằng email công ty, nhưng KHÔNG suy ra được
+# GitHub username từ email — đã kiểm bằng số liệu thật trên repo này:
+#
+#   anhnt1@hapas.vn   -> .author.login = anhnt1hapas    (khớp)
+#   linhntt@hapas.vn  -> .author.login = null           (không map được)
+#   vinhnd@hapas.vn   -> .author.login = null           (không map được)
+#   minhnd@hapas.vn   -> .author.login = null           (không map được)
+#
+# `null` = email commit chưa gắn vào tài khoản GitHub nào — cùng gốc với lỗi Vercel
+# "GitHub couldn't verify an account for the commit" đang thấy ở mọi PR.
+#
+# Và suy theo phần trước dấu @ thì SAI VÀ NGUY HIỂM: `anhnt1@hapas.vn` -> `@anhnt1`,
+# nhưng `@anhnt1` là tài khoản thật của **người ngoài org**; username đúng là
+# `anhnt1hapas`. Nên phải khai tay, và nên kiểm username có trong org (xem workflow).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Đã xác minh (resolve được qua GitHub API, đều là member của org)
+# ─────────────────────────────────────────────────────────────────────────────
+AG-DATA-SUPPORT     anhnt1hapas
+AG-SOURCING         linhn9484-maker
+AG-MOTHERS-DAY      linhn9484-maker
+AG-HR               ntranthi
+AG-MINH-ANH         ntranthi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CHƯA khai được — cần maintainer điền tay
+# ─────────────────────────────────────────────────────────────────────────────
+# Hai agent dưới đây có người viết rõ ràng trong git log, nhưng email của họ không
+# map được sang GitHub username (trả `null`), nên KHÔNG dám đoán — đoán sai thì trao
+# quyền cho người lạ, đúng như ca `@anhnt1` ở trên.
+#
+# Nhờ anh/chị hỏi trực tiếp rồi điền username vào:
+#
+#   AG-SQ-THAILAND    <username của vinhnd@hapas.vn — squad Thái Lan>
+#   AG-MAI-KDONLINE   <username của minhnd@hapas.vn — KD Online VN>
+#
+# Trong lúc chưa điền: agent chưa khai owner thì guard **cho qua kèm cảnh báo**
+# (STRICT_OWNERSHIP=false trong scope-guard.yml) để không chặn oan các squad.
+# Điền xong hết thì đổi STRICT_OWNERSHIP=true là chốt cứng.
