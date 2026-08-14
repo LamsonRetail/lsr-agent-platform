@@ -42,7 +42,7 @@
 | LK.2 | Resolve với agent token | 200; email→open_id qua cache danh tính chung (158 người đã nạp) | ✅ 08-11 |
 | LK.3 | `/v1/lark/send` thiếu nội dung | 400 — không gửi gì | ✅ 08-11 |
 | LK.4 | Token Lark cache 2 tầng | `lark_token_cache` có token + hạn; mọi service dùng chung 1 token | ✅ 08-11 |
-| LK.5 | Send text/markdown tới email/open_id/chat_id | Gửi đúng loại; email chưa resolve được → fallback nhóm chung | ⏳ chờ Lark app mở range (blocker ngoài) |
+| LK.5 | Send text/markdown tới email/open_id/chat_id | Gửi đúng loại; email→open_id resolve qua danh bạ | ✅ 08-14 — Admin App mở range + sửa bug open_department_id: resolve OK cả 5 admin/owner |
 | LK.6 | Audit mỗi lần agent gửi Lark | `audit_log` action=lark_send, actor=agent | ✅ 08-11 |
 
 ## 4. P1 — Ingress hợp nhất (✅ 08-11, 8/8)
@@ -429,10 +429,10 @@ harness trả lời nhầm — xem báo cáo 08-14.)
 
 ---
 
-**Tổng: 219 case — 211 ✅ đã nghiệm thu (96%).**
+**Tổng: 219 case — 212 ✅ đã nghiệm thu (97%).**
 
-**8 case còn lại, chia 2 nhóm:**
-- **Cần bạn xử lý (4):** `LK.5`, `P1.1` — Lark app chưa mở available-range và bot chưa ở nhóm nào (resolve trả `null`, `/v1/lark/chats` rỗng); `ST.8` — cần team thật cùng push 1 branch; `P10.4` — đăng nhập Lark thật trên trình duyệt (cần khai redirect URI trong Lark Developer Console trước).
+**7 case còn lại, chia 2 nhóm:**
+- **Cần bạn xử lý (3):** `P1.1` — bot Admin App chưa được add vào nhóm nào (`/v1/lark/chats` rỗng — add bot vào 1 nhóm là xong); `ST.8` — cần team thật cùng push 1 branch; `P10.4` — đăng nhập Lark thật trên trình duyệt (redirect URI + scope đã publish trên Admin App).
 - **Chỉ kiểm bằng mắt trên UI (4):** `P3.7.1`–`P3.7.5` Builder (các API bên dưới đã pass, trang render 200).
 
 Toàn bộ P1–P7 đã triển khai và verify trên VM. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.

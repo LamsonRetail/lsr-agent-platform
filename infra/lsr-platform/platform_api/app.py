@@ -2540,6 +2540,8 @@ def _lark_open_id_by_enterprise_email(email: str, token: str) -> str:
         return ""
 
     # Duyệt toàn bộ cây phòng ban (fetch_child) — user có thể ở dept con.
+    # QUAN TRỌNG: /users?department_id= mặc định nhận OPEN department_id (od-xxx) —
+    # dùng department_id thường sẽ bị 400 ở MỌI dept con (bug đã sửa 08-14).
     dept_ids = ["0"]
     page = ""
     for _ in range(30):
@@ -2549,7 +2551,9 @@ def _lark_open_id_by_enterprise_email(email: str, token: str) -> str:
             d = (requests.get(url, headers=h, timeout=15).json().get("data") or {})
         except Exception:
             break
-        dept_ids += [x.get("department_id") for x in (d.get("items") or []) if x.get("department_id")]
+        dept_ids += [x.get("open_department_id") or x.get("department_id")
+                     for x in (d.get("items") or [])
+                     if x.get("open_department_id") or x.get("department_id")]
         if not d.get("has_more"):
             break
         page = d.get("page_token") or ""
