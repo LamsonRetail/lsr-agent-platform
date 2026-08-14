@@ -11,15 +11,21 @@
 #   bash scripts/add-lark-app.sh SAWADEE cli_aaf6d2b3a5b8ded3 event_gateway_sawadee
 #   bash scripts/add-lark-app.sh SOURCING cli_aaf6ce7c8d38deed event_gateway_sourcing
 #   bash scripts/add-lark-app.sh DATA cli_xxx event_gateway_data
+#   bash scripts/add-lark-app.sh NOTIFY cli_aaff13891ff85ee6 platform_api
+#     ↑ PREFIX đặc biệt NOTIFY = Admin App của platform (OAuth đăng nhập console,
+#       notify admin, bot broker mặc định) → ghi LARK_NOTIFY_APP_ID/SECRET.
 #
 # Lưu ý: chạy qua ssh phải có -t (cần TTY để nhập ẩn):
 #   ssh -t lsr-gcp "cd /opt/lsr-platform && bash scripts/add-lark-app.sh SAWADEE cli_... event_gateway_sawadee"
 set -euo pipefail
 
-PREFIX="${1:?cần prefix env (vd SAWADEE, SOURCING, DATA)}"
+PREFIX="${1:?cần prefix env (vd SAWADEE, SOURCING, DATA, NOTIFY)}"
 APP_ID="${2:?cần app_id (cli_...)}"
 shift 2
 SERVICES=("$@")
+# NOTIFY = Admin App platform: tên biến chuẩn LARK_NOTIFY_APP_ID/SECRET (không có hậu tố _LARK_).
+if [ "$PREFIX" = "NOTIFY" ]; then K_ID="LARK_NOTIFY_APP_ID"; K_SEC="LARK_NOTIFY_APP_SECRET"
+else K_ID="${PREFIX}_LARK_APP_ID"; K_SEC="${PREFIX}_LARK_APP_SECRET"; fi
 ROOT="${LSR_ROOT:-/opt/lsr-platform}"
 DOMAIN="${LARK_DOMAIN:-https://open.larksuite.com}"
 cd "$ROOT"
@@ -53,12 +59,11 @@ if [ "$CODE" != "0" ]; then
 fi
 echo "✓ Lark xác nhận secret HỢP LỆ."
 
-# Ghi .env: xoá mọi dòng cũ của prefix (chống trùng) rồi thêm cặp mới.
-sed -i "/^${PREFIX}_LARK_APP_ID=/d; /^${PREFIX}_LARK_APP_SECRET=/d" .env
-printf '%s_LARK_APP_ID=%s\n%s_LARK_APP_SECRET=%s\n' \
-  "$PREFIX" "$APP_ID" "$PREFIX" "$SECRET" >> .env
+# Ghi .env: xoá mọi dòng cũ của cặp biến (chống trùng) rồi thêm cặp mới.
+sed -i "/^${K_ID}=/d; /^${K_SEC}=/d" .env
+printf '%s=%s\n%s=%s\n' "$K_ID" "$APP_ID" "$K_SEC" "$SECRET" >> .env
 unset SECRET
-echo "✓ đã ghi .env (${PREFIX}_LARK_APP_ID/SECRET)."
+echo "✓ đã ghi .env (${K_ID}/${K_SEC})."
 
 if [ ${#SERVICES[@]} -gt 0 ]; then
   echo "→ khởi động lại: platform_api ${SERVICES[*]}"

@@ -408,9 +408,28 @@
 | P10.5h | Duyệt lại yêu cầu đã chốt | 409 | ✅ |
 | P10.6 | Admin TỪ CHỐI yêu cầu lên admin | Quyền giữ nguyên moderator | ✅ |
 
+## 16. A2A — 5 tình huống agent gọi nhau (✅ 08-14, 14/14 pass — agent + token THẬT trên VM)
+
+> Master data năng lực (`agents.capabilities` + `usage_guide`) là nguồn để agent khác
+> biết AI-làm-được-GÌ và GỌI-THẾ-NÀO trước khi A2A. Agent mới: token cấp TỰ ĐỘNG ở
+> mọi kênh đăng ký (enroll/no-code) nhưng phải được admin ACTIVATE mới chạy kênh thực + A2A.
+
+| ID | Tình huống | Kỳ vọng | TT |
+|---|---|---|---|
+| A2A.1 | MAI đọc `/v1/self/directory` | Thấy capabilities + usage_guide (10 agent có master data), `can_call` đúng theo grant | ✅ |
+| A2A.2 | **Happy path** MAI → AG-SOURCING hỏi trạng thái duyệt báo giá | Grant → gọi → target trả lời → caller nhận đúng nội dung (round-trip đo được) | ✅ |
+| A2A.3 | **Grant gate** AG-SQ-THAILAND → AG-DATA-SUPPORT | Chưa grant: 403 + audit `a2a_denied`; sau grant: nhận số liệu kèm nguồn | ✅ |
+| A2A.4 | **Approve gate**: agent mới enroll (AG-A2ATEST) | Token TỰ SINH + admin được notify; gọi TỚI nó 409, nó gọi RA 403, Lark ingest `rejected`; admin activate → chạy ngay | ✅ |
+| A2A.5 | **Chống vòng lặp + caller-pays** | hop 4 > 3 → 429; mart `a2a_out` tính cho BÊN GỌI (MAI=2, TH=1) | ✅ |
+
+⚠️ Bài học vận hành (sự cố 08-14, đã khắc phục trong harness): consumer mô phỏng khi test
+**chỉ được đụng job `channel='a2a'` khớp req_id của test** — job kênh thật lease nhầm phải
+`fail` để trả về queue, tuyệt đối không reply. (Một tin thật của nhóm SOURCING MM từng bị
+harness trả lời nhầm — xem báo cáo 08-14.)
+
 ---
 
-**Tổng: 214 case — 206 ✅ đã nghiệm thu (96%).**
+**Tổng: 219 case — 211 ✅ đã nghiệm thu (96%).**
 
 **8 case còn lại, chia 2 nhóm:**
 - **Cần bạn xử lý (4):** `LK.5`, `P1.1` — Lark app chưa mở available-range và bot chưa ở nhóm nào (resolve trả `null`, `/v1/lark/chats` rỗng); `ST.8` — cần team thật cùng push 1 branch; `P10.4` — đăng nhập Lark thật trên trình duyệt (cần khai redirect URI trong Lark Developer Console trước).

@@ -1153,6 +1153,10 @@ def _ensure_schema() -> None:
         conn.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS lark_open_id text")
         conn.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS auth_via text DEFAULT 'password'")
         conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS lark_bot_name text")
+        # Master data năng lực agent: agent khác đọc qua /v1/self/directory để biết
+        # AI làm được GÌ và GỌI THẾ NÀO trước khi A2A.
+        conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS capabilities jsonb")
+        conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS usage_guide text")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS role_requests (
@@ -2174,6 +2178,13 @@ def enroll(agent: dict, authorization: str = Header(default="")) -> dict:
         _audit(conn, owner, "enroll", "agent", agent_id,
                {"name": agent.get("name"), "deployment": agent.get("deployment", "managed"),
                 "self_service": True})
+        # Admin duyệt mới được chạy kênh thực (Lark/Telegram) + A2A — báo ngay khi đăng ký.
+        _notify_admins(conn,
+                       f"🆕 Agent mới đăng ký: {agent_id} ({agent.get('name') or '?'})\n"
+                       f"Owner: {owner} · deploy: {agent.get('deployment', 'managed')}\n"
+                       f"Token kết nối đã cấp TỰ ĐỘNG. Test qua web chat được ngay; "
+                       f"duyệt ACTIVATE để chạy Lark/Telegram + A2A: "
+                       f"{APP_PUBLIC_URL}/agent/{agent_id}")
         conn.commit()
     _minh_anh_share(agent_id)
     return {
@@ -2881,10 +2892,13 @@ def _ingest(conn, *, channel: str, payload: dict, event_id: str | None = None,
     if not agent_id:
         agent_id = _route(conn, channel, app_id, chat_id)
     status = "queued"
+    ag_st = _agent_status(conn, agent_id) if agent_id else None
     if not agent_id:
         status = "unrouted"
-    elif _agent_status(conn, agent_id) == "deactivated":
+    elif ag_st == "deactivated":
         status = "rejected"     # kill-switch: nhận nhưng không cho chạy
+    elif channel in ("lark", "telegram") and ag_st != "active":
+        status = "rejected"     # kênh THỰC chỉ chạy khi admin đã activate; web test vẫn được
     row = conn.execute(
         """
         INSERT INTO jobs(agent_id, channel, session_id, reply_to, payload, status)
@@ -3931,10 +3945,15 @@ def agent_create_nocode(body: dict, authorization: str = Header(default="")) -> 
                     (ch["channel"], ch.get("app_id"), ch["chat_id"], aid, actor))
         _audit(conn, actor, "agent_create_nocode", "agent", aid,
                {"name": name, "n_tests": len(valid_tests), "channels": len(body.get("channels") or [])})
+        _notify_admins(conn,
+                       f"🆕 Agent no-code mới: {aid} ({name})\nNgười tạo: {actor}\n"
+                       f"Token đã cấp TỰ ĐỘNG. Chạy thử được ngay trên console; "
+                       f"duyệt ACTIVATE để chạy Lark/Telegram + A2A: {APP_PUBLIC_URL}/agent/{aid}")
         conn.commit()
     return {"agent_id": aid, "telemetry_key": key, "version": 1, "runtime": "nocode",
             "console_url": f"{APP_PUBLIC_URL}/agent/{aid}",
-            "note": "Agent đã sẵn sàng — bấm Chạy thử. Publish prod cần admin duyệt."}
+            "note": "Agent đã sẵn sàng — bấm Chạy thử. Kênh thực (Lark/Telegram) + A2A "
+                    "cần admin ACTIVATE; publish prod cần admin duyệt."}
 
 
 @app.get("/v1/agents/{agent_id}/spec")
@@ -3942,11 +3961,40 @@ def agent_spec(agent_id: str, authorization: str = Header(default="")) -> dict:
     """Use case + test case của agent (dùng cho console và nút Xuất repo)."""
     _require_role(authorization, "user", agent_id)
     with _db() as conn:
-        r = conn.execute("SELECT agent_id, name, owner, runtime, usecase_md, testcases "
+        r = conn.execute("SELECT agent_id, name, owner, runtime, usecase_md, testcases, "
+                         "capabilities, usage_guide, lark_bot_name "
                          "FROM agents WHERE agent_id=%s", (agent_id,)).fetchone()
     if not r:
         raise HTTPException(status_code=404, detail="agent không tồn tại")
     return dict(r)
+
+
+@app.post("/v1/agents/{agent_id}/profile")
+def agent_profile_update(agent_id: str, body: dict,
+                         authorization: str = Header(default="")) -> dict:
+    """MASTER DATA của agent: năng lực (capabilities) + hướng dẫn sử dụng (usage_guide).
+
+    Nguồn sự thật cho: trang Xin quyền, /v1/self/directory (agent khác đọc trước khi A2A).
+    Moderator của agent (hoặc admin) mới sửa được.
+    """
+    p = _require_role(authorization, "moderator", agent_id)
+    caps = body.get("capabilities")
+    guide = body.get("usage_guide")
+    bot = body.get("lark_bot_name")
+    if caps is not None and not isinstance(caps, list):
+        raise HTTPException(status_code=400, detail="capabilities phải là danh sách chuỗi")
+    with _db() as conn:
+        n = conn.execute(
+            "UPDATE agents SET capabilities=coalesce(%s, capabilities), "
+            "usage_guide=coalesce(%s, usage_guide), lark_bot_name=coalesce(%s, lark_bot_name) "
+            "WHERE agent_id=%s RETURNING agent_id",
+            (Json(caps) if caps is not None else None, guide, bot, agent_id)).fetchone()
+        if not n:
+            raise HTTPException(status_code=404, detail="agent không tồn tại")
+        _audit(conn, p["actor"] or "admin", "agent_profile_update", "agent", agent_id,
+               {"capabilities": bool(caps), "usage_guide": bool(guide)})
+        conn.commit()
+    return {"ok": True, "agent_id": agent_id}
 
 
 @app.post("/v1/agents/{agent_id}/spec")
@@ -4176,6 +4224,7 @@ def self_directory(authorization: str = Header(default="")) -> dict:
         rows = conn.execute(
             """
             SELECT a.agent_id, a.name, a.owner, a.status, a.squad,
+                   a.capabilities, a.usage_guide, a.lark_bot_name,
                    coalesce(v.skills, to_jsonb(coalesce(a.skills,'{}'))) AS skills,
                    (SELECT 1 FROM a2a_grants g WHERE g.caller_id=%s AND g.target_id=a.agent_id) AS can_call
             FROM agents a
@@ -4187,6 +4236,8 @@ def self_directory(authorization: str = Header(default="")) -> dict:
     return {"caller": caller, "agents": [
         {"agent_id": r["agent_id"], "name": r["name"], "owner": r["owner"],
          "status": r["status"], "squad": r["squad"], "skills": r["skills"],
+         "capabilities": r["capabilities"], "usage_guide": r["usage_guide"],
+         "lark_bot_name": r["lark_bot_name"],
          "can_call": bool(r["can_call"]), "is_self": r["agent_id"] == caller}
         for r in rows]}
 
@@ -4238,11 +4289,17 @@ def a2a_call(target_id: str, body: dict, authorization: str = Header(default="")
     if not task:
         raise HTTPException(status_code=400, detail="thiếu 'task'")
     with _db() as conn:
+        # A2A chỉ giữa các agent ĐÃ được admin activate — cả hai chiều.
+        cstatus = _agent_status(conn, caller)
+        if cstatus != "active":
+            raise HTTPException(status_code=403,
+                                detail=f"agent của bạn đang '{cstatus}' — cần admin ACTIVATE mới gọi A2A được")
         tstatus = _agent_status(conn, target_id)
         if not tstatus:
             raise HTTPException(status_code=404, detail="target không tồn tại")
-        if tstatus == "deactivated":
-            raise HTTPException(status_code=409, detail="target inactive — không enqueue")
+        if tstatus != "active":
+            raise HTTPException(status_code=409,
+                                detail=f"target đang '{tstatus}' — chưa được admin activate, không enqueue")
         if not conn.execute("SELECT 1 FROM a2a_grants WHERE caller_id=%s AND target_id=%s",
                             (caller, target_id)).fetchone():
             _audit(conn, caller, "a2a_denied", "a2a", f"{caller}->{target_id}", {"task": task[:80]})
