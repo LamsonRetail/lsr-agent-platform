@@ -58,6 +58,7 @@ RUN_HOUR = int(os.environ.get("KD_SYNC_HOUR", "6"))
 RUN_ON_START = os.environ.get("KD_SYNC_ON_START", "false").lower() == "true"
 MAX_CHARS = int(os.environ.get("KD_CHUNK_CHARS", "1800"))
 ROWS_PER_ITEM = int(os.environ.get("KD_ROWS_PER_ITEM", "20"))
+SHEET_ROWS = int(os.environ.get("KD_SHEET_ROWS", "200"))
 SYNC_WIKI = os.environ.get("KD_SYNC_WIKI", "false").lower() == "true"
 TZ = timezone(timedelta(hours=7))  # Asia/Ho_Chi_Minh
 
@@ -90,6 +91,32 @@ def bases() -> list[dict]:
         return json.loads(raw)
     except json.JSONDecodeError:
         log.warning("KD_BASES không phải JSON hợp lệ — bỏ qua nguồn Lark Base")
+        return []
+
+
+def configured_docs() -> list[dict]:
+    """Tài liệu cần đồng bộ. Khai bằng env ``KD_DOCS`` (JSON) — nguồn CHÍNH giai đoạn 1.
+
+    Ví dụ::
+
+        KD_DOCS='[
+          {"token":"Hh7Fwh2VpiNUctkhnTylsoCygGf","label":"MATE MADE - BC DAILY","domain":"kd-ops"},
+          {"token":"JKZUw0CK4iDXbCkhi5ilTNoXgnd","label":"01_SOP","domain":"kd-report"},
+          {"token":"GNSHwzC3aiurVmkXHryli0acgth","label":"JBP DT/CP 2026","domain":"kd-ops",
+           "scope":"agent"}
+        ]'
+
+    ``token`` lấy từ URL (đoạn sau ``/wiki/``, ``/docx/`` hoặc ``/sheets/``).
+    ``scope: "agent"`` cho tài liệu nhạy cảm (P&L, giá vốn, chi phí booking) — mặc định
+    là ``shared`` để cả team tra được.
+    """
+    raw = os.environ.get("KD_DOCS", "").strip()
+    if not raw:
+        return []
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        log.warning("KD_DOCS không phải JSON hợp lệ — bỏ qua nguồn tài liệu")
         return []
 
 
@@ -195,6 +222,126 @@ def collect_bases(docs: LarkDocs) -> list[dict]:
     return items
 
 
+def collect_docs(docs: LarkDocs) -> list[dict]:
+    """Tài liệu chỉ đích danh (docx / sheet / bitable) → tri thức.
+
+    **Đây là nguồn CHÍNH ở giai đoạn 1.** Số vận hành của team hiện nằm trong báo cáo
+    docx và sheet viết tay (BC DAILY, B2S-SHOPEE, báo cáo AFF, SOP, JBP), không nằm
+    trong Lark Base. Khai từng tài liệu bằng ``KD_DOCS`` thay vì quét cả folder: quét
+    folder sẽ kéo về cả file nháp, file cũ, file của người khác — rác vào kho tri thức
+    thì người duyệt phải lọc tay.
+
+    ``token`` nhận cả **wiki node token** (đoạn sau ``/wiki/`` trên URL) lẫn token tài
+    liệu; ``resolve()`` tự phân biệt.
+    """
+    items: list[dict] = []
+    stamp = today()
+    for d in configured_docs():
+        token, label = d.get("token"), d.get("label") or d.get("token")
+        if not token:
+            continue
+        domain = d.get("domain") or "kd-ops"
+        confidential = d.get("scope") == "agent"
+        try:
+            node = docs.resolve(token)
+        except LarkDocsError as exc:
+            log.warning("bỏ qua '%s': %s", label, exc)
+            continue
+        obj, otype = node["obj_token"], (node["obj_type"] or d.get("type") or "").lower()
+        title = node["title"] or label
+
+        try:
+            if otype in ("sheet", "sheets", "spreadsheet"):
+                items += _sheet_items(docs, obj, title, label, domain, confidential, stamp)
+            elif otype in ("bitable", "base"):
+                items += _bitable_items(docs, obj, title, label, domain, confidential, stamp)
+            else:  # docx là mặc định — đa số báo cáo của team ở dạng này
+                items += _docx_items(docs, obj, title, label, domain, confidential, stamp)
+        except LarkDocsError as exc:
+            log.warning("đọc lỗi '%s' (%s): %s", label, otype or "docx", exc)
+    return items
+
+
+def _item(**kw) -> dict:
+    """Khung một mục tri thức — gom vào đây để mọi nguồn dùng chung đúng schema."""
+    conf = kw.pop("confidential", False)
+    return {
+        "kind": "knowledge",
+        "scope": "agent" if conf else "shared",
+        "agent_id": AGENT_ID if conf else None,
+        "source_agent": AGENT_ID,
+        "source_team": "MATE MADE",
+        **kw,
+    }
+
+
+def _docx_items(docs, obj, title, label, domain, conf, stamp) -> list[dict]:
+    out = []
+    for s in docs.docx_sections(obj, doc_title=title, max_chars=MAX_CHARS):
+        out.append(_item(
+            item_id=f"kd_dx_{obj[:12]}_{(s['block_id'] or 'x')[:12]}",
+            title=f"{title} › {s['title']}" if s["title"] != title else title,
+            content=s["content"], domain=domain, tags=["lark-docx", label],
+            confidential=conf,
+            source_ref=f"{s['heading_path']} · sync {stamp}",
+            source_url=s["source_url"]))
+    return out
+
+
+def _sheet_items(docs, obj, title, label, domain, conf, stamp) -> list[dict]:
+    """Sheet → mỗi khối ROWS_PER_ITEM dòng là một mục, giữ dòng đầu làm tiêu đề cột.
+
+    Không có dòng tiêu đề thì số trong mục mất nghĩa ("7.1" là ROAS hay là giá?), nên
+    dòng đầu được lặp lại ở mọi khối.
+    """
+    out = []
+    for sh in docs.sheet_list(obj):
+        rows = docs.sheet_rows(obj, sh["sheet_id"], max_rows=SHEET_ROWS)
+        if not rows:
+            continue
+        header = " | ".join(str(c) for c in rows[0] if c not in (None, ""))
+        body = rows[1:]
+        for idx in range(0, len(body), ROWS_PER_ITEM):
+            chunk = body[idx:idx + ROWS_PER_ITEM]
+            text = "\n".join(" | ".join(str(c) for c in r if c not in (None, ""))
+                             for r in chunk)
+            if not text.strip():
+                continue
+            part = idx // ROWS_PER_ITEM + 1
+            out.append(_item(
+                item_id=f"kd_sh_{obj[:10]}_{str(sh['sheet_id'])[:10]}_{part:04d}",
+                title=f"{title} › {sh['title']} (phần {part})",
+                content=(f"Cột: {header}\n{text}")[:MAX_CHARS],
+                domain=domain, tags=["lark-sheet", label, sh["title"]],
+                confidential=conf,
+                source_ref=f"{sh['title']} · sync {stamp}",
+                source_url=docs.sheet_url(obj, sh["sheet_id"])))
+    return out
+
+
+def _bitable_items(docs, obj, title, label, domain, conf, stamp) -> list[dict]:
+    out = []
+    for t in docs.bitable_tables(obj):
+        tid, tname = t.get("table_id"), t.get("name") or t.get("table_id")
+        if not tid:
+            continue
+        records = docs.bitable_records(obj, tid)
+        records.sort(key=lambda r: str(r.get("record_id") or ""))
+        for idx in range(0, len(records), ROWS_PER_ITEM):
+            body = render_rows(records[idx:idx + ROWS_PER_ITEM])
+            if not body:
+                continue
+            part = idx // ROWS_PER_ITEM + 1
+            out.append(_item(
+                item_id=f"kd_bt_{obj[:10]}_{tid[:10]}_{part:04d}",
+                title=f"{title} › {tname} (phần {part})",
+                content=body[:MAX_CHARS], domain=domain,
+                tags=["lark-base", label, tname], confidential=conf,
+                source_ref=f"{tname} · sync {stamp}",
+                source_url=docs.bitable_url(obj, tid)))
+    return out
+
+
 def collect_folders(docs: LarkDocs) -> list[dict]:
     """Drive/Sheets báo cáo → tri thức dùng chung (scope=shared)."""
     items: list[dict] = []
@@ -280,12 +427,15 @@ def collect_wiki(docs: LarkDocs) -> list[dict]:
 
 
 def collect(docs: LarkDocs) -> list[dict]:
-    items = collect_bases(docs) + collect_folders(docs)
+    # Giai đoạn 1: KD_DOCS là nguồn chính (báo cáo docx/sheet team đang dùng hằng ngày).
+    # Giai đoạn 2: khi team dựng được Base "số vận hành hằng ngày" thì khai thêm KD_BASES
+    # và chuyển dần các mục số sang đó — Base có cột ngày nên chặn được lỗi kỳ dữ liệu.
+    items = collect_docs(docs) + collect_bases(docs) + collect_folders(docs)
     if SYNC_WIKI:
         items += collect_wiki(docs)
     else:
-        log.info("KD_SYNC_WIKI=false — bỏ qua wiki space %s (tránh trùng với AG-LEGAL)",
-                 KD_WIKI_SPACE)
+        log.info("KD_SYNC_WIKI=false — bỏ qua quét cả wiki space %s (khai từng tài liệu "
+                 "bằng KD_DOCS thay vì quét cả space)", KD_WIKI_SPACE)
     return items
 
 
@@ -365,9 +515,9 @@ def main() -> None:
     ap.add_argument("--once", action="store_true", help="chạy 1 lần rồi thoát")
     args = ap.parse_args()
 
-    if not (bases() or folders() or SYNC_WIKI):
-        log.warning("chưa khai nguồn nào (KD_BASES / KD_FOLDERS / KD_SYNC_WIKI) — "
-                    "sẽ không có tri thức nào được nộp")
+    if not (configured_docs() or bases() or folders() or SYNC_WIKI):
+        log.warning("chưa khai nguồn nào (KD_DOCS / KD_BASES / KD_FOLDERS / KD_SYNC_WIKI) "
+                    "— sẽ không có tri thức nào được nộp. Giai đoạn 1 dùng KD_DOCS.")
 
     if args.dry_run or args.once:
         run_once(dry_run=args.dry_run)

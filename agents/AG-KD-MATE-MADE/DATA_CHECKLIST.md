@@ -10,23 +10,47 @@ bump version prompt, và mỗi câu trả lời đều dẫn được về đún
 > Đó là hành vi đúng, không phải lỗi. **Đừng điền số giả để test cho xanh** — người ta sẽ
 > quyết ngân sách dựa trên con số đó.
 
-## Cách nạp
+## Thực tế: số của team nằm trong docx/sheet, không nằm trong Base
 
-Khai Base trong `.env`:
+Tra Lark công ty (17/08/2026) thì số vận hành của team đang nằm trong **báo cáo docx và
+sheet viết tay**, không nằm trong Lark Base:
+
+| Tài liệu | Loại | Dùng cho |
+|---|---|---|
+| MATE MADE - BC DAILY | docx | số hằng ngày, vận hành sàn |
+| B2S - SHOPEE | docx | ROAS / GMV Max theo SKU |
+| CHECK IN 1-1 - TIKTOK | docx | camp TikTok Ads |
+| BÁO CÁO AFF HAPAS | docx | KOC ra đơn, ROAS theo KOC |
+| JBP DT/CP 2026 MATE MADE | sheet | Investment · Ad GMV · ROAS · CIR |
+| 01_SOP · TIKTOK ADS · [KD MATE MADE] - SCOPE | docx | quy trình, SOP |
+
+Chỉ có 2 Lark Base trong tenant và **cả hai đều không phải dữ liệu của team**: "THEO DÕI
+TIẾN ĐỘ DOANH THU" (phòng KHHH) và "CÔNG NỢ KHÁCH HÀNG" (Kế toán) — muốn đọc phải xin quyền
+phòng khác.
+
+Nên làm **hai giai đoạn**:
+
+### Giai đoạn 1 — sync đúng thứ team đang dùng (làm ngay)
+
+Khai từng tài liệu trong `.env`, **không quét cả space** (quét cả space kéo về cả file
+nháp, file cũ, file người khác → người duyệt phải lọc tay):
 
 ```bash
-KD_BASES=[{"app_token":"bascnXXXXX","label":"Vận hành sàn MATE MADE"}]
+KD_DOCS=[{"token":"Hh7Fwh2VpiNUctkhnTylsoCygGf","label":"MATE MADE - BC DAILY","domain":"kd-ops"}]
 ```
 
-Lấy `app_token`: mở Base trên trình duyệt, URL dạng `.../base/`**`bascnXXXXX`**.
+`token` lấy từ URL — đoạn sau `/wiki/`, `/docx/` hoặc `/sheets/`. Code tự nhận biết docx /
+sheet / bitable, và tự giải wiki node token thành token tài liệu thật.
+
+Tài liệu nhạy cảm (P&L, giá vốn, chi phí booking) thêm `"scope":"agent"` → chỉ LYLY tra được.
+
+### Giai đoạn 2 — dựng Base "số vận hành hằng ngày"
+
+Khi có Base chuẩn **có cột ngày**, khai thêm `KD_BASES` và chuyển dần phần số sang đó. Lý do
+xem mục cuối file: cột ngày là thứ chặn được lỗi nguy hiểm nhất của agent này.
 
 Sau khi sync: vào console `/agent/AG-KD-MATE-MADE` → tab **Brain / Duyệt tri thức** →
 duyệt. Chưa duyệt thì LYLY chưa dùng được.
-
-> ⚠️ **`kd_sync.py` hiện đặt MỌI item từ Lark Base vào `scope=agent`** (chỉ LYLY tra được).
-> An toàn nhưng chặt: số vận hành thường (ROAS, tồn kho) cả team nên xem được. Nếu bạn tách
-> Base công khai và Base nhạy cảm thành hai Base riêng, báo tôi để chỉnh `kd_sync.py` cho
-> Base công khai thành `scope=shared`.
 
 ## Checklist nội dung
 
@@ -100,6 +124,14 @@ lại toàn bộ kho.
 
 ## Cột "ngày / kỳ báo cáo" — đừng bỏ qua
 
-Đây là cột dễ quên nhất và là nguồn lỗi nguy hiểm nhất của agent này. Không có nó, LYLY trả
-số mà không nói được của ngày nào; người đọc mặc định là hôm nay rồi quyết ngân sách sai —
-và **không ai phát hiện ra ngay**, khác với trường hợp bịa số vì bịa thì thường nhìn là thấy sai.
+Đây là nguồn lỗi nguy hiểm nhất của agent này. Không có nó, LYLY trả số mà không nói được
+của ngày nào; người đọc mặc định là hôm nay rồi quyết ngân sách sai — và **không ai phát
+hiện ra ngay**, khác với bịa số vì bịa thì thường nhìn là thấy sai.
+
+**Giai đoạn 1 chỉ giảm thiểu được một phần.** Số nằm trong văn xuôi báo cáo ("set GMV Max
+ROAS 7.1 cho Balo Glowy") thì `kd_sync` chỉ suy được kỳ từ **tiêu đề và heading** của tài
+liệu — không chắc bằng một cột ngày. Vì vậy ở giai đoạn 1, LYLY trả **nguyên đoạn kèm link**
+để người tự đọc con số trong ngữ cảnh của nó, thay vì trích ra một con số trần trụi.
+
+Đây là lý do chính nên làm giai đoạn 2. Nếu team chỉ dựng được **một** thứ, dựng bảng có ba
+cột: **ngày · chỉ số · giá trị**. Chừng đó đã đủ để LYLY trả lời chắc chắn.

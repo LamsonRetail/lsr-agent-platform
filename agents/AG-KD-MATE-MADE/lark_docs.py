@@ -123,6 +123,32 @@ class LarkDocs:
         walk("", "")
         return out
 
+    def wiki_node(self, node_token: str) -> dict:
+        """Giải một wiki node token → ``{obj_token, obj_type, title}``.
+
+        Cần vì token thấy trên URL wiki (``/wiki/RTSpww...``) **không phải** token của
+        tài liệu bên dưới. Gọi API docx/bitable bằng token wiki sẽ trả "param invalid".
+        """
+        data = self._get("/open-apis/wiki/v2/spaces/get_node",
+                         {"token": node_token, "obj_type": "wiki"})
+        node = data.get("node") or {}
+        return {"obj_token": node.get("obj_token") or "",
+                "obj_type": node.get("obj_type") or "",
+                "title": node.get("title") or ""}
+
+    def resolve(self, token: str) -> dict:
+        """Nhận token bất kỳ (wiki node hoặc token tài liệu) → tài liệu thật.
+
+        Thử giải wiki trước; không phải wiki thì trả lại chính token đó.
+        """
+        try:
+            node = self.wiki_node(token)
+            if node["obj_token"]:
+                return node
+        except LarkDocsError:
+            pass
+        return {"obj_token": token, "obj_type": "", "title": ""}
+
     def docx_sections(self, doc_token: str, *, doc_title: str = "",
                       max_chars: int = 1800) -> list[dict]:
         """Cắt tài liệu docx thành mục theo heading.
@@ -207,6 +233,33 @@ class LarkDocs:
             return ""
         url = f"{self.doc_host}/base/{app_token}?table={table_id}"
         return f"{url}&record={record_id}" if record_id else url
+
+    # ----------------------------- Sheets -----------------------------
+
+    def sheet_list(self, spreadsheet_token: str) -> list[dict]:
+        """Các sheet trong một bảng tính. Mỗi sheet: ``{sheet_id, title}``."""
+        data = self._get(
+            f"/open-apis/sheets/v3/spreadsheets/{spreadsheet_token}/sheets/query")
+        return [{"sheet_id": s.get("sheet_id"), "title": s.get("title") or ""}
+                for s in (data.get("sheets") or [])]
+
+    def sheet_rows(self, spreadsheet_token: str, sheet_id: str, *,
+                   max_rows: int = 200, max_cols: str = "Z") -> list[list]:
+        """Đọc ô của một sheet, trả list dòng.
+
+        Giới hạn mặc định 200 dòng: sheet báo cáo thường có vài nghìn dòng, nạp hết vào
+        kho tri thức là làm loãng RAG và ngập hàng chờ duyệt. Cần nhiều hơn thì chỉnh
+        ``KD_SHEET_ROWS``.
+        """
+        rng = f"{sheet_id}!A1:{max_cols}{max_rows}"
+        data = self._get(f"/open-apis/sheets/v2/spreadsheets/{spreadsheet_token}/values/{rng}")
+        return (data.get("valueRange") or {}).get("values") or []
+
+    def sheet_url(self, spreadsheet_token: str, sheet_id: str = "") -> str:
+        if not self.doc_host:
+            return ""
+        url = f"{self.doc_host}/sheets/{spreadsheet_token}"
+        return f"{url}?sheet={sheet_id}" if sheet_id else url
 
     # ----------------------------- Drive -----------------------------
 

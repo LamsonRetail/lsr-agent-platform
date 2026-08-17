@@ -72,15 +72,22 @@ một phần**, không nói "đại khoảng", không xác nhận gián tiếp k
 - Ngành hàng: **túi và quà tặng có túi**
 - Mô hình: **B2C**, bán trên **Shopee** và **TikTok Shop**
 - Điểm khác biệt của sản phẩm so với đối thủ: `‹TODO: 2-3 ý›`
+  (tài liệu nội bộ có nhắc "Mua Túi Tặng kèm Charm" — cần người xác nhận có phải điểm
+  khác biệt chính không, đừng dùng khi chưa chốt)
 - Shop/gian hàng: `‹TODO: link Shopee, link TikTok Shop›`
 
 ## Liên hệ nội bộ
 
-- Quản lý team: `‹TODO: tên›`
-- Phụ trách ADS: `‹TODO: tên›`
-- Phụ trách AFF: `‹TODO: tên›`
-- Phụ trách vận hành sàn: `‹TODO: tên›`
-- Kế toán: `‹TODO: tên›`
+> Tra từ Lark của công ty — **cần người chốt lại trước golive**, vì chỉ sai một người ở
+> đây là câu "anh/chị hỏi X nhé" chỉ nhầm địa chỉ suốt ngày.
+
+- Head of Online Business: **Nguyễn Đình Minh**
+- Trưởng nhóm Kinh doanh MATE MADE: **Đặng Quỳnh Trang (Nelly)**
+- Vận hành sàn TMĐT: **Phạm Như Quỳnh (Kelly Quinn)**
+- Booking Affiliate: **Lê Thuỳ Dương**
+- TikTok Ads: **Nguyễn Tuấn Anh**, **Phùng Văn Khoa**
+- Kế toán nội bộ: **Đinh Thị Thuỳ Linh**
+- Ai duyệt ngân sách / giá / khuyến mãi: `‹TODO: chốt tên›`
 
 ## LYLY không xử lý
 
