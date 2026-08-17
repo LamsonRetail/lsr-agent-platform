@@ -17,10 +17,14 @@ Scope Lark cần cấp cho app đọc:
 
 from __future__ import annotations
 
+import json
 import os
 import time
+from datetime import datetime, timedelta, timezone
 
 import requests
+
+_TZ_VN = timezone(timedelta(hours=7))
 
 _MARGIN = 120  # làm mới token trước hạn 2 phút
 
@@ -135,6 +139,27 @@ class LarkDocs:
         return {"obj_token": node.get("obj_token") or "",
                 "obj_type": node.get("obj_type") or "",
                 "title": node.get("title") or ""}
+
+    def doc_updated(self, token: str, obj_type: str = "docx") -> str:
+        """Lần sửa gần nhất của tài liệu, dạng ``dd/mm/yyyy``. Rỗng nếu không lấy được.
+
+        **Bắt buộc phải có.** Nếu chỉ ghi ngày SYNC thì một tài liệu bốn tháng không ai
+        đụng vẫn hiện "sync hôm nay" — người đọc tưởng số mới, quyết theo số cũ. Ngày sửa
+        tài liệu mới là thứ nói lên dữ liệu cũ hay mới.
+        """
+        try:
+            data = self._get("/open-apis/drive/v1/metas/batch_query",
+                             {"request_docs": json.dumps(
+                                 [{"doc_token": token, "doc_type": obj_type or "docx"}])})
+        except LarkDocsError:
+            return ""
+        metas = data.get("metas") or []
+        if not metas:
+            return ""
+        ts = metas[0].get("latest_modify_time") or ""
+        if not str(ts).isdigit():
+            return ""
+        return datetime.fromtimestamp(int(ts), _TZ_VN).strftime("%d/%m/%Y")
 
     def resolve(self, token: str) -> dict:
         """Nhận token bất kỳ (wiki node hoặc token tài liệu) → tài liệu thật.

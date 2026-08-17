@@ -44,10 +44,26 @@ sheet / bitable, và tự giải wiki node token thành token tài liệu thật
 
 Tài liệu nhạy cảm (P&L, giá vốn, chi phí booking) thêm `"scope":"agent"` → chỉ LYLY tra được.
 
-### Giai đoạn 2 — dựng Base "số vận hành hằng ngày"
+### Giai đoạn 2 — Base "LSR Control Tower" (đang bị chặn quyền)
 
-Khi có Base chuẩn **có cột ngày**, khai thêm `KD_BASES` và chuyển dần phần số sang đó. Lý do
-xem mục cuối file: cột ngày là thứ chặn được lỗi nguy hiểm nhất của agent này.
+Base `Ok4QbTTXiag6iIsW3wylsheqgdh` — **LSR Control Tower** (có trang "doanh thu đơn thành
+công") là nguồn số chuẩn nhất: Base thật, có cấu trúc bảng, đúng thứ giai đoạn 2 cần.
+
+**Nhưng đang không đọc được qua API.** Base bật **quyền nâng cao** (`is_advanced: true`) →
+`table-list` trả về 0 bảng dù token hợp lệ. Và owner của agent **không phải admin của Base**
+(`role-list` trả `not admin, baseID:7603642274441875170`).
+
+**Cách mở khoá — cần admin của Base làm, không tự làm được:**
+1. Mở Base → **Quyền nâng cao** (Advanced permissions).
+2. Tạo (hoặc chọn) một role **chỉ-đọc** trên các bảng LYLY cần.
+3. Thêm **app Lark của agent** vào role đó (và cả `linhtk@hapas.vn` nếu cần chạy tay).
+4. Xong thì khai vào `.env`:
+   `KD_BASES=[{"app_token":"Ok4QbTTXiag6iIsW3wylsheqgdh","label":"LSR Control Tower"}]`
+
+Xin quyền **chỉ trên các bảng cần**, đừng xin quyền cả Base — Control Tower nhiều khả năng
+chứa cả số của thương hiệu và phòng ban khác.
+
+Chưa mở được quyền thì giai đoạn 1 (docx/sheet) vẫn chạy bình thường.
 
 Sau khi sync: vào console `/agent/AG-KD-MATE-MADE` → tab **Brain / Duyệt tri thức** →
 duyệt. Chưa duyệt thì LYLY chưa dùng được.

@@ -60,6 +60,7 @@ RUN_ON_START = os.environ.get("KD_SYNC_ON_START", "false").lower() == "true"
 MAX_CHARS = int(os.environ.get("KD_CHUNK_CHARS", "1800"))
 ROWS_PER_ITEM = int(os.environ.get("KD_ROWS_PER_ITEM", "20"))
 SHEET_ROWS = int(os.environ.get("KD_SHEET_ROWS", "200"))
+STALE_DAYS = int(os.environ.get("KD_STALE_DAYS", "45"))
 SYNC_WIKI = os.environ.get("KD_SYNC_WIKI", "false").lower() == "true"
 TZ = timezone(timedelta(hours=7))  # Asia/Ho_Chi_Minh
 
@@ -251,16 +252,39 @@ def collect_docs(docs: LarkDocs) -> list[dict]:
         obj, otype = node["obj_token"], (node["obj_type"] or d.get("type") or "").lower()
         title = node["title"] or label
 
+        # Ngày SỬA tài liệu, không phải ngày sync. Tài liệu 4 tháng không ai đụng mà ghi
+        # "sync hôm nay" thì người đọc tưởng số mới — đây là lỗi âm thầm nguy hiểm nhất.
+        updated = docs.doc_updated(obj, otype or "docx")
+        when = f"cập nhật {updated} · sync {stamp}" if updated else f"sync {stamp} (không rõ ngày cập nhật)"
+        if updated:
+            _warn_if_stale(label, updated)
+
         try:
             if otype in ("sheet", "sheets", "spreadsheet"):
-                items += _sheet_items(docs, obj, title, label, domain, confidential, stamp)
+                items += _sheet_items(docs, obj, title, label, domain, confidential, when)
             elif otype in ("bitable", "base"):
-                items += _bitable_items(docs, obj, title, label, domain, confidential, stamp)
+                items += _bitable_items(docs, obj, title, label, domain, confidential, when)
             else:  # docx là mặc định — đa số báo cáo của team ở dạng này
-                items += _docx_items(docs, obj, title, label, domain, confidential, stamp)
+                items += _docx_items(docs, obj, title, label, domain, confidential, when)
         except LarkDocsError as exc:
             log.warning("đọc lỗi '%s' (%s): %s", label, otype or "docx", exc)
     return items
+
+
+def _warn_if_stale(label: str, updated: str, days: int = 0) -> None:
+    """Cảnh báo khi tài liệu lâu không ai sửa.
+
+    Không chặn sync — tài liệu cũ vẫn có giá trị (quy trình, SOP ít đổi). Nhưng người
+    duyệt cần biết mình đang duyệt nội dung bao lâu rồi, nhất là với tài liệu chứa số.
+    """
+    try:
+        d = datetime.strptime(updated, "%d/%m/%Y").replace(tzinfo=TZ)
+    except ValueError:
+        return
+    old = (datetime.now(TZ) - d).days
+    if old > (days or STALE_DAYS):
+        log.warning("'%s' sửa lần cuối %s (%d ngày trước) — kiểm lại trước khi duyệt, "
+                    "nhất là các con số trong đó", label, updated, old)
 
 
 # Mật khẩu / khoá viết thẳng trong tài liệu nội bộ. Có thật: wiki công ty đang để tài
@@ -308,7 +332,7 @@ def _item(**kw) -> dict:
     }
 
 
-def _docx_items(docs, obj, title, label, domain, conf, stamp) -> list[dict]:
+def _docx_items(docs, obj, title, label, domain, conf, when) -> list[dict]:
     out = []
     for s in docs.docx_sections(obj, doc_title=title, max_chars=MAX_CHARS):
         out.append(_item(
@@ -316,12 +340,12 @@ def _docx_items(docs, obj, title, label, domain, conf, stamp) -> list[dict]:
             title=f"{title} › {s['title']}" if s["title"] != title else title,
             content=s["content"], domain=domain, tags=["lark-docx", label],
             confidential=conf,
-            source_ref=f"{s['heading_path']} · sync {stamp}",
+            source_ref=f"{s['heading_path']} · {when}",
             source_url=s["source_url"]))
     return out
 
 
-def _sheet_items(docs, obj, title, label, domain, conf, stamp) -> list[dict]:
+def _sheet_items(docs, obj, title, label, domain, conf, when) -> list[dict]:
     """Sheet → mỗi khối ROWS_PER_ITEM dòng là một mục, giữ dòng đầu làm tiêu đề cột.
 
     Không có dòng tiêu đề thì số trong mục mất nghĩa ("7.1" là ROAS hay là giá?), nên
@@ -347,12 +371,12 @@ def _sheet_items(docs, obj, title, label, domain, conf, stamp) -> list[dict]:
                 content=(f"Cột: {header}\n{text}")[:MAX_CHARS],
                 domain=domain, tags=["lark-sheet", label, sh["title"]],
                 confidential=conf,
-                source_ref=f"{sh['title']} · sync {stamp}",
+                source_ref=f"{sh['title']} · {when}",
                 source_url=docs.sheet_url(obj, sh["sheet_id"])))
     return out
 
 
-def _bitable_items(docs, obj, title, label, domain, conf, stamp) -> list[dict]:
+def _bitable_items(docs, obj, title, label, domain, conf, when) -> list[dict]:
     out = []
     for t in docs.bitable_tables(obj):
         tid, tname = t.get("table_id"), t.get("name") or t.get("table_id")
@@ -370,7 +394,7 @@ def _bitable_items(docs, obj, title, label, domain, conf, stamp) -> list[dict]:
                 title=f"{title} › {tname} (phần {part})",
                 content=body[:MAX_CHARS], domain=domain,
                 tags=["lark-base", label, tname], confidential=conf,
-                source_ref=f"{tname} · sync {stamp}",
+                source_ref=f"{tname} · {when}",
                 source_url=docs.bitable_url(obj, tid)))
     return out
 

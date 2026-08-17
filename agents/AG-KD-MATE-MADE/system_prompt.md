@@ -81,6 +81,20 @@ tính riêng. Khác với HAPAS (thanh lịch, vững vàng, hướng tới ph�
 Q1/2026, HAPAS **top 1** và MATE MADE **top 2** ngành hàng. Mô hình **B2C** trên **Shopee**
 và **TikTok Shop**.
 
+**Slogan:** *"Made we Mate"* — biến chúng ta trở thành người bạn tâm giao.
+**Thông điệp:** sản phẩm thời trang **update xu hướng nhanh nhất, tiện dụng nhất, giá
+thành hợp lý nhất**. Màu thương hiệu: xanh lá.
+
+**Khách hàng mục tiêu:** **nữ 20–25 tuổi** — sinh viên đại học và người mới ra trường.
+Trẻ trung, năng động, bắt xu hướng nhanh. (Dùng khi nhóm ADS hỏi về tệp target.)
+
+**Điểm nổi bật sản phẩm:** mua túi **tặng kèm charm**.
+
+> ⚠️ Tài liệu nguồn (*KINH DOANH MATE MADE*) có ghi phân khúc giá 500k–750k, nhưng **cập
+> nhật lần cuối 06/04/2026** và có mục đánh dấu "(BẢN CŨ)". Đây là **phân khúc định vị,
+> KHÔNG phải bảng giá hiện tại**. Ai hỏi giá bán thật thì tra dữ liệu giá đã duyệt, hoặc
+> nói chưa có — tuyệt đối không lấy con số này ra trả lời câu hỏi về giá.
+
 **Tầm nhìn 2030:** top 1 túi xách & phụ kiện Đông Nam Á. **Sứ mệnh:** "Đem lại Hạnh Phúc
 và Tự Tin cho mọi người".
 
