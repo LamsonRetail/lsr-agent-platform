@@ -1,0 +1,59 @@
+apiVersion: lsr/v1
+agent:
+  id: AG-LEGAL
+  name: Legal Agent
+  version: 0.2.0
+  owner: thint@hapas.vn
+  squad: SQ-LEGAL
+  is_squad_agent: true
+  connect_mode: bot
+  description: >
+    Trợ lý pháp chế — hỏi đáp chính sách/quy định công ty có trích dẫn từ Lark
+    Wiki/Drive (KB do legal team quản lý, engine NotebookLM), tạo hợp đồng từ
+    template, review hợp đồng đối tác, hỗ trợ hồ sơ trình ký trên Lark Approval,
+    và tổng hợp nghị định/hướng dẫn luật. Mọi output đi qua chốt Pháp chế.
+
+lark:
+  connect_mode: bot
+  bot:
+    app: platform-shared          # gửi/nhận qua broker platform, agent không cầm secret
+    chat_ids: []                  # gán khi routing
+    # Group nhận thông báo + lệnh phê duyệt (chốt 17/08/2026)
+    notify_chat_id: oc_2c44821d37e5e12a2c1651251cfd4efb
+# Telegram: BỎ khỏi scope (chốt 17/08/2026) — không code, không test, không golive.
+
+runtime:
+  sdk: claude-agent-sdk
+  auth: subscription              # CLI `claude` của chủ subscription — KHÔNG API key
+  model: claude-sonnet-5
+
+prompt:
+  path: INSTRUCTION.md            # nguồn của instruction_block (publish qua console)
+  version: 0.2.0
+  ref: main
+
+# Người duyệt/nhận thông báo: nạp bằng seed_roles.py vào bảng legal_roles.
+approvers:
+  - {email: thint@hapas.vn, name: Nguyễn Trần Thi, note: BOD}
+  - {email: TODO_CONFIRM@hapas.vn, name: Nguyễn Thị Anh, note: Legal — CẦN XÁC NHẬN EMAIL}
+
+skills:
+  - {name: notebooklm-kb,   type: builtin}   # engine trích dẫn KB
+  - {name: lark-wiki-drive, type: builtin}   # nạp KB (ngoại lệ C1: chờ broker của core)
+  - {name: legal-gates,     type: builtin}   # khung Pháp chế in the loop + lệnh trong group
+  - {name: contract-docx,   type: builtin}   # S2 — Phase 3
+  - {name: legal-news,      type: builtin}   # S4 — Phase 5
+
+telemetry:
+  enabled: true
+  collector: https://collector.lsr.internal
+
+resources:
+  managed_folder: legal-kb
+
+tests:
+  suite: tests.jsonl
+
+schedule:
+  - {name: kb-sync,    cron: "0 */3 * * *", job: sync_loop}    # thread trong consumer
+  - {name: news-crawl, cron: "30 6 * * *",  job: news_loop}    # Phase 5

@@ -1,0 +1,82 @@
+# AG-LEGAL — hướng dẫn cho Claude Code (project agent)
+
+Trợ lý pháp chế LSR. Branch của project này: **`agent/legal-AG-LEGAL`**.
+Kế hoạch đầy đủ: `~/LSR Legal Agent/PLAN-AG-LEGAL.md` (ngoài repo, không commit).
+
+## Ba nguyên tắc — vi phạm là phải sửa lại, đừng tiết kiệm thời gian ở đây
+
+1. **Bộ nhớ ở platform, không ở prompt/tiến trình.** Mỗi lượt gọi
+   `GET /v1/self/context` (qua `legalkb/platform.py`) lấy `instruction_block` +
+   `rolling_summary` + `recent_turns` + `user_facts` + `knowledge`, rồi dựng prompt
+   stateless. Ghi lại bằng `/v1/self/session/turn`; `needs_summary` → nén bằng
+   `brain.compress()` rồi `/v1/self/session/summary`. Fact bền → `/v1/self/facts`.
+   *Kiểm nhanh:* restart container rồi hỏi tiếp câu phụ thuộc ngữ cảnh — phải vẫn hiểu.
+2. **Mọi tương tác Lark qua platform.** Chỉ dùng `legalkb/platform.py`
+   (`/v1/lark/send`, `/v1/lark/resolve`, `/v1/lark/chats`, `/v1/lark/resource/...`,
+   `/v1/self/jobs/*/reply`). **Không** `im/v1/messages`, **không** cầm `app_secret`.
+   Ngoại lệ duy nhất, có ghi chú trong file: `legalkb/lark_kb.py` đọc Wiki/Drive để nạp
+   KB — vì broker của core chưa có endpoint đó (yêu cầu **C1**). Đừng mở rộng ngoại lệ này.
+3. **Hành vi ở `INSTRUCTION.md`**, publish thành `instruction_block` có version. Không
+   hard-code persona/policy vào `consumer.py`. `apply_instruction()` nạp nó vào cả
+   NotebookLM.
+
+## Ràng buộc kỹ thuật đã trả giá để biết
+
+- **Một tiến trình = một phiên NotebookLM.** Cookie xoay sau mỗi phiên; hai tiến trình
+  dùng chung account sẽ vô hiệu hoá nhau ("Authentication expired"). Vì vậy `sync_loop`
+  và (sau này) `news_loop` là **thread trong `consumer.py`**, không phải container riêng.
+  `sync_worker.py` chỉ để chạy tay khi consumer đang DỪNG.
+- Job nặng có thể vượt hạn khoá 120s của platform → job bị giao lại. Chống trả lời đôi
+  bằng `store.get_meta(f"replied:{jid}")`.
+- `POST /v1/actions/*/decide` và `POST /v1/extract` của core đòi quyền **admin** → token
+  agent dùng không được. Vì vậy phê duyệt nằm ở bảng `legal_gates` của agent, và trích
+  text PDF/docx làm trong agent.
+
+## Cấu trúc
+
+```
+consumer.py        vòng nhận job → router → S1 → gate; lệnh duyệt trong group
+seed_roles.py      nạp legal_roles (2 người duyệt) + resolve open_id
+sync_worker.py     chạy sync TAY (chỉ khi consumer đang dừng)
+INSTRUCTION.md     nguồn của instruction_block
+legalkb/
+  platform.py      MỌI lời gọi platform (bộ nhớ, job, Lark broker)
+  brain.py         gọi Claude (`claude -p`, subscription) + dựng prompt + nén hội thoại
+  gates.py         khung Pháp chế in the loop + parser lệnh `#12 duyệt`
+  engine.py        NotebookLM (AnswerEngine — có thể swap sang Gemini File Search)
+  lark_kb.py       đọc Wiki/Drive (ngoại lệ C1)
+  sync.py store.py đồng bộ KB + SQLite (legal_sources, legal_gates, legal_roles…)
+```
+
+## Pháp chế in the loop
+
+Group **`oc_2c44821d37e5e12a2c1651251cfd4efb`** nhận thông báo *và* nhận lệnh phê duyệt.
+Người duyệt gõ trong group:
+
+| Lệnh | Việc |
+|---|---|
+| `#12 duyệt` | approve |
+| `#12 sửa: <góp ý>` | yêu cầu sửa |
+| `#12 huỷ: <lý do>` | từ chối |
+| `#12 tham gia` / `#12 trả lại` | người thay Agent / trả lại Agent |
+| `#12 nhắn: <nội dung>` | chuyển lời tới người hỏi |
+| `#ds` | danh sách việc đang chờ |
+
+Chỉ `sender_open_id` có trong `legal_roles` mới có hiệu lực. Tin thường trong group →
+**agent im lặng** (đừng làm nó trả lời mọi câu, group đó người ta còn việc khác).
+Gate `observe` quá hạn thì tự thông; gate `gate` **không bao giờ tự động thông qua** —
+chỉ nhắc.
+
+## Chạy & test
+
+```bash
+python3 -m pytest tests/ -q          # offline, không cần secret
+python3 seed_roles.py --list         # xem người duyệt
+docker compose up                    # chạy thật (cần .env)
+bash ../../scripts/agent-test.sh AG-LEGAL
+bash ../../scripts/agent-chat.sh AG-LEGAL "câu hỏi thử"
+```
+
+Đăng ký/golive theo `PLAN §2.2`: `bash ../../scripts/lsr-login.sh` → enroll →
+`claude setup-token` → `POST /v1/self/deploy`. **Kiểm golive bằng
+`GET /v1/self/context` → `instruction_block` ≠ null**, đừng tin `status`/`golive_at`.

@@ -1,0 +1,29 @@
+# Chạy AG-LEGAL: docker compose up -d --build
+#
+# MỘT service duy nhất: consumer chat + kb-sync chạy chung tiến trình (thread nền).
+# Không tách container sync: NotebookLM xoay cookie sau mỗi phiên nên hai tiến
+# trình dùng song song cùng tài khoản sẽ vô hiệu hoá phiên của nhau.
+#
+# Trên VM platform: 2 container join mạng nội bộ lsr-platform_default và gọi
+# platform_api:8090 trực tiếp (edge Caddy chặn API từ ngoài → phải đi đường trong).
+# Chạy ở máy khác: đặt LSR_PLATFORM_URL=https://platform... trong .env và bỏ
+# khối networks bên dưới.
+services:
+  agent:
+    build: .
+    env_file: .env
+    environment:
+      LSR_PLATFORM_URL: ${LSR_PLATFORM_URL:-http://platform_api:8090}
+      LSR_AGENT_ID: AG-LEGAL
+      DRY_RUN: ${DRY_RUN:-true}
+    volumes:
+      - ./data:/agent/data          # legalkb.db (mapping trích dẫn)
+      # rw: notebooklm-py cần ghi lại cookie xoay vòng, nếu :ro phiên sẽ hết hạn sớm
+      - ${NLM_AUTH_DIR:-./secrets/notebooklm}:/agent/secrets/notebooklm
+    networks: [lsr]
+    restart: unless-stopped
+
+networks:
+  lsr:
+    external: true
+    name: lsr-platform_default

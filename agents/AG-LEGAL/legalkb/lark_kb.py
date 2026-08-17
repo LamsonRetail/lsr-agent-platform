@@ -1,0 +1,148 @@
+"""Đọc Lark Wiki + Drive bằng tenant token — chỉ stdlib.
+
+⚠️ NGOẠI LỆ CÓ CHỦ Ý so với chuẩn "mọi tương tác Lark qua platform" (PLAN §2.3):
+broker của platform hiện chỉ có nhóm `im` (send/resolve/chats/resource) — CHƯA có
+endpoint đọc Wiki/Drive. Vì vậy riêng phần nạp KB còn dùng tenant token trực tiếp.
+Đã mở yêu cầu core **C1** (`/v1/lark/wiki/*`, `/v1/lark/drive/*`); khi có thì thay
+`LarkKB` bằng lời gọi broker và bỏ hẳn app_secret khỏi agent.
+
+Mọi việc GỬI/NHẬN tin Lark đã chuyển sang `legalkb/platform.py` — module này KHÔNG
+được thêm lại hàm `im` nào.
+
+Cần các scope (admin duyệt trên Lark Developer Console):
+  wiki:wiki:readonly · drive:drive:readonly · docx:document:readonly
+Và bot phải là member (Read) của wiki space pháp chế.
+"""
+import json
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+
+class LarkError(RuntimeError):
+    def __init__(self, code, msg, http=None):
+        super().__init__(f"lark code={code}: {msg}")
+        self.code = code
+        self.http = http
+
+
+# Lỗi quyền wiki hay gặp — kèm hướng dẫn để worker báo rõ ràng (test case #12)
+PERMISSION_CODES = {131006, 99991672, 1069902}
+PERMISSION_HINT = (
+    "Bot chưa có quyền đọc wiki space. Admin mở Wiki space → Settings → Members "
+    "→ thêm bot app với quyền Read, và kiểm tra app đã có scope wiki:wiki:readonly."
+)
+
+
+class LarkKB:
+    """Chỉ đọc Wiki/Drive để nạp KB. Không gửi tin, không thao tác chat."""
+
+    def __init__(self, app_id, app_secret,
+                 base="https://open.larksuite.com",
+                 tenant_domain="o4pvcegwn6b.sg.larksuite.com"):
+        self.app_id = app_id
+        self.app_secret = app_secret
+        self.base = base.rstrip("/")
+        self.tenant_domain = tenant_domain
+        self._token = None
+        self._token_exp = 0.0
+
+    # ---------- HTTP ----------
+
+    def _request(self, method, path, payload=None, raw=False, auth=True, timeout=60):
+        url = path if path.startswith("http") else self.base + path
+        data = json.dumps(payload).encode() if payload is not None else None
+        headers = {"Content-Type": "application/json"}
+        if auth:
+            headers["Authorization"] = f"Bearer {self.tenant_token()}"
+        req = urllib.request.Request(url, data=data, method=method, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                body = r.read()
+        except urllib.error.HTTPError as e:
+            body = e.read()
+            try:
+                j = json.loads(body.decode())
+                raise LarkError(j.get("code", e.code), j.get("msg", str(e)), http=e.code)
+            except (ValueError, KeyError):
+                raise LarkError(e.code, body[:200].decode(errors="replace"), http=e.code)
+        if raw:
+            return body
+        j = json.loads(body.decode())
+        if j.get("code", 0) != 0:
+            raise LarkError(j["code"], j.get("msg", ""))
+        return j.get("data", {})
+
+    def tenant_token(self):
+        if self._token and time.time() < self._token_exp - 300:
+            return self._token
+        req = urllib.request.Request(
+            self.base + "/open-apis/auth/v3/tenant_access_token/internal",
+            data=json.dumps({"app_id": self.app_id, "app_secret": self.app_secret}).encode(),
+            method="POST", headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            j = json.loads(r.read().decode())
+        if j.get("code", 0) != 0:
+            raise LarkError(j["code"], j.get("msg", "tenant_access_token failed"))
+        self._token = j["tenant_access_token"]
+        self._token_exp = time.time() + int(j.get("expire", 3600))
+        return self._token
+
+    def _paged(self, path, params, item_key):
+        """GET có phân trang chuẩn Lark (page_token/has_more)."""
+        token = ""
+        while True:
+            q = dict(params)
+            if token:
+                q["page_token"] = token
+            data = self._request("GET", f"{path}?{urllib.parse.urlencode(q)}")
+            for it in data.get(item_key) or []:
+                yield it
+            if not data.get("has_more"):
+                return
+            token = data.get("page_token", "")
+
+    # ---------- Wiki ----------
+
+    def wiki_nodes(self, space_id, parent_node_token=None):
+        """Duyệt đệ quy toàn bộ node trong một wiki space."""
+        params = {"page_size": 50}
+        if parent_node_token:
+            params["parent_node_token"] = parent_node_token
+        try:
+            nodes = list(self._paged(f"/open-apis/wiki/v2/spaces/{space_id}/nodes",
+                                     params, "items"))
+        except LarkError as e:
+            if e.code in PERMISSION_CODES:
+                raise LarkError(e.code, f"{e.args[0] if e.args else e}. {PERMISSION_HINT}")
+            raise
+        out = []
+        for n in nodes:
+            out.append(n)
+            if n.get("has_child"):
+                out.extend(self.wiki_nodes(space_id, n["node_token"]))
+        return out
+
+    def docx_raw_content(self, document_id):
+        data = self._request(
+            "GET", f"/open-apis/docx/v1/documents/{document_id}/raw_content?lang=0")
+        return data.get("content", "")
+
+    def wiki_node_url(self, node_token):
+        return f"https://{self.tenant_domain}/wiki/{node_token}"
+
+    # ---------- Drive ----------
+
+    def drive_files(self, folder_token):
+        return list(self._paged("/open-apis/drive/v1/files",
+                                {"folder_token": folder_token, "page_size": 200},
+                                "files"))
+
+    def drive_download(self, file_token):
+        return self._request(
+            "GET", f"/open-apis/drive/v1/files/{file_token}/download", raw=True,
+            timeout=300)
+
+    def drive_file_url(self, file_token, file_type="file"):
+        return f"https://{self.tenant_domain}/{file_type}/{file_token}"
