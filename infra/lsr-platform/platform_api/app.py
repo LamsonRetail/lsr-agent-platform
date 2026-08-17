@@ -4216,8 +4216,10 @@ def agent_profile_update(agent_id: str, body: dict,
     if caps is not None and not isinstance(caps, list):
         raise HTTPException(status_code=400, detail="capabilities phải là danh sách chuỗi")
     with _db() as conn:
+        # %s::jsonb — psycopg gửi Json() dưới type `json`, cột là `jsonb`;
+        # COALESCE(json, jsonb) không ghép được nên phải cast tường minh.
         n = conn.execute(
-            "UPDATE agents SET capabilities=coalesce(%s, capabilities), "
+            "UPDATE agents SET capabilities=coalesce(%s::jsonb, capabilities), "
             "usage_guide=coalesce(%s, usage_guide), lark_bot_name=coalesce(%s, lark_bot_name) "
             "WHERE agent_id=%s RETURNING agent_id",
             (Json(caps) if caps is not None else None, guide, bot, agent_id)).fetchone()
