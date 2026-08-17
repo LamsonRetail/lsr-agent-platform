@@ -48,6 +48,11 @@ export default function AccountsConsole({ accounts, agents, meEmail }:
 
       <section className="card">
         <h2 style={{ marginTop: 0 }}>Tạo tài khoản</h2>
+        <p className="muted" style={{ fontSize: 12, marginTop: -6 }}>
+          Nhân viên có Lark <b>không cần tạo tay</b>: bấm "Đăng nhập bằng Lark" là tài khoản
+          tự mở với quyền <b>user trên mọi agent</b>, rồi tự xin thêm quyền ở trang Xin quyền.
+          Chỉ tạo tay khi cần tài khoản mật khẩu (service/ngoại lệ).
+        </p>
         <div style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap" }}>
           <label>Email<br /><input value={nEmail} onChange={e => setNEmail(e.target.value)} placeholder="ten@hapas.vn" /></label>
           <label>Tên<br /><input value={nName} onChange={e => setNName(e.target.value)} placeholder="Họ tên" /></label>
@@ -72,14 +77,23 @@ export default function AccountsConsole({ accounts, agents, meEmail }:
           tự nối bằng <code>/dangky &lt;email&gt; &lt;mã&gt;</code>.
         </p>
         <table>
-          <thead><tr><th>Email</th><th>Tên</th><th>Vai trò</th><th>Telegram</th><th>Trạng thái</th><th>Đăng nhập cuối</th><th></th></tr></thead>
+          <thead><tr><th>Email</th><th>Tên</th><th>Đăng nhập</th><th>Vai trò (nhiều vai cùng lúc)</th><th>Telegram</th><th>Trạng thái</th><th>Đăng nhập cuối</th><th></th></tr></thead>
           <tbody>
             {accounts.map((a: any) => (
               <tr key={a.email}>
                 <td className="mono" style={{ fontSize: 12 }}>{a.email}{a.email === meEmail && " (bạn)"}</td>
                 <td>{a.name}</td>
                 <td style={{ fontSize: 12 }}>
-                  {(a.roles || []).length === 0 && <span className="muted">chưa cấp</span>}
+                  {a.auth_via === "lark"
+                    ? <span title="tự mở qua đăng nhập Lark — không dùng mật khẩu">🔵 Lark</span>
+                    : <span title="tài khoản mật khẩu">🔑 mật khẩu</span>}
+                  {a.lark_linked && a.auth_via !== "lark" &&
+                    <div className="muted" style={{ fontSize: 10 }}>đã liên kết Lark</div>}
+                </td>
+                <td style={{ fontSize: 12 }}>
+                  {(a.roles || []).length === 0 &&
+                    <span className="muted" title="quyền mặc định của mọi tài khoản trên mọi agent">
+                      user <span style={{ fontSize: 10 }}>(mặc định — mọi agent)</span></span>}
                   {(a.roles || []).map((r: any, i: number) => (
                     <div key={i}>
                       <span style={{ color: ROLE_COLOR[r.role], fontWeight: 600 }}>{r.role}</span>
@@ -102,11 +116,13 @@ export default function AccountsConsole({ accounts, agents, meEmail }:
                     onClick={() => call(`/v1/accounts/${a.email}/status`,
                       { status: a.status === "active" ? "disabled" : "active" })}>
                     {a.status === "active" ? "Khoá" : "Mở"}</button>
-                  <button className="btn" disabled={busy}
-                    onClick={async () => {
-                      const d = await call(`/v1/accounts/${a.email}/reset-password`);
-                      if (d?.temp_password) setTempPw({ email: a.email, pw: d.temp_password });
-                    }}>Reset MK</button>
+                  {a.auth_via !== "lark" && (
+                    <button className="btn" disabled={busy}
+                      onClick={async () => {
+                        const d = await call(`/v1/accounts/${a.email}/reset-password`);
+                        if (d?.temp_password) setTempPw({ email: a.email, pw: d.temp_password });
+                      }}>Reset MK</button>
+                  )}
                 </td>
               </tr>
             ))}

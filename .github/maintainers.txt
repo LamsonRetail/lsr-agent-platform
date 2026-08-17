@@ -1,3 +1,4 @@
 # Maintainers được phép sửa CORE (mỗi dòng 1 GitHub username, phân biệt hoa/thường).
 # Scope-guard cho phép các user này chạm core; người khác chỉ được sửa agent của mình.
 ntranthi
+thienquy71

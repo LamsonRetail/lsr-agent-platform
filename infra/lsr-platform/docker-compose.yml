@@ -62,6 +62,60 @@ services:
       LARK_DOMAIN_CONST: LARK
     restart: unless-stopped
 
+  # Long-connection cho app Lark Sawadee HAPAS (squad Thái Lan — AG-SQ-THAILAND).
+  # 1 container / 1 app: thiếu SAWADEE_LARK_APP_ID/SECRET trong .env thì container
+  # chỉ idle (log cảnh báo), không ảnh hưởng gì — điền secret là tự chạy sau restart.
+  event_gateway_sawadee:
+    build: ./event_gateway
+    depends_on: [platform_api]
+    environment:
+      PLATFORM_URL: http://platform_api:8090
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
+      LARK_APP_ID: ${SAWADEE_LARK_APP_ID:-}
+      LARK_APP_SECRET: ${SAWADEE_LARK_APP_SECRET:-}
+      LARK_DOMAIN_CONST: LARK
+    restart: unless-stopped
+
+  # Long-connection cho app Lark nihao-sourcing (team Sourcing — AG-SOURCING).
+  event_gateway_sourcing:
+    build: ./event_gateway
+    depends_on: [platform_api]
+    environment:
+      PLATFORM_URL: http://platform_api:8090
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
+      LARK_APP_ID: ${SOURCING_LARK_APP_ID:-}
+      LARK_APP_SECRET: ${SOURCING_LARK_APP_SECRET:-}
+      LARK_DOMAIN_CONST: LARK
+    restart: unless-stopped
+
+  # Long-connection cho app Lark "Magic LSR" (squad FA — AG-HARRY).
+  event_gateway_harry:
+    build: ./event_gateway
+    depends_on: [platform_api]
+    environment:
+      PLATFORM_URL: http://platform_api:8090
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
+      LARK_APP_ID: ${HARRY_LARK_APP_ID:-}
+      LARK_APP_SECRET: ${HARRY_LARK_APP_SECRET:-}
+      LARK_DOMAIN_CONST: LARK
+    restart: unless-stopped
+
+  # Long-connection cho app Lark của Data Support (squad Data — AG-DATA-SUPPORT).
+  event_gateway_data:
+    build: ./event_gateway
+    depends_on: [platform_api]
+    environment:
+      PLATFORM_URL: http://platform_api:8090
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
+      LARK_APP_ID: ${DATA_LARK_APP_ID:-}
+      LARK_APP_SECRET: ${DATA_LARK_APP_SECRET:-}
+      LARK_DOMAIN_CONST: LARK
+    restart: unless-stopped
+
   # Bot admin Telegram: kênh AG-OPS/AG-EVAL ↔ admin (cảnh báo + nút duyệt việc).
   telegram_bot:
     build: ./telegram_bot
@@ -144,8 +198,19 @@ services:
       LARK_NOTIFY_APP_SECRET: ${LARK_NOTIFY_APP_SECRET:-}
       MINH_ANH_LARK_APP_ID: ${MINH_ANH_LARK_APP_ID:-}
       MINH_ANH_LARK_APP_SECRET: ${MINH_ANH_LARK_APP_SECRET:-}
+      # App Lark phụ (theo routing_binding.app_id) — trả lời job bằng ĐÚNG bot đã nhận tin.
+      # Secret chỉ nằm trong .env trên VM; thêm app mới = thêm cặp env + ghép vào JSON này.
+      LARK_EXTRA_APPS: '{"${SAWADEE_LARK_APP_ID:-}": "${SAWADEE_LARK_APP_SECRET:-}",
+                         "${SOURCING_LARK_APP_ID:-}": "${SOURCING_LARK_APP_SECRET:-}",
+                         "${DATA_LARK_APP_ID:-}": "${DATA_LARK_APP_SECRET:-}",
+                         "${HARRY_LARK_APP_ID:-}": "${HARRY_LARK_APP_SECRET:-}"}'
       LARK_NOTIFY_CHAT_ID: ${LARK_NOTIFY_CHAT_ID:-}
       LARK_DOMAIN: ${LARK_DOMAIN:-https://open.larksuite.com}
+      # P10: đăng nhập console qua Lark OAuth + kiểm tra ORG + quyền mặc định
+      CONSOLE_BASE_URL: ${CONSOLE_BASE_URL:-https://app.34-126-154-135.sslip.io}
+      ALLOWED_LOGIN_DOMAINS: ${ALLOWED_LOGIN_DOMAINS:-hapas.vn}
+      LARK_TENANT_KEY: ${LARK_TENANT_KEY:-}
+      DEFAULT_LOGIN_ROLE: ${DEFAULT_LOGIN_ROLE:-user}
       AGENT_RUNNER_IMAGE: ${AGENT_RUNNER_IMAGE:-lsr-agent-runner:latest}
       LSR_AGENT_NETWORK: ${LSR_AGENT_NETWORK:-lsr-platform_default}
       # Nơi chạy agent GĐ này = docker-socket-proxy trên VM chung (quyền hạn chế).
@@ -209,6 +274,8 @@ services:
       LSR_PLATFORM_URL: http://platform_api:8090   # gọi nội bộ (bỏ qua Caddy/token)
       LSR_COLLECTOR: http://collector:8081
       PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      # Gốc PUBLIC để dựng redirect trình duyệt (OAuth) — không dùng hostname container.
+      LSR_APP_PUBLIC: ${LSR_APP_PUBLIC:-https://app.34-126-154-135.sslip.io}
     restart: unless-stopped
 
   caddy:
