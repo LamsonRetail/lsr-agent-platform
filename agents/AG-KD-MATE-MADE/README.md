@@ -1,21 +1,23 @@
-# LYLY — Trợ lý Kinh doanh MATE MADE (AG-KD-MATE-MADE)
+# LYLY — Trợ lý vận hành sàn MATE MADE (AG-KD-MATE-MADE)
 
-Agent của team Kinh doanh MATE MADE trên LSR Agent Platform. **Người dùng là nhân viên
-sale nội bộ, không phải khách hàng cuối.** Ba việc chính:
+Agent của team **MATE MADE** (túi & quà tặng có túi, B2C trên **Shopee** và **TikTok Shop**)
+trên LSR Agent Platform.
 
-1. **Tra giá & chính sách** — giá lẻ/sỉ, chiết khấu, phí ship, bảo hành. Luôn kèm **link
-   nguồn + kỳ dữ liệu** để sale đối chiếu trước khi báo khách. Không có căn cứ →
-   _"Cái này em chưa có, anh/chị hỏi lại quản lý nhé."_
-2. **Soạn tin & xử lý khách khó** — đoạn tin copy-gửi-luôn; playbook khách chê đắt / lưỡng
-   lự / so sánh đối thủ, kèm câu nói mẫu.
-3. **Biên bản họp** — recording → transcript → biên bản nháp (có mục **cam kết
+**Người dùng là team nội bộ ba nhóm — ADS · AFF · Vận hành sàn.** Không có sale, không ai
+chat 1-1 với khách. Hai việc chính:
+
+1. **Hỏi số & hỏi chính sách** — ROAS, ngân sách, tồn kho, tỷ lệ hủy/hoàn, hoa hồng aff,
+   chính sách sàn, deadline campaign. Luôn kèm **link nguồn + kỳ dữ liệu**. Không có căn cứ
+   → _"Cái này em chưa có, anh/chị hỏi lại quản lý nhé."_
+2. **Biên bản họp** — recording → transcript → biên bản nháp (có mục **cam kết
    ai-làm-gì-khi-nào**) → **xin chủ trì chốt** → Lark Docs + task + lưu vào kho tri thức.
 
-> **LYLY không tự duyệt** chiết khấu vượt khung, công nợ, hay thời gian giao ngoài chính
-> sách — mọi ngoại lệ đẩy về quản lý kinh doanh, kể cả khi sale nói gấp.
+> **LYLY tra số để người ta quyết, không quyết thay.** Không tự duyệt ngân sách quảng cáo,
+> giá bán, khuyến mãi sàn, booking KOC, hay đền bù ngoài chính sách — kể cả khi kho tri thức
+> có sẵn số chứng minh nên làm, kể cả khi bị hối gấp.
 
-**Giá không nằm trong prompt.** Toàn bộ số liệu nằm trong kho tri thức đã duyệt, sync hàng
-ngày từ Lark → đổi giá là sửa file gốc, không phải sửa code.
+**Số không nằm trong prompt.** Toàn bộ số liệu nằm trong kho tri thức đã duyệt, sync hàng
+ngày từ **Lark Base** → số đổi là sửa trong Base, không phải sửa code.
 
 Đọc trước khi sửa: [USECASE.md](USECASE.md) · [TESTCASES.md](TESTCASES.md) ·
 [DATA_CHECKLIST.md](DATA_CHECKLIST.md) ← **cần nạp dữ liệu trước khi LYLY dùng được**
@@ -80,7 +82,7 @@ Admin gán ở Console → Ingress. Agent không cần biết tin đến từ k�
 
 - **Không add AG-MINH-ANH vào nhóm KD** và ngược lại — hai bot cùng nhóm sẽ ra hai biên bản
   khác nhau cho cùng cuộc họp. Chốt với admin trước golive.
-- Dữ liệu từ Lark Base (giá vốn, chiết khấu, khách hàng) luôn vào `scope=agent` — agent khác
+- Dữ liệu từ Lark Base (giá vốn, biên lợi nhuận, chi phí booking) luôn vào `scope=agent` — agent khác
   trong công ty **không** tra được. Đừng đổi thành `shared`.
 - Mọi tri thức vào hàng chờ `pending`, người của team KD duyệt trên console rồi agent mới
   dùng được. Agent không tự duyệt tri thức của chính nó.

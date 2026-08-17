@@ -1,88 +1,82 @@
 # Dữ liệu LYLY cần — checklist nạp vào kho tri thức
 
-LYLY **không giữ giá trong prompt**. Mọi con số nằm trong kho tri thức đã duyệt, được
-`kd_sync.py` đồng bộ hàng ngày từ Lark và phải qua người duyệt trên console.
+LYLY **không giữ số trong prompt**. Mọi con số nằm trong kho tri thức đã duyệt, được
+`kd_sync.py` đồng bộ hàng ngày từ **Lark Base** và phải qua người duyệt trên console.
 
-Nghĩa là: **đổi giá thì sửa file gốc trên Lark**, hôm sau LYLY biết. Không phải sửa code,
-không phải bump version prompt, và mỗi câu trả lời đều dẫn được về đúng dòng dữ liệu gốc.
+Nghĩa là: **số đổi thì sửa trong Base**, hôm sau LYLY biết. Không phải sửa code, không phải
+bump version prompt, và mỗi câu trả lời đều dẫn được về đúng dòng dữ liệu gốc.
 
 > Chưa nạp mục nào thì LYLY trả lời _"Cái này em chưa có, anh/chị hỏi lại quản lý nhé."_
-> Đó là hành vi đúng, không phải lỗi. **Đừng điền số giả để test cho xanh** — sale sẽ copy
-> nguyên con số đó gửi cho khách.
+> Đó là hành vi đúng, không phải lỗi. **Đừng điền số giả để test cho xanh** — người ta sẽ
+> quyết ngân sách dựa trên con số đó.
 
 ## Cách nạp
 
-| Loại dữ liệu | Để ở đâu | Vào kho qua |
-|---|---|---|
-| Bảng giá, tồn kho, pipeline, khách hàng | **Lark Base** | `KD_BASES` trong `.env` |
-| Báo cáo doanh số, bảng chính sách dạng tài liệu | **Drive/Sheets** (file docx) | `KD_FOLDERS` trong `.env` |
-| Quy trình, FAQ, playbook bán hàng | **Lark Wiki KD** | `KD_SYNC_WIKI` (đọc ghi chú trong `kd_sync.py`) |
+Khai Base trong `.env`:
+
+```bash
+KD_BASES=[{"app_token":"bascnXXXXX","label":"Vận hành sàn MATE MADE"}]
+```
+
+Lấy `app_token`: mở Base trên trình duyệt, URL dạng `.../base/`**`bascnXXXXX`**.
 
 Sau khi sync: vào console `/agent/AG-KD-MATE-MADE` → tab **Brain / Duyệt tri thức** →
 duyệt. Chưa duyệt thì LYLY chưa dùng được.
+
+> ⚠️ **`kd_sync.py` hiện đặt MỌI item từ Lark Base vào `scope=agent`** (chỉ LYLY tra được).
+> An toàn nhưng chặt: số vận hành thường (ROAS, tồn kho) cả team nên xem được. Nếu bạn tách
+> Base công khai và Base nhạy cảm thành hai Base riêng, báo tôi để chỉnh `kd_sync.py` cho
+> Base công khai thành `scope=shared`.
 
 ## Checklist nội dung
 
 ### 1. Bối cảnh thương hiệu — điền vào `system_prompt.md`
 Phần này ít đổi nên để trong prompt. Đang là `‹TODO›`:
 
-- [ ] Ngành hàng
-- [ ] Khách hàng chính (bán lẻ / sỉ / đại lý / doanh nghiệp)
-- [ ] 2–3 điểm khác biệt so với đối thủ (câu sale hay dùng để thuyết phục)
-- [ ] Website / fanpage
-- [ ] Tên: quản lý kinh doanh · kho/vận hành · kế toán · marketing
-- [ ] Hệ thống nhập đơn (bước 3 quy trình chốt đơn)
-- [ ] Ai xử lý: lương thưởng/hoa hồng · khiếu nại lớn
+- [ ] 2–3 điểm khác biệt của túi MATE MADE so với đối thủ
+- [ ] Link gian hàng Shopee + TikTok Shop
+- [ ] Tên: quản lý team · phụ trách ADS · phụ trách AFF · phụ trách vận hành sàn · kế toán
+- [ ] Ai xử lý lương thưởng / hoa hồng nhân viên
 
-### 2. Sản phẩm & giá — vào **Lark Base** (`scope: agent`)
-Mỗi sản phẩm một dòng, tối thiểu các cột:
+### 2. Số cho nhóm ADS — Lark Base
+Mỗi dòng một campaign một ngày (hoặc một tuần), tối thiểu các cột:
 
-- [ ] Tên sản phẩm · **SKU**
-- [ ] Giá lẻ
-- [ ] Giá sỉ + **số lượng tối thiểu** áp dụng
-- [ ] Mô tả: chất liệu, kích thước, màu có sẵn
-- [ ] Điểm bán hàng (lý do khách nên mua)
-- [ ] Tồn kho: luôn có / đặt trước bao nhiêu ngày
+- [ ] Ngày / kỳ báo cáo ← **bắt buộc**, LYLY dùng cột này làm "kỳ dữ liệu"
+- [ ] Sàn (Shopee / TikTok)
+- [ ] Tên campaign · SKU
+- [ ] Chi phí · Doanh thu · **ROAS**
+- [ ] CPC · CPM · lượt hiển thị · click
+- [ ] Ngân sách đặt · ngân sách còn lại
 
-### 3. Chiết khấu — vào **Lark Base hoặc Sheets**
-- [ ] Bậc 1: đơn từ ‹mức› → giảm ‹%›
-- [ ] Bậc 2: đơn từ ‹mức› → giảm ‹%›
-- [ ] Chính sách riêng cho đại lý / khách sỉ
-- [ ] **Mức tối đa sale được tự quyết** + ai duyệt khi vượt
+### 3. Số cho nhóm AFF — Lark Base
+- [ ] Ngày / kỳ báo cáo
+- [ ] Tên KOC/KOL · kênh
+- [ ] SKU · số đơn ra · doanh thu
+- [ ] **% hoa hồng theo SKU** (mức công khai)
+- [ ] Tỷ lệ hoàn đơn từ affiliate
 
-> ⚠️ LYLY **chỉ nhắc lại** các mức này, không bao giờ tự phán "được". Sale hỏi "giảm thêm
-> được không" luôn bị đẩy về quản lý kinh doanh — kể cả khi bảng chiết khấu đã có trong kho.
+### 4. Số cho nhóm Vận hành sàn — Lark Base
+- [ ] Ngày / kỳ báo cáo
+- [ ] SKU · tên sản phẩm · **tồn kho**
+- [ ] Số đơn · đơn hủy · đơn hoàn · **tỷ lệ hủy / hoàn**
+- [ ] Điểm sức khỏe shop từng sàn
+- [ ] Giá bán đang niêm yết
 
-### 4. Giao hàng & thanh toán — vào **Sheets/Docs chính sách**
-- [ ] Nội thành ‹tỉnh/thành›: thời gian + phí
-- [ ] Tỉnh khác: thời gian + phí
-- [ ] Miễn phí ship từ mức đơn nào
-- [ ] Hình thức thanh toán (CK / COD / công nợ bao nhiêu ngày)
-- [ ] **Thông tin chuyển khoản** gửi khách: số TK — tên — ngân hàng
+### 5. Chính sách & deadline — Drive/Wiki hoặc một bảng trong Base
+- [ ] Chính sách đổi trả / hoàn hàng của **Shopee**
+- [ ] Chính sách đổi trả / hoàn hàng của **TikTok Shop**
+- [ ] Quy định về điểm sức khỏe shop, các mức phạt
+- [ ] **Lịch & deadline đăng ký campaign sàn** (9.9, 10.10, 11.11, 12.12…)
+- [ ] Quy trình nội bộ: ai duyệt ngân sách, ai duyệt giá, ai duyệt booking
 
-> Số tài khoản để trong kho tri thức (không phải trong prompt) để đổi tài khoản là sửa một
-> chỗ. LYLY không được nhớ số tài khoản từ trí nhớ — luôn lấy từ nguồn.
+### 6. Dữ liệu hạn chế — **bắt buộc** `scope: agent`
+Nên để **Base riêng** hoặc bảng riêng, tách khỏi số vận hành thường:
 
-### 5. Đổi trả & bảo hành — vào **Docs chính sách**
-- [ ] Đổi trả trong bao nhiêu ngày + điều kiện
-- [ ] Bảo hành bao lâu + phạm vi
-- [ ] Các trường hợp **không** áp dụng
-
-### 6. FAQ — vào **Wiki KD**
-- [ ] Câu khách hỏi nhiều nhất + câu trả lời chuẩn của team
-- [ ] Câu số 2 + đáp
-- [ ] Câu số 3 + đáp
-
-### 7. Dữ liệu hạn chế — **bắt buộc** `scope: agent`
-Nạp riêng, không để chung với bảng giá công khai:
-
-- [ ] Giá vốn / biên lợi nhuận
-- [ ] Chiết khấu riêng theo từng khách
-- [ ] Danh sách khách hàng, thông tin liên hệ
-- [ ] Công nợ, hạn mức tín dụng
-
-`kd_sync.py` đã set `scope=agent` + `agent_id` cho mọi item từ Lark Base. **Đừng đổi thành
-`shared`** — đó là mở giá vốn cho mọi agent trong công ty.
+- [ ] Giá vốn / giá nhập theo SKU
+- [ ] Biên lợi nhuận theo SKU / theo campaign
+- [ ] Chi phí booking KOC/KOL, hợp đồng affiliate, mức hoa hồng riêng
+- [ ] Dữ liệu người mua (SĐT, địa chỉ) — cân nhắc **không nạp** nếu không thật sự cần
+- [ ] Công nợ / giá nhà cung cấp
 
 - [ ] Chốt danh sách người được xem → điền `KD_CONFIDENTIAL_VIEWERS` trong `.env`.
       Để rỗng = **không ai** xem được (fail-closed, cố ý).
@@ -103,3 +97,9 @@ bash scripts/agent-test.sh AG-KD-MATE-MADE
 Chạy `kd_sync.py --once` hai lần liên tiếp: lần hai phải báo `unchanged`, không nộp lại.
 Nếu lần hai vẫn `submitted` thì `item_id` đang không ổn định — mỗi ngày team sẽ phải duyệt
 lại toàn bộ kho.
+
+## Cột "ngày / kỳ báo cáo" — đừng bỏ qua
+
+Đây là cột dễ quên nhất và là nguồn lỗi nguy hiểm nhất của agent này. Không có nó, LYLY trả
+số mà không nói được của ngày nào; người đọc mặc định là hôm nay rồi quyết ngân sách sai —
+và **không ai phát hiện ra ngay**, khác với trường hợp bịa số vì bịa thì thường nhìn là thấy sai.
