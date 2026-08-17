@@ -23,6 +23,7 @@ INTERVAL = int(os.environ.get("OPS_INTERVAL_SECS", "300"))
 DLQ_TH = int(os.environ.get("OPS_DLQ_THRESHOLD", "5"))
 ERR_TH = int(os.environ.get("OPS_ERR_THRESHOLD", "20"))
 POOL_MIN = int(os.environ.get("OPS_POOL_MIN", "1"))
+DISK_WARN_PCT = int(os.environ.get("OPS_DISK_WARN_PCT", "85"))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ag-ops")
@@ -91,6 +92,17 @@ def diagnose(snap: dict) -> list[tuple]:
                                              f"({c.get('owner_email') or '?'}) còn **{d} ngày** là hết hạn. "
                                              f"Gia hạn: chạy `claude setup-token` rồi nạp lại vào pool."},
                         "low", f"credential còn {d} ngày"))
+
+    # Ổ đĩa VM: đầy là deploy/build/Postgres chết đứng (sự cố 08-14) — báo sớm.
+    disk = snap.get("disk") or {}
+    pct = int(disk.get("used_pct") or 0)
+    if pct >= DISK_WARN_PCT:
+        icon = "🔴" if pct >= 95 else "🟠" if pct >= 90 else "🟡"
+        out.append(("alert", {"message": f"{icon} Ổ đĩa VM đã dùng **{pct}%** "
+                                         f"(còn {disk.get('free_gb')}GB/{disk.get('total_gb')}GB). "
+                                         f"Dọn image Docker cũ: "
+                                         f"`ssh lsr-gcp \"sudo docker image prune -f\"`"},
+                    "low", f"đĩa {pct}% ≥ ngưỡng {DISK_WARN_PCT}%"))
 
     errs = snap.get("connector_errors_24h") or []
     for e in errs:

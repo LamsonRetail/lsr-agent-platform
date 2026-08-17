@@ -1,0 +1,41 @@
+apiVersion: lsr/v1
+agent:
+  id: AG-DATA-SUPPORT
+  name: Data Support
+  version: 0.1.0
+  owner: anhnt1@hapas.vn      # OWNER thật của agent — auth dùng subscription của người này
+  squad: SQ-DATA
+  is_squad_agent: true         # squad Data chưa có agent nào khác — đề nghị làm squad agent chính
+  connect_mode: bot            # bot | user
+  description: >
+    Tổng hợp dữ liệu chung (BigQuery + Lark Base) của team Data vào một kho tri thức
+    ai cũng hỏi được qua chat, kèm dựng biên bản họp tự động từ Lark Meeting.
+
+lark:
+  connect_mode: bot
+  bot:
+    app: custom                 # app Lark riêng của Data Support (app_id/secret admin cấu hình
+                                 # ở /opt/lsr-platform/.env trên VPS — KHÔNG nằm trong repo)
+    chat_ids: ["oc_e521377bc4d63c0516f825bb79eab59f"]   # nhóm Lark Data squad đã add bot
+    event_webhook: https://collector.lsr.internal/lark/events
+
+runtime:
+  sdk: claude-agent-sdk
+  auth: subscription        # BẮT BUỘC: đăng nhập subscription của OWNER (claude login /
+                             # setup-token). KHÔNG dùng api key, KHÔNG dùng auth chung platform.
+  model: claude-sonnet-5
+
+skills:                     # MCP tự do — chỉ khai báo + log
+  - {name: resource-index, type: builtin}
+  - {name: bigquery, type: mcp}
+  - {name: lark-base, type: mcp}
+
+telemetry:
+  enabled: true             # BẮT BUỘC (control point) — agent không gửi trace = không golive
+  collector: https://collector.lsr.internal
+
+tests:
+  suite: agents/AG-DATA-SUPPORT/tests.jsonl
+schedule:
+  - {job: ingest/bigquery_sync.py, cron: "0 6 * * *"}    # 06:00 hằng ngày — chỉnh theo nhu cầu thật
+  - {job: ingest/lark_base_sync.py, cron: "0 6 * * *"}

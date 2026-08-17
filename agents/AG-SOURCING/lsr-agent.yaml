@@ -1,0 +1,47 @@
+apiVersion: lsr/v1
+agent:
+  id: AG-SOURCING
+  name: Sourcing
+  version: 0.1.0
+  owner: linhntt@hapas.vn      # OWNER thật của agent — auth dùng subscription của người này
+  squad: SQ-SOURCING
+  is_squad_agent: true         # agent chung của cả team Sourcing (không riêng 1 campaign)
+  connect_mode: bot            # bot | user
+  description: >
+    Tổng hợp dữ liệu chung của team Sourcing (NCC, quy trình duyệt báo giá, tiến độ
+    theo ngành hàng) vào một kho tri thức ai cũng hỏi được qua chat, kèm dựng biên bản
+    họp tự động từ cuộc họp sourcing (transcript → nháp → chủ trì confirm → tạo task).
+
+lark:
+  connect_mode: bot
+  bot:
+    app: nihao-sourcing              # Lark custom app riêng của team Sourcing
+    app_id: cli_aaf6ce7c8d38deed     # identifier công khai; app_secret CHỈ nằm trên VM/.env local
+    secret_env: SOURCING_LARK_APP_SECRET  # tên biến THẬT trên VM — xem infra/lsr-platform/.env.example:15
+                                          # (maintainer đặt SOURCING_*, không phải NIHAO_*)
+    domain: https://open.larksuite.com
+    chat_ids:                        # nhóm bot đã tham gia (lấy bằng `python3 lark_link.py`)
+      - oc_96886011764769b30cb8fc541944df91   # TEAM S (Supplier & Sampling Development)
+      - oc_d3079f5e1bf44f8605a4f222cce4f86c   # SOURCING MM
+      # oc_e521377bc4d63c0516f825bb79eab59f   # "Sharing ai thích học cái mới" — nhóm sinh hoạt,
+      #                                         không phải nhóm việc → chưa bật ingress
+    event_webhook: https://collector.lsr.internal/lark/events
+
+runtime:
+  sdk: claude-agent-sdk
+  auth: subscription        # BẮT BUỘC: đăng nhập subscription của OWNER (claude login /
+                             # setup-token). KHÔNG dùng api key, KHÔNG dùng auth chung platform.
+  model: claude-sonnet-5
+
+skills:                     # MCP tự do — chỉ khai báo + log
+  - {name: resource-index, type: builtin}
+  - {name: lark-minutes, type: mcp}
+  - {name: lark-task, type: mcp}
+  - {name: lark-base, type: mcp}
+
+telemetry:
+  enabled: true             # BẮT BUỘC (control point) — agent không gửi trace = không golive
+  collector: https://collector.lsr.internal
+
+tests:
+  suite: agents/AG-SOURCING/tests.jsonl

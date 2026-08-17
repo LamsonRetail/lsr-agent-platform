@@ -42,7 +42,7 @@
 | LK.2 | Resolve với agent token | 200; email→open_id qua cache danh tính chung (158 người đã nạp) | ✅ 08-11 |
 | LK.3 | `/v1/lark/send` thiếu nội dung | 400 — không gửi gì | ✅ 08-11 |
 | LK.4 | Token Lark cache 2 tầng | `lark_token_cache` có token + hạn; mọi service dùng chung 1 token | ✅ 08-11 |
-| LK.5 | Send text/markdown tới email/open_id/chat_id | Gửi đúng loại; email chưa resolve được → fallback nhóm chung | ⏳ chờ Lark app mở range (blocker ngoài) |
+| LK.5 | Send text/markdown tới email/open_id/chat_id | Gửi đúng loại; email→open_id resolve qua danh bạ | ✅ 08-14 — Admin App mở range + sửa bug open_department_id: resolve OK cả 5 admin/owner |
 | LK.6 | Audit mỗi lần agent gửi Lark | `audit_log` action=lark_send, actor=agent | ✅ 08-11 |
 
 ## 4. P1 — Ingress hợp nhất (✅ 08-11, 8/8)
@@ -356,12 +356,116 @@
 | P9.4.4 | Deactivate agent no-code | Job `rejected`, runtime bỏ qua (kill-switch vẫn hiệu lực) | ✅ |
 | P9.4.2 | Xuất repo (USECASE/TESTCASES ra file) | — | ⏳ chưa làm (spec đã lưu DB, API sẵn) |
 
+## 14. TH — Đa app Lark theo squad + C1 tải file (✅ 08-12, 13/13 pass)
+
+> Nền cho AG-SQ-THAILAND (app Sawadee HAPAS `cli_aaf6d2b3a5b8ded3`): mỗi routing_binding
+> có thể gắn app Lark riêng, trả lời job bằng **đúng bot đã nhận tin**.
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| TH.1 | Token agent AG-SQ-THAILAND (enroll) | `/v1/self` trả đúng agent | ✅ |
+| TH.2a | Ingest sự kiện từ app Sawadee | Route → AG-SQ-THAILAND theo `routing_binding.app_id` | ✅ |
+| TH.2b | reply_to của job | Tự mang `app_id` nguồn (chọn bot khi trả lời) | ✅ |
+| TH.3a | Agent lease job | Nhận được job vừa ingest | ✅ |
+| TH.3b | Reply khi app chưa có secret trên VM | Lỗi **RÕ** "chưa có secret" — KHÔNG gửi bằng bot sai | ✅ |
+| TH.3c | Reply lỗi kênh Lark | Message vẫn ghi `job_events` (web/SSE không mất) | ✅ |
+| TH.4 | Regression app mặc định | `/v1/lark/chats` = 200 (Minh Anh/notify còn nguyên) | ✅ |
+| TH.5 | `chats?app_id=` app thiếu secret | 503 kèm hướng dẫn thêm vào `.env` VM | ✅ |
+| TH.6 | C1: tin nhắn file qua gateway | Payload có `file_key`+`file_name`+`sender_open_id`+`app_id` | ✅ |
+| TH.7a | Tải resource app thiếu secret | 503 secret missing | ✅ |
+| TH.7b | Tải resource app mặc định (id giả) | Tới Lark, Lark từ chối → 502 minh bạch | ✅ |
+| TH.7c | Tải resource không token | 401 | ✅ |
+| TH.8 | Container gateway_sawadee chưa có secret | Idle an toàn + log cảnh báo rõ | ✅ |
+
+## 15. P10 — Đăng nhập Lark OAuth + quyền mặc định + xin quyền per-agent (✅ 08-14, 21/21 pass)
+
+> Mọi tài khoản đăng nhập (mật khẩu hoặc Lark) mặc định có quyền **user trên tất cả agent**;
+> quyền moderator/admin cấp theo **từng agent** — một người giữ nhiều vai trò cùng lúc.
+> Đăng nhập Lark: kiểm tra ĐÚNG ORG (tenant_key + domain email) rồi mới tự mở tài khoản.
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| P10.1a | Account A (user platform + admin AG-MINH-ANH + moderator AG-SOURCING) login | Có phiên | ✅ |
+| P10.1b | `/v1/auth/me` của A | Trả **cả 3 vai trò cùng lúc** — đa agent/account | ✅ |
+| P10.1c | A sửa routing AG-SOURCING (vai moderator) | 200 | ✅ |
+| P10.1d | A sửa routing AG-MINH-ANH (vai admin) | 200 | ✅ |
+| P10.1e | A sửa routing AG-BI (chỉ user mặc định) | 403 | ✅ |
+| P10.1f | A gọi API quản lý tài khoản | 403 (không phải admin platform) | ✅ |
+| P10.2a | Account B không có binding nào | DB xác nhận 0 binding | ✅ |
+| P10.2b | Catalog của B | effective_role = **user trên TẤT CẢ agent** (mặc định) | ✅ |
+| P10.2c | B sửa config | 403 — mặc định chỉ xem | ✅ |
+| P10.3a | `/v1/auth/lark/start` | URL authorize Lark (app_id + redirect console + state ký HMAC) | ✅ |
+| P10.3b | Callback với state giả | 400 (chống CSRF, TTL 10') | ✅ |
+| P10.3c | Callback state đúng + code giả | 401 — Lark từ chối, không tạo phiên | ✅ |
+| P10.4 | Đăng nhập Lark thật + kiểm org (tenant/domain) + auto tạo tài khoản + trang xin quyền | ✅ 08-14 — thint@hapas.vn login OK (audit #396); fix redirect dùng hostname container → publicBase(); siết LARK_TENANT_KEY | ✅ |
+| P10.5a | B xin moderator AG-SOURCING | Tạo yêu cầu + notify admin (Telegram/Lark) | ✅ |
+| P10.5b | Xin trùng khi đang pending | 409 | ✅ |
+| P10.5c | Xin quyền 'user' | 400 — user là mặc định, không cần xin | ✅ |
+| P10.5d | B tự duyệt yêu cầu của mình | 403 | ✅ |
+| P10.5e | Admin xem danh sách chờ | Thấy yêu cầu (Console → Tài khoản) | ✅ |
+| P10.5f | Admin duyệt | Ghi role_binding + báo người xin | ✅ |
+| P10.5g | Sau duyệt B sửa AG-SOURCING | 200 — quyền hiệu lực ngay | ✅ |
+| P10.5h | Duyệt lại yêu cầu đã chốt | 409 | ✅ |
+| P10.6 | Admin TỪ CHỐI yêu cầu lên admin | Quyền giữ nguyên moderator | ✅ |
+
+## 16. A2A — 5 tình huống agent gọi nhau (✅ 08-14, 14/14 pass — agent + token THẬT trên VM)
+
+> Master data năng lực (`agents.capabilities` + `usage_guide`) là nguồn để agent khác
+> biết AI-làm-được-GÌ và GỌI-THẾ-NÀO trước khi A2A. Agent mới: token cấp TỰ ĐỘNG ở
+> mọi kênh đăng ký (enroll/no-code) nhưng phải được admin ACTIVATE mới chạy kênh thực + A2A.
+
+| ID | Tình huống | Kỳ vọng | TT |
+|---|---|---|---|
+| A2A.1 | MAI đọc `/v1/self/directory` | Thấy capabilities + usage_guide (10 agent có master data), `can_call` đúng theo grant | ✅ |
+| A2A.2 | **Happy path** MAI → AG-SOURCING hỏi trạng thái duyệt báo giá | Grant → gọi → target trả lời → caller nhận đúng nội dung (round-trip đo được) | ✅ |
+| A2A.3 | **Grant gate** AG-SQ-THAILAND → AG-DATA-SUPPORT | Chưa grant: 403 + audit `a2a_denied`; sau grant: nhận số liệu kèm nguồn | ✅ |
+| A2A.4 | **Approve gate**: agent mới enroll (AG-A2ATEST) | Token TỰ SINH + admin được notify; gọi TỚI nó 409, nó gọi RA 403, Lark ingest `rejected`; admin activate → chạy ngay | ✅ |
+| A2A.5 | **Chống vòng lặp + caller-pays** | hop 4 > 3 → 429; mart `a2a_out` tính cho BÊN GỌI (MAI=2, TH=1) | ✅ |
+
+⚠️ Bài học vận hành (sự cố 08-14, đã khắc phục trong harness): consumer mô phỏng khi test
+**chỉ được đụng job `channel='a2a'` khớp req_id của test** — job kênh thật lease nhầm phải
+`fail` để trả về queue, tuyệt đối không reply. (Một tin thật của nhóm SOURCING MM từng bị
+harness trả lời nhầm — xem báo cáo 08-14.)
+
+## 17. P11 — Device-login CLI + token cá nhân + enroll tự duyệt (✅ 08-14, 25/25 pass)
+
+> Bỏ rào "đi xin enroll token": CLI/Claude Code tự đăng nhập như `gh auth login`.
+> Token cá nhân mang ĐÚNG quyền người dùng; **admin enroll → agent ACTIVE luôn**.
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| P11.1a | `POST /v1/auth/device/start` | Trả user_code + link duyệt, không cần auth | ✅ |
+| P11.1b | Poll khi chưa duyệt | `pending` — không cấp token sớm | ✅ |
+| P11.1c | Duyệt khi chưa đăng nhập console | 401 | ✅ |
+| P11.1d | Người dùng duyệt trên console | `approved` | ✅ |
+| P11.1e | CLI poll sau duyệt | Nhận token cá nhân của ĐÚNG người duyệt | ✅ |
+| P11.1f | Poll lần 2 | Token chỉ trả MỘT LẦN rồi xoá | ✅ |
+| P11.1g | Mã sai | 404 | ✅ |
+| P11.2a | Gọi `/v1/auth/me` bằng PAT | Nhận diện đúng người | ✅ |
+| P11.2b | PAT moderator gọi API admin | **403** (không phải 401 — không đá về login) | ✅ |
+| P11.2c | Liệt kê token của mình | Thấy nhãn thiết bị | ✅ |
+| P11.3a | Enroll bằng PAT, KHÔNG enroll-token | Tạo agent thành công | ✅ |
+| P11.3b | — | Token agent cấp TỰ ĐỘNG trong response | ✅ |
+| P11.3c | Không truyền owner | Tự lấy = email người tạo | ✅ |
+| P11.3d | Người tạo là moderator | `auto_approved=false` — chờ admin | ✅ |
+| P11.3e | — | Người tạo tự thành moderator của agent đó | ✅ |
+| P11.4a | **Admin** enroll | Agent `active` NGAY (tự duyệt) | ✅ |
+| P11.4b | — | Response ghi `auto_approved=true` | ✅ |
+| P11.4c | — | `golive_at` được ghi | ✅ |
+| P11.4d | Tin Lark tới agent admin vừa tạo | `queued` — chạy kênh thực ngay | ✅ |
+| P11.4e | Tin Lark tới agent của moderator | `rejected` — vẫn chờ duyệt | ✅ |
+| P11.5a | Enroll bằng enroll-token cũ | Vẫn chạy (không phá script cũ) | ✅ |
+| P11.5b | Enroll không auth | Lỗi CHỈ ĐƯỜNG: chạy `lsr-login.sh` | ✅ |
+| P11.5c | Thu hồi token cá nhân | Chết ngay (401) | ✅ |
+| P11.6a | Ops snapshot | Có dung lượng đĩa VM | ✅ |
+| P11.6b | AG-OPS khi đĩa ≥85% | Cảnh báo kèm lệnh dọn Docker (sự cố 08-14) | ✅ |
+
 ---
 
-**Tổng: 179 case — 172 ✅ đã nghiệm thu (96%).**
+**Tổng: 244 case — 238 ✅ đã nghiệm thu (98%).**
 
 **7 case còn lại, chia 2 nhóm:**
-- **Cần bạn xử lý (3):** `LK.5`, `P1.1` — Lark app chưa mở available-range và bot chưa ở nhóm nào (resolve trả `null`, `/v1/lark/chats` rỗng); `ST.8` — cần team thật cùng push 1 branch.
+- **Cần bạn xử lý (2):** `P1.1` — bot Admin App chưa được add vào nhóm nào (`/v1/lark/chats` rỗng — add bot vào 1 nhóm là xong); `ST.8` — cần team thật cùng push 1 branch.
 - **Chỉ kiểm bằng mắt trên UI (4):** `P3.7.1`–`P3.7.5` Builder (các API bên dưới đã pass, trang render 200).
 
 Toàn bộ P1–P7 đã triển khai và verify trên VM. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.
