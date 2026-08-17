@@ -11,7 +11,9 @@ services:
     environment:
       LSR_PLATFORM_URL: ${LSR_PLATFORM_URL:-https://platform.34-126-154-135.sslip.io}
       LSR_AGENT_ID: ${LSR_AGENT_ID:-AG-KD-MATE-MADE}
-      LSR_AGENT_TOKEN: ${LSR_AGENT_TOKEN:?cần token — xin ở Console hoặc scripts/lsr_adopt.py}
+      # Chạy tay/compose dùng tên này; runtime trên VM tiêm LSR_TELEMETRY_API_KEY —
+      # consumer.py đọc được cả hai.
+      LSR_AGENT_TOKEN: ${LSR_AGENT_TOKEN:?cần token — chạy `bash scripts/lsr-login.sh` rồi `scripts/lsr_adopt.py`}
       DRY_RUN: ${DRY_RUN:-true}                     # false = gửi tin/tạo doc/task thật
       # Ai được xem giá vốn/chiết khấu/danh sách khách. RỖNG = không ai (fail-closed).
       KD_CONFIDENTIAL_VIEWERS: ${KD_CONFIDENTIAL_VIEWERS:-}

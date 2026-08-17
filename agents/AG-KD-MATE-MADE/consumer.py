@@ -39,7 +39,11 @@ import urllib.request
 import meeting_note
 
 PLATFORM = os.environ.get("LSR_PLATFORM_URL", "https://platform.34-126-154-135.sslip.io").rstrip("/")
-TOKEN = os.environ.get("LSR_AGENT_TOKEN", "")
+# HAI tên biến vì có HAI đường chạy: docker-compose / chạy tay truyền LSR_AGENT_TOKEN,
+# còn runtime trên VM (POST /v1/self/deploy) tiêm LSR_TELEMETRY_API_KEY. Chỉ đọc một tên
+# thì đường kia chạy với token rỗng và ăn 403 vô hạn mà không rõ vì sao — đúng lỗi
+# AG-DATA-SUPPORT đã dính (commit e29fb37).
+TOKEN = os.environ.get("LSR_AGENT_TOKEN") or os.environ.get("LSR_TELEMETRY_API_KEY") or ""
 AGENT_ID = os.environ.get("LSR_AGENT_ID", "AG-KD-MATE-MADE")
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() != "false"
 

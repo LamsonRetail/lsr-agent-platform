@@ -41,9 +41,14 @@ ngày từ **Lark Base** → số đổi là sửa trong Base, không phải s�
 ## Chạy nhanh
 
 ```bash
-# 1) đăng ký agent (1 lần) — nhận LSR_AGENT_TOKEN
-python3 scripts/lsr_adopt.py --enroll-token <hỏi admin> --id AG-KD-MATE-MADE \
-  --name "Trợ lý Kinh Doanh Mate Made" --owner <email của bạn> --squad KINH-DOANH
+# 0) đăng nhập platform (1 lần, giống `gh auth login` — KHÔNG cần xin token của ai).
+#    Script xin mã, bạn bấm Duyệt trên console, token cá nhân lưu vào ~/.lsr/token.
+bash scripts/lsr-login.sh
+
+# 1) đăng ký agent (1 lần) — nhận LSR_AGENT_TOKEN. Từ P11: owner mặc định là người
+#    đăng nhập, và người tạo TỰ thành moderator của agent (tự duyệt tri thức được).
+python3 scripts/lsr_adopt.py --id AG-KD-MATE-MADE \
+  --name "LYLY - Tro ly van hanh san MATE MADE" --squad KINH-DOANH
 
 # 2) cấu hình
 cd agents/AG-KD-MATE-MADE && cp .env.example .env && vi .env
