@@ -239,13 +239,15 @@ def answer(q: str, ctx: dict, user_ref: str = "") -> str:
     hits = ctx.get("knowledge") or []
 
     # (5) Không có căn cứ đã duyệt → KHÔNG đưa số, KHÔNG ước lượng.
+    # Cố ý KHÔNG kèm DISCLAIMER ở đây: câu disclaimer nói "số lấy từ kho đã duyệt, check
+    # link nguồn" — dán nó vào một câu trả lời không có số và không có link thì vô nghĩa,
+    # và tệ hơn là khiến câu từ chối trông như một câu trả lời có căn cứ.
     if not hits:
         return (f"{NO_DATA}\n\n"
                 "Em **chưa tìm thấy dữ liệu đã duyệt** cho câu này nên không dám đưa số.\n"
                 "• Anh/chị check trực tiếp trên Lark Base / Seller Center giúp em.\n"
                 "• Nếu số này có trong Base rồi mà em chưa thấy, báo em để team đưa vào kho "
-                "— lần sau em trả lời được ngay ạ.\n\n"
-                f"{DISCLAIMER}")
+                "— lần sau em trả lời được ngay ạ.")
 
     # (6) Có căn cứ → trả lời gọn: số + nguồn + kỳ dữ liệu.
     return ("**Trả lời**\n" + cite(hits) + "\n\n"
