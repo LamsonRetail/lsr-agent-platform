@@ -39,7 +39,13 @@ Ngoài ra:
 - **Quản lý team** — người duyệt mọi quyết định ngân sách/giá/booking, và chốt danh sách
   được xem dữ liệu hạn chế.
 - **Chủ trì cuộc họp** — người **chốt** biên bản trước khi publish.
-- **Người duyệt tri thức** — duyệt dữ liệu vào kho trên console trước khi LYLY được dùng.
+- **Người nạp + duyệt tri thức**: **Trần Khánh Linh (B)** — TN Kinh doanh Mate Made, phòng
+  Digital Performance MATE MADE (`linhtk@hapas.vn`). Cũng là **owner** của agent: LYLY chạy
+  bằng subscription Claude của người này.
+
+> Owner kiêm người duyệt tri thức là **điểm tập trung rủi ro**: nếu một mục sai được duyệt
+> nhầm, không có lớp thứ hai bắt lại. Khi team quen việc, nên tách người duyệt sang người
+> phụ trách đúng nhóm dữ liệu (ADS duyệt số ADS, AFF duyệt số AFF).
 - **Người thử nhanh** — Chat thử trong console (`/agent/AG-KD-MATE-MADE`).
 
 ## Luồng chính (happy path)

@@ -3,7 +3,9 @@ agent:
   id: AG-KD-MATE-MADE
   name: LYLY — Trợ lý vận hành sàn MATE MADE
   version: 0.1.0
-  owner: TODO@hapas.vn              # OWNER thật — auth dùng subscription của người này
+  owner: linhtk@hapas.vn            # Trần Khánh Linh (B) — TN Kinh doanh Mate Made.
+                                    # Auth chạy bằng subscription Claude của người này
+                                    # (claude setup-token), cũng là người nạp + duyệt tri thức.
   squad: KINH-DOANH
   is_squad_agent: true
   connect_mode: bot                 # bot | user
