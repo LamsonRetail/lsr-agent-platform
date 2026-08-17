@@ -1,0 +1,47 @@
+# Chạy agent này ở BẤT KỲ đâu (máy dev / VM): docker compose up
+#
+# HAI tiến trình, không phải ba:
+#   agent    — poll job từ platform, xử lý CẢ hỏi đáp lẫn biên bản họp.
+#              meeting_note.py là module do agent gọi, KHÔNG chạy thành service riêng:
+#              hai process cùng poll /v1/self/jobs sẽ giành job của nhau.
+#   kd_sync  — đồng bộ Lark Base + Drive → hàng chờ tri thức (hàng ngày 6h VN).
+services:
+  agent:
+    build: .
+    environment:
+      LSR_PLATFORM_URL: ${LSR_PLATFORM_URL:-https://platform.34-126-154-135.sslip.io}
+      LSR_AGENT_ID: ${LSR_AGENT_ID:-AG-KD-MATE-MADE}
+      LSR_AGENT_TOKEN: ${LSR_AGENT_TOKEN:?cần token — xin ở Console hoặc scripts/lsr_adopt.py}
+      DRY_RUN: ${DRY_RUN:-true}                     # false = gửi tin/tạo doc/task thật
+      # Ai được xem giá vốn/chiết khấu/danh sách khách. RỖNG = không ai (fail-closed).
+      KD_CONFIDENTIAL_VIEWERS: ${KD_CONFIDENTIAL_VIEWERS:-}
+      # Ai được chốt biên bản. RỖNG = người gửi recording được coi là chủ trì.
+      KD_MEETING_CHAIRS: ${KD_MEETING_CHAIRS:-}
+      # App Lark riêng của agent — cần để publish biên bản đã chốt + tạo task.
+      LARK_APP_ID: ${LARK_APP_ID:-}
+      LARK_APP_SECRET: ${LARK_APP_SECRET:-}
+      LARK_DOMAIN: ${LARK_DOMAIN:-https://open.larksuite.com}
+      KD_NOTE_FOLDER: ${KD_NOTE_FOLDER:-}
+      # Transcription server. Bắt buộc khi xử lý recording (không có mặc định hardcode).
+      LSR_TRANSCRIBE_URL: ${LSR_TRANSCRIBE_URL:-}
+    restart: unless-stopped
+
+  kd_sync:
+    build: .
+    command: ["python3", "kd_sync.py"]
+    environment:
+      LSR_PLATFORM_URL: ${LSR_PLATFORM_URL:-https://platform.34-126-154-135.sslip.io}
+      LSR_AGENT_ID: ${LSR_AGENT_ID:-AG-KD-MATE-MADE}
+      # Nộp tri thức vào hàng chờ cần quyền admin của platform.
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN:?cần admin token để nộp tri thức}
+      # App Lark ĐỌC dữ liệu (scope wiki/docx/bitable/drive readonly).
+      LARK_APP_ID: ${LARK_APP_ID:?cần app Lark có scope đọc wiki/docx/bitable/drive}
+      LARK_APP_SECRET: ${LARK_APP_SECRET:?cần app secret}
+      LARK_DOMAIN: ${LARK_DOMAIN:-https://open.larksuite.com}
+      LARK_DOC_HOST: ${LARK_DOC_HOST:?cần host tài liệu để dựng link trích dẫn}
+      KD_BASES: ${KD_BASES:-}
+      KD_FOLDERS: ${KD_FOLDERS:-}
+      # false = KHÔNG sync wiki KD (tránh trùng với AG-LEGAL). Đọc ghi chú trong kd_sync.py.
+      KD_SYNC_WIKI: ${KD_SYNC_WIKI:-false}
+      KD_SYNC_HOUR: ${KD_SYNC_HOUR:-6}
+    restart: unless-stopped

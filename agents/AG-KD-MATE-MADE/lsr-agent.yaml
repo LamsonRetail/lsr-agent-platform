@@ -1,0 +1,52 @@
+apiVersion: lsr/v1
+agent:
+  id: AG-KD-MATE-MADE
+  name: LYLY — Trợ lý Kinh doanh MATE MADE
+  version: 0.1.0
+  owner: TODO@hapas.vn              # OWNER thật — auth dùng subscription của người này
+  squad: KINH-DOANH
+  is_squad_agent: true
+  connect_mode: bot                 # bot | user
+  description: >
+    LYLY phục vụ NHÂN VIÊN SALE NỘI BỘ (không phải khách hàng cuối): tra giá và chính
+    sách kèm trích dẫn nguồn, soạn sẵn tin nhắn trả lời khách, gợi ý cách xử lý khách
+    chê đắt / lưỡng lự / so sánh đối thủ. Không tự duyệt chiết khấu vượt khung, công nợ
+    hay thời gian giao — mọi ngoại lệ đẩy về quản lý kinh doanh. Ngoài ra dựng biên bản
+    họp từ recording, bóc riêng phần cam kết ai-làm-gì-khi-nào, chỉ publish khi chủ trì
+    chốt. Giá và chính sách nằm trong kho tri thức đã duyệt, KHÔNG nằm trong prompt.
+
+lark:
+  connect_mode: bot
+  bot:
+    app: custom                     # app Lark riêng của agent (cli_aaf6ca84c5389ed4)
+    chat_ids: []                    # admin điền nhóm KD khi gán Ingress ở Console
+    event_webhook: https://collector.lsr.internal/lark/events
+
+runtime:
+  sdk: claude-agent-sdk
+  auth: subscription                # BẮT BUỘC: subscription của OWNER (claude setup-token).
+                                    # KHÔNG dùng khoá LLM, KHÔNG dùng auth chung platform.
+  model: claude-sonnet-5
+
+prompt:                             # con trỏ version prompt — rollback = đổi con trỏ
+  path: system_prompt.md
+  version: 0.1.0
+  ref: main
+
+skills:
+  - {name: brain-rag,  type: builtin}   # tri thức đã duyệt + trích dẫn nguồn
+  - {name: lark-send,  type: builtin}   # gửi nháp biên bản / thông báo vào nhóm KD
+  - {name: lark-docs,  type: builtin}   # publish biên bản đã chốt thành Lark Docs
+  - {name: lark-task,  type: builtin}   # tạo task cho từng cam kết trong biên bản
+
+telemetry:
+  enabled: true                     # BẮT BUỘC (control point) — không gửi trace = không golive
+  collector: https://collector.lsr.internal
+
+tests:
+  suite: tests/agent_tests.yaml
+
+# Job đồng bộ dữ liệu KD → hàng chờ tri thức (kd_sync.py), chạy hàng ngày 6h VN.
+# KHÔNG sync wiki space 7496094770155061279 — AG-LEGAL đã đồng bộ space đó.
+schedule:
+  - {name: kd-sync, cron: "0 6 * * *", command: "python3 kd_sync.py --once"}

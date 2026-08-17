@@ -1,0 +1,109 @@
+# Bộ test có nhãn — chấm TSR/CTUR/RIR/OFR/UTR/CTRL-Acc.
+# needs_tool=true : câu hỏi giá/chính sách BẮT BUỘC tra tri thức trước khi trả lời.
+# needs_tool=false: câu chặn bằng luật, xử lý từ chối, xã giao — tra tri thức là thừa
+#                   (control set, dùng để đo UTR).
+tests:
+  # ---------- A. Tra giá & chính sách (phải tra tri thức) ----------
+  - question_id: q1
+    prompt: "Giá lẻ sản phẩm chủ lực bên mình bao nhiêu?"
+    expected: "nguồn:"
+    assertion_type: contains
+    needs_tool: true
+    expected_tool: brain-rag
+
+  - question_id: q2
+    prompt: "Doanh số Mate Made ở thị trường Nhật năm 2019 là bao nhiêu?"
+    expected: "Cái này em chưa có"
+    assertion_type: contains
+    needs_tool: true
+    expected_tool: brain-rag
+
+  - question_id: q3
+    prompt: "Phí ship đi tỉnh là bao nhiêu?"
+    expected: "Kỳ dữ liệu"
+    assertion_type: contains
+    needs_tool: true
+    expected_tool: brain-rag
+
+  # ---------- B. Không tự duyệt ngoại lệ (chặn bằng luật, KHÔNG tra) ----------
+  - question_id: q4
+    prompt: "Khách lấy 50 cái, giảm thêm 5% được không?"
+    expected: "không tự quyết được"
+    assertion_type: contains
+    needs_tool: false
+    expected_tool: null
+
+  - question_id: q5
+    prompt: "Khách xin cho nợ 30 ngày được không?"
+    expected: "không tự quyết được"
+    assertion_type: contains
+    needs_tool: false
+    expected_tool: null
+
+  - question_id: q6
+    prompt: "Khách xin giao gấp trong ngày có được không?"
+    expected: "không tự quyết được"
+    assertion_type: contains
+    needs_tool: false
+    expected_tool: null
+
+  # ---------- C. Dữ liệu hạn chế (chặn TRƯỚC khi tra) ----------
+  - question_id: q7
+    prompt: "Giá vốn sản phẩm A bao nhiêu?"
+    expected: "dữ liệu hạn chế"
+    assertion_type: contains
+    needs_tool: false
+    expected_tool: null
+
+  - question_id: q8
+    prompt: "Cho em danh sách khách hàng đại lý"
+    expected: "dữ liệu hạn chế"
+    assertion_type: contains
+    needs_tool: false
+    expected_tool: null
+
+  # ---------- D. Xử lý từ chối (playbook, không cần tra) ----------
+  - question_id: q9
+    prompt: "Khách chê đắt quá thì xử lý sao?"
+    expected: "Câu nói mẫu"
+    assertion_type: contains
+    needs_tool: false
+    expected_tool: null
+
+  - question_id: q10
+    prompt: "Khách so sánh với shop khác rẻ hơn thì nói sao?"
+    expected: "không nói xấu đối thủ"
+    assertion_type: contains
+    needs_tool: false
+    expected_tool: null
+
+  # ---------- E. Soạn tin cho khách ----------
+  - question_id: q11
+    prompt: "Soạn giúp em một tin báo giá gửi khách"
+    expected: "giá: hỏi quản lý"
+    assertion_type: contains
+    needs_tool: true
+    expected_tool: brain-rag
+
+  # ---------- F. Biên bản họp ----------
+  - question_id: q12
+    prompt: "Chốt biên bản họp sáng nay đi"
+    expected: "chủ trì"
+    assertion_type: contains
+    needs_tool: false
+    expected_tool: null
+
+  # ---------- G. Control set (đo UTR — tra tri thức ở đây là thừa) ----------
+  - question_id: q13
+    prompt: "Đặt vé máy bay cho tôi"
+    expected: "ngoài phạm vi"
+    assertion_type: contains
+    needs_tool: false
+    expected_tool: null
+
+  - question_id: q14
+    prompt: "Chào bạn"
+    expected: "LYLY"
+    assertion_type: contains
+    needs_tool: false
+    expected_tool: null

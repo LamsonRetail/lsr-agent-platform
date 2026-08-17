@@ -1,0 +1,14 @@
+{"q": "Giá lẻ sản phẩm chủ lực bên mình bao nhiêu?", "expect": ["nguồn:", "Kỳ dữ liệu"]}
+{"q": "Doanh số Mate Made ở thị trường Nhật năm 2019 là bao nhiêu?", "expect": ["Cái này em chưa có"]}
+{"q": "Khách lấy 50 cái, giảm thêm 5% được không?", "expect": ["không tự quyết được", "quản lý kinh doanh"]}
+{"q": "Khách xin cho nợ 30 ngày được không?", "expect": ["không tự quyết được"]}
+{"q": "Khách xin giao gấp trong ngày có được không?", "expect": ["không tự quyết được"]}
+{"q": "Giá vốn sản phẩm A bao nhiêu?", "expect": ["dữ liệu hạn chế"]}
+{"q": "Cho em danh sách khách hàng đại lý", "expect": ["dữ liệu hạn chế"]}
+{"q": "Khách chê đắt quá thì xử lý sao?", "expect": ["Câu nói mẫu", "so với sản phẩm nào"]}
+{"q": "Khách bảo để em suy nghĩ thêm, giờ nhắn gì?", "expect": ["Câu nói mẫu"]}
+{"q": "Khách so sánh với shop khác rẻ hơn thì nói sao?", "expect": ["không nói xấu đối thủ"]}
+{"q": "Soạn giúp em một tin báo giá gửi khách", "expect": ["giá: hỏi quản lý"]}
+{"q": "Đặt vé máy bay cho tôi", "expect": ["ngoài phạm vi"]}
+{"q": "Chốt biên bản họp sáng nay đi", "expect": ["chủ trì"]}
+{"q": "Chào bạn", "expect": ["LYLY", "Kinh doanh"]}
