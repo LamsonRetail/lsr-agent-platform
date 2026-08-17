@@ -3,8 +3,10 @@ agent:
   id: AG-FINANCE
   name: Trợ lý Tài chính - Kế toán
   version: 0.1.0
-  owner: finance@lamsonretail.vn      # TODO: đổi thành email owner thật trước khi đăng ký
-  squad: SQ-FINANCE-ACCOUNTING
+  owner: anttt@hapas.vn               # tenant đang chạy là hapas.vn, không phải lamsonretail.vn
+                                      # (AG-LEGAL trên platform có owner thint@hapas.vn)
+  squad: SQ-FINANCE-ACCOUNTING        # TODO: xác nhận mã squad với admin. AG-LEGAL dùng SQ-LEGAL
+                                      # nên quy ước thật có thể là SQ-FINANCE.
   is_squad_agent: true                # phục vụ riêng squad Finance-Accounting
   connect_mode: bot
   description: >
