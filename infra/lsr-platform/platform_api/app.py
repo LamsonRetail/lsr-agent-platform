@@ -219,11 +219,27 @@ def _effective_role(conn, email: str, agent_id: str | None = None) -> str | None
     return best
 
 
+def _pat_email(conn, token: str) -> str | None:
+    """Token cá nhân (CLI/Claude Code) → email chủ token. Cập nhật last_used_at."""
+    if not token.startswith("lsr_pat_"):
+        return None
+    h = hashlib.sha256(token.encode()).hexdigest()
+    row = conn.execute(
+        "UPDATE personal_tokens p SET last_used_at=now() "
+        "FROM accounts a WHERE p.token_hash=%s AND a.email=p.email AND a.status='active' "
+        "  AND p.revoked_at IS NULL AND p.expires_at > now() RETURNING p.email", (h,)).fetchone()
+    if row:
+        conn.commit()
+        return row["email"]
+    return None
+
+
 def _principal(authorization: str, agent_id: str | None = None) -> dict:
     """Nhận diện người/dịch vụ đang gọi.
 
     - admin token (service-to-service: gateway, bot, CI) → quyền admin, actor='service'
-    - session token của người dùng   → quyền theo role_bindings, actor=email
+    - session token console           → quyền theo role_bindings, actor=email
+    - token cá nhân `lsr_pat_` (CLI)  → CÙNG quyền như khi đăng nhập console
     """
     tok = _bearer(authorization)
     if not tok:
@@ -232,10 +248,10 @@ def _principal(authorization: str, agent_id: str | None = None) -> dict:
         return {"kind": "admin_token", "actor": "service", "role": "admin"}
     try:
         with _db() as conn:
-            email = _session_email(conn, tok)
+            email = _session_email(conn, tok) or _pat_email(conn, tok)
             if email:
-                return {"kind": "session", "actor": email,
-                        "role": _effective_role(conn, email, agent_id)}
+                return {"kind": "pat" if tok.startswith("lsr_pat_") else "session",
+                        "actor": email, "role": _effective_role(conn, email, agent_id)}
     except Exception:
         pass
     return {"kind": "unknown", "actor": None, "role": None}
@@ -1175,6 +1191,36 @@ def _ensure_schema() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_rolereq_status ON role_requests(status, created_at DESC)")
+        # P11: token CÁ NHÂN cho CLI/Claude Code (thay enroll token dùng chung) +
+        # device-login (như `gh auth login`): CLI không phải dán secret nào.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS personal_tokens (
+                token_hash   text PRIMARY KEY,
+                email        text NOT NULL REFERENCES accounts(email) ON DELETE CASCADE,
+                label        text,
+                created_at   timestamptz DEFAULT now(),
+                expires_at   timestamptz NOT NULL,
+                last_used_at timestamptz,
+                revoked_at   timestamptz
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pat_email ON personal_tokens(email)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS device_codes (
+                device_code text PRIMARY KEY,
+                user_code   text UNIQUE NOT NULL,
+                label       text,
+                status      text DEFAULT 'pending',   -- pending | approved | denied
+                email       text,                     -- người duyệt (chủ token)
+                token_once  text,                     -- PAT trả 1 lần cho CLI rồi xoá
+                created_at  timestamptz DEFAULT now(),
+                expires_at  timestamptz NOT NULL
+            )
+            """
+        )
         # P9: token NGẮN HẠN để nocode_runtime hành động NHÂN DANH agent no-code
         # (khoá gốc của agent chỉ lưu hash nên không lấy lại được).
         conn.execute(
@@ -1282,7 +1328,9 @@ def _require_admin(authorization: str) -> None:
     p = _principal(authorization)
     if p.get("role") == "admin":
         return
-    if p.get("kind") == "session":
+    # ĐÃ xác thực (phiên console hoặc token cá nhân CLI) nhưng thiếu quyền → 403,
+    # không phải 401 (401 sẽ đá người dùng về trang login dù họ đang đăng nhập).
+    if p.get("kind") in ("session", "pat"):
         raise HTTPException(status_code=403, detail="cần quyền admin")
     raise HTTPException(status_code=401, detail="admin token required")
 
@@ -1350,10 +1398,13 @@ def auth_logout(authorization: str = Header(default="")) -> dict:
 
 @app.get("/v1/auth/me")
 def auth_me(authorization: str = Header(default="")) -> dict:
-    """Người đang đăng nhập + vai trò (platform và theo từng agent)."""
+    """Người đang đăng nhập + vai trò (platform và theo từng agent).
+
+    Dùng được cả bằng phiên console lẫn token cá nhân CLI (`lsr-login.sh --status`).
+    """
     tok = _bearer(authorization)
     with _db() as conn:
-        email = _session_email(conn, tok)
+        email = _session_email(conn, tok) or _pat_email(conn, tok)
         if not email:
             raise HTTPException(status_code=401, detail="chưa đăng nhập")
         a = conn.execute("SELECT email, name, must_change_pw FROM accounts WHERE email=%s",
@@ -1503,13 +1554,141 @@ def auth_lark_callback(body: dict, request: Request) -> dict:
             "expires_hours": SESSION_HOURS}
 
 
+# ---------------- P11: device-login + token cá nhân cho CLI/Claude Code ----------------
+# Vấn đề cũ: enroll cần LSR_ENROLL_TOKEN — secret dùng chung, ai cũng phải đi xin.
+# Nay: CLI gọi /device/start → người dùng mở console duyệt → CLI nhận TOKEN CÁ NHÂN
+# mang đúng quyền của người đó. Admin enroll thì agent ACTIVE luôn (tự duyệt).
+
+_PAT_DAYS = int(os.environ.get("PAT_DAYS", "90"))
+_DEVICE_TTL_MIN = 15
+_USER_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"     # bỏ ký tự dễ nhìn nhầm
+
+
+def _mint_pat(conn, email: str, label: str) -> str:
+    token = "lsr_pat_" + secrets.token_urlsafe(24)
+    conn.execute(
+        "INSERT INTO personal_tokens(token_hash, email, label, expires_at) "
+        "VALUES (%s,%s,%s, now() + make_interval(days => %s))",
+        (hashlib.sha256(token.encode()).hexdigest(), email, label[:80], _PAT_DAYS))
+    return token
+
+
+@app.post("/v1/auth/device/start")
+def device_start(body: dict) -> dict:
+    """CLI mở phiên đăng nhập. KHÔNG cần auth — chưa cấp gì cho tới khi người duyệt."""
+    _ensure_schema()
+    label = (body.get("label") or "Claude Code CLI")[:80]
+    device_code = secrets.token_urlsafe(32)
+    with _db() as conn:
+        for _ in range(5):      # tránh trùng user_code hiếm gặp
+            user_code = ("".join(secrets.choice(_USER_CODE_ALPHABET) for _ in range(4))
+                         + "-" + "".join(secrets.choice(_USER_CODE_ALPHABET) for _ in range(4)))
+            try:
+                conn.execute(
+                    "INSERT INTO device_codes(device_code, user_code, label, expires_at) "
+                    "VALUES (%s,%s,%s, now() + make_interval(mins => %s))",
+                    (device_code, user_code, label, _DEVICE_TTL_MIN))
+                conn.commit()
+                break
+            except Exception:
+                conn.rollback()
+        else:
+            raise HTTPException(status_code=503, detail="không sinh được mã — thử lại")
+    return {"device_code": device_code, "user_code": user_code,
+            "verify_url": f"{APP_PUBLIC_URL}/device?code={user_code}",
+            "expires_in": _DEVICE_TTL_MIN * 60, "interval": 3}
+
+
+@app.post("/v1/auth/device/poll")
+def device_poll(body: dict) -> dict:
+    """CLI hỏi kết quả. Token trả về ĐÚNG MỘT LẦN rồi xoá khỏi DB."""
+    dc = body.get("device_code") or ""
+    with _db() as conn:
+        r = conn.execute("SELECT * FROM device_codes WHERE device_code=%s", (dc,)).fetchone()
+        if not r:
+            raise HTTPException(status_code=404, detail="mã thiết bị không tồn tại")
+        if r["expires_at"] and r["expires_at"] < datetime.now(timezone.utc):
+            return {"status": "expired"}
+        if r["status"] == "denied":
+            return {"status": "denied"}
+        if r["status"] != "approved":
+            return {"status": "pending"}
+        token = r["token_once"]
+        conn.execute("DELETE FROM device_codes WHERE device_code=%s", (dc,))
+        conn.commit()
+    if not token:
+        return {"status": "expired"}
+    return {"status": "approved", "token": token, "email": r["email"],
+            "expires_days": _PAT_DAYS}
+
+
+@app.post("/v1/auth/device/approve")
+def device_approve(body: dict, authorization: str = Header(default="")) -> dict:
+    """Người dùng (đã đăng nhập console) duyệt phiên CLI của chính mình."""
+    p = _principal(authorization)
+    if p["kind"] not in ("session", "pat"):
+        raise HTTPException(status_code=401, detail="cần đăng nhập console")
+    code = (body.get("user_code") or "").strip().upper()
+    deny = bool(body.get("deny"))
+    with _db() as conn:
+        r = conn.execute(
+            "SELECT device_code, status, expires_at, label FROM device_codes WHERE user_code=%s",
+            (code,)).fetchone()
+        if not r:
+            raise HTTPException(status_code=404, detail="mã không đúng — kiểm tra lại")
+        if r["expires_at"] and r["expires_at"] < datetime.now(timezone.utc):
+            raise HTTPException(status_code=410, detail="mã đã hết hạn — chạy lại lệnh đăng nhập")
+        if r["status"] != "pending":
+            raise HTTPException(status_code=409, detail=f"mã đã được xử lý ({r['status']})")
+        if deny:
+            conn.execute("UPDATE device_codes SET status='denied' WHERE user_code=%s", (code,))
+            conn.commit()
+            return {"ok": True, "status": "denied"}
+        token = _mint_pat(conn, p["actor"], r["label"] or "CLI")
+        conn.execute("UPDATE device_codes SET status='approved', email=%s, token_once=%s "
+                     "WHERE user_code=%s", (p["actor"], token, code))
+        _audit(conn, p["actor"], "device_login_approve", "account", p["actor"],
+               {"label": r["label"]})
+        conn.commit()
+    return {"ok": True, "status": "approved", "email": p["actor"], "expires_days": _PAT_DAYS}
+
+
+@app.get("/v1/auth/tokens")
+def pat_list(authorization: str = Header(default="")) -> list[dict]:
+    p = _principal(authorization)
+    if p["kind"] not in ("session", "pat"):
+        raise HTTPException(status_code=401, detail="cần đăng nhập console")
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT token_hash, label, created_at, expires_at, last_used_at FROM personal_tokens "
+            "WHERE email=%s AND revoked_at IS NULL ORDER BY created_at DESC", (p["actor"],)).fetchall()
+    return [{"id": r["token_hash"][:12], "label": r["label"], "created_at": r["created_at"],
+             "expires_at": r["expires_at"], "last_used_at": r["last_used_at"]} for r in rows]
+
+
+@app.post("/v1/auth/tokens/{token_id}/revoke")
+def pat_revoke(token_id: str, authorization: str = Header(default="")) -> dict:
+    p = _principal(authorization)
+    if p["kind"] not in ("session", "pat"):
+        raise HTTPException(status_code=401, detail="cần đăng nhập console")
+    with _db() as conn:
+        n = conn.execute(
+            "UPDATE personal_tokens SET revoked_at=now() WHERE email=%s AND token_hash LIKE %s "
+            "AND revoked_at IS NULL RETURNING token_hash", (p["actor"], token_id + "%")).fetchone()
+        if not n:
+            raise HTTPException(status_code=404, detail="không thấy token")
+        _audit(conn, p["actor"], "pat_revoke", "account", p["actor"], {"id": token_id})
+        conn.commit()
+    return {"ok": True}
+
+
 # ---------------- P10: yêu cầu phân quyền per-agent (admin duyệt) ----------------
 
 @app.get("/v1/roles/catalog")
 def roles_catalog(authorization: str = Header(default="")) -> dict:
     """Trang 'Xin quyền': mọi agent (tên + bot Lark) + quyền hiện có + yêu cầu của tôi."""
     p = _principal(authorization)
-    if p["kind"] != "session":
+    if p["kind"] not in ("session", "pat"):
         raise HTTPException(status_code=401, detail="cần đăng nhập console")
     email = p["actor"]
     _ensure_schema()
@@ -1541,7 +1720,7 @@ def roles_catalog(authorization: str = Header(default="")) -> dict:
 def roles_request(body: dict, authorization: str = Header(default="")) -> dict:
     """Người dùng xin quyền moderator|admin trên 1 agent (hoặc platform). Admin sẽ duyệt."""
     p = _principal(authorization)
-    if p["kind"] != "session":
+    if p["kind"] not in ("session", "pat"):
         raise HTTPException(status_code=401, detail="cần đăng nhập console")
     email = p["actor"]
     scope_type = body.get("scope_type") or "agent"
@@ -2140,15 +2319,31 @@ def enroll(agent: dict, authorization: str = Header(default="")) -> dict:
     key của agent đã có (409 nếu trùng id).
     """
 
-    if not ENROLL_TOKEN or authorization != f"Bearer {ENROLL_TOKEN}":
-        raise HTTPException(status_code=401, detail="enroll token required (LSR_ENROLL_TOKEN)")
     _ensure_schema()
+    # 3 cách xác thực, ưu tiên DANH TÍNH NGƯỜI DÙNG (không cần secret dùng chung):
+    #   1. token cá nhân / phiên console  → owner mặc định = chính người đó;
+    #      admin platform thì agent ACTIVE luôn (tự duyệt).
+    #   2. enroll token dùng chung        → giữ tương thích cho script cũ (agent 'registered').
+    p = _principal(authorization)
+    tok = _bearer(authorization)
+    if p["kind"] in ("session", "pat", "admin_token"):
+        actor, actor_role = p["actor"], p["role"]
+    elif ENROLL_TOKEN and tok == ENROLL_TOKEN:
+        actor, actor_role = None, None
+    else:
+        raise HTTPException(
+            status_code=401,
+            detail="cần đăng nhập: chạy `bash scripts/lsr-login.sh` (mở console duyệt 1 lần) "
+                   "— hoặc dùng LSR_ENROLL_TOKEN nếu bạn có sẵn")
     agent_id = (agent.get("agent_id") or "").strip()
-    owner = str(agent.get("owner", "")).strip()
+    owner = str(agent.get("owner", "")).strip() or (actor or "")
     if not agent_id:
         raise HTTPException(status_code=422, detail="agent_id required")
     if not _EMAIL_RE.match(owner):
         raise HTTPException(status_code=422, detail="owner phải là email thật của người sở hữu")
+    # Admin tự duyệt agent mình tạo; người khác vẫn cần admin activate.
+    auto_approve = actor_role == "admin"
+    status0 = "active" if auto_approve else "registered"
     skills = agent.get("skills") or []
     if not isinstance(skills, list):
         skills = [str(skills)]
@@ -2163,33 +2358,45 @@ def enroll(agent: dict, authorization: str = Header(default="")) -> dict:
             INSERT INTO agents (agent_id, name, owner, squad, connect_mode, is_squad_agent,
                                 skills, status, telemetry_key_hash, deployment, repo_url,
                                 host_note, backup_owner, prompt_version, prompt_ref,
-                                backend_url, dashboard_url)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,'registered',%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                                backend_url, dashboard_url, golive_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                    CASE WHEN %s='active' THEN now() END)
             """,
             (agent_id, agent.get("name"), owner, agent.get("squad"),
              agent.get("connect_mode", "bot"), bool(agent.get("is_squad_agent", False)),
-             skills, key_hash, agent.get("deployment", "managed"), agent.get("repo_url"),
+             skills, status0, key_hash, agent.get("deployment", "managed"), agent.get("repo_url"),
              agent.get("host_note"), agent.get("backup_owner"),
              agent.get("prompt_version"), agent.get("prompt_ref"),
-             agent.get("backend_url"), agent.get("dashboard_url")),
+             agent.get("backend_url"), agent.get("dashboard_url"), status0),
         )
+        # Người tạo là moderator của chính agent mình (quản trong console mà không cần xin).
+        if actor and "@" in actor:
+            conn.execute(
+                "INSERT INTO role_bindings(email, scope_type, scope_id, role, granted_by) "
+                "VALUES (%s,'agent',%s,'moderator','auto-enroll') ON CONFLICT DO NOTHING",
+                (actor, agent_id))
         schema = agent_schema(agent_id)
         conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
-        _audit(conn, owner, "enroll", "agent", agent_id,
+        _audit(conn, actor or owner, "enroll", "agent", agent_id,
                {"name": agent.get("name"), "deployment": agent.get("deployment", "managed"),
-                "self_service": True})
-        # Admin duyệt mới được chạy kênh thực (Lark/Telegram) + A2A — báo ngay khi đăng ký.
+                "self_service": True, "auto_approved": auto_approve,
+                "via": p["kind"] if actor else "enroll_token"})
         _notify_admins(conn,
-                       f"🆕 Agent mới đăng ký: {agent_id} ({agent.get('name') or '?'})\n"
-                       f"Owner: {owner} · deploy: {agent.get('deployment', 'managed')}\n"
-                       f"Token kết nối đã cấp TỰ ĐỘNG. Test qua web chat được ngay; "
-                       f"duyệt ACTIVATE để chạy Lark/Telegram + A2A: "
-                       f"{APP_PUBLIC_URL}/agent/{agent_id}")
+                       f"🆕 Agent mới: {agent_id} ({agent.get('name') or '?'})\n"
+                       f"Owner: {owner} · người tạo: {actor or 'enroll-token'} · "
+                       f"deploy: {agent.get('deployment', 'managed')}\n"
+                       + ("✅ ĐÃ TỰ ACTIVE (người tạo là admin platform)."
+                          if auto_approve else
+                          "Token đã cấp TỰ ĐỘNG; test web chat được ngay. "
+                          "Cần ACTIVATE để chạy Lark/Telegram + A2A.")
+                       + f"\n{APP_PUBLIC_URL}/agent/{agent_id}")
         conn.commit()
     _minh_anh_share(agent_id)
     return {
         "agent_id": agent_id,
-        "status": "registered",
+        "status": status0,
+        "auto_approved": auto_approve,
+        "created_by": actor,
         "telemetry_key": telemetry_key,     # hiện MỘT LẦN — dùng cho plugin VÀ backend
         "agent_token": telemetry_key,       # alias: LSR_AGENT_TOKEN cho API /v1/self*
         "db_schema": schema,                # schema Postgres riêng của agent (truy cập qua /v1/self*)
@@ -2205,7 +2412,8 @@ def enroll(agent: dict, authorization: str = Header(default="")) -> dict:
             "— backend gọi /v1/self* để lấy dữ liệu agent (không cần admin/gateway token).",
             "Deploy backend: node scripts/provision-vercel.mjs " + agent_id +
             " (dùng VERCEL_TOKEN của owner) → tự set backend_url.",
-            "Hoàn tất golive checklist rồi nhờ admin chuyển sang 'active'.",
+            "Agent đã ACTIVE — chạy được cả Lark/Telegram + A2A." if auto_approve
+            else "Test ngay bằng web chat console; nhờ admin ACTIVATE để chạy Lark/Telegram + A2A.",
         ],
     }
 
@@ -4743,7 +4951,25 @@ def ops_snapshot(authorization: str = Header(default="")) -> dict:
         "connector_errors_24h": [dict(r) for r in errs],
         "credentials_expiring": [dict(r) for r in expiring],
         "pending_actions": pending,
+        "disk": _disk_usage(),
     }
+
+
+def _disk_usage() -> dict:
+    """Dung lượng ổ của VM. Hết đĩa = build/deploy/DB chết đứng — phải cảnh báo sớm.
+
+    (Sự cố 08-14: ổ đầy 100% do image Docker cũ tích tụ, deploy fail giữa chừng.)
+    """
+    try:
+        st = os.statvfs("/")
+        total = st.f_blocks * st.f_frsize
+        free = st.f_bavail * st.f_frsize
+        if not total:
+            return {}
+        return {"total_gb": round(total / 1e9, 1), "free_gb": round(free / 1e9, 1),
+                "used_pct": round((total - free) / total * 100)}
+    except Exception:
+        return {}
 
 
 # -------- Mart: rollup KPI (nguồn cho dashboard + đối soát) --------

@@ -19,6 +19,7 @@ của team** — KHÔNG nằm trên main. Hỏi người dùng họ thuộc team
 
 ```bash
 git checkout <branch> && git pull
+bash scripts/lsr-login.sh          # đăng nhập platform 1 lần (không cần xin token của ai)
 ```
 
 Sau đó **đọc `agents/<ID>/CLAUDE.md`** — đó là hướng dẫn chính của project agent
@@ -33,8 +34,11 @@ Sau đó **đọc `agents/<ID>/CLAUDE.md`** — đó là hướng dẫn chính c
    apps/` sẽ bị CI `scope-guard` chặn (core do maintainer giữ).
 3. **Secret không vào git**: token/secret chỉ nằm trong `.env` local (đã gitignore)
    hoặc trên VM `/opt/lsr-platform/`. Không paste token vào code/commit.
-4. Agent mới đăng ký sẽ có **token tự động** nhưng phải được **admin activate** mới
-   chạy kênh thực (Lark/Telegram) + A2A. Web chat console test được ngay.
+4. **Đăng nhập bằng `bash scripts/lsr-login.sh`** — mở link, bấm Duyệt trên console,
+   token cá nhân lưu ở `~/.lsr/token`. KHÔNG đi xin `LSR_ENROLL_TOKEN` của ai nữa.
+5. Agent mới đăng ký có **token tự động**. Người tạo là **admin platform** → agent
+   **ACTIVE luôn**; người khác → `registered`, test web chat được ngay, admin duyệt
+   mới chạy kênh thực (Lark/Telegram) + A2A.
 
 ## Cấu trúc repo (tham khảo nhanh)
 

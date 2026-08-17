@@ -427,9 +427,42 @@
 `fail` để trả về queue, tuyệt đối không reply. (Một tin thật của nhóm SOURCING MM từng bị
 harness trả lời nhầm — xem báo cáo 08-14.)
 
+## 17. P11 — Device-login CLI + token cá nhân + enroll tự duyệt (✅ 08-14, 25/25 pass)
+
+> Bỏ rào "đi xin enroll token": CLI/Claude Code tự đăng nhập như `gh auth login`.
+> Token cá nhân mang ĐÚNG quyền người dùng; **admin enroll → agent ACTIVE luôn**.
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| P11.1a | `POST /v1/auth/device/start` | Trả user_code + link duyệt, không cần auth | ✅ |
+| P11.1b | Poll khi chưa duyệt | `pending` — không cấp token sớm | ✅ |
+| P11.1c | Duyệt khi chưa đăng nhập console | 401 | ✅ |
+| P11.1d | Người dùng duyệt trên console | `approved` | ✅ |
+| P11.1e | CLI poll sau duyệt | Nhận token cá nhân của ĐÚNG người duyệt | ✅ |
+| P11.1f | Poll lần 2 | Token chỉ trả MỘT LẦN rồi xoá | ✅ |
+| P11.1g | Mã sai | 404 | ✅ |
+| P11.2a | Gọi `/v1/auth/me` bằng PAT | Nhận diện đúng người | ✅ |
+| P11.2b | PAT moderator gọi API admin | **403** (không phải 401 — không đá về login) | ✅ |
+| P11.2c | Liệt kê token của mình | Thấy nhãn thiết bị | ✅ |
+| P11.3a | Enroll bằng PAT, KHÔNG enroll-token | Tạo agent thành công | ✅ |
+| P11.3b | — | Token agent cấp TỰ ĐỘNG trong response | ✅ |
+| P11.3c | Không truyền owner | Tự lấy = email người tạo | ✅ |
+| P11.3d | Người tạo là moderator | `auto_approved=false` — chờ admin | ✅ |
+| P11.3e | — | Người tạo tự thành moderator của agent đó | ✅ |
+| P11.4a | **Admin** enroll | Agent `active` NGAY (tự duyệt) | ✅ |
+| P11.4b | — | Response ghi `auto_approved=true` | ✅ |
+| P11.4c | — | `golive_at` được ghi | ✅ |
+| P11.4d | Tin Lark tới agent admin vừa tạo | `queued` — chạy kênh thực ngay | ✅ |
+| P11.4e | Tin Lark tới agent của moderator | `rejected` — vẫn chờ duyệt | ✅ |
+| P11.5a | Enroll bằng enroll-token cũ | Vẫn chạy (không phá script cũ) | ✅ |
+| P11.5b | Enroll không auth | Lỗi CHỈ ĐƯỜNG: chạy `lsr-login.sh` | ✅ |
+| P11.5c | Thu hồi token cá nhân | Chết ngay (401) | ✅ |
+| P11.6a | Ops snapshot | Có dung lượng đĩa VM | ✅ |
+| P11.6b | AG-OPS khi đĩa ≥85% | Cảnh báo kèm lệnh dọn Docker (sự cố 08-14) | ✅ |
+
 ---
 
-**Tổng: 219 case — 213 ✅ đã nghiệm thu (97%).**
+**Tổng: 244 case — 238 ✅ đã nghiệm thu (98%).**
 
 **7 case còn lại, chia 2 nhóm:**
 - **Cần bạn xử lý (2):** `P1.1` — bot Admin App chưa được add vào nhóm nào (`/v1/lark/chats` rỗng — add bot vào 1 nhóm là xong); `ST.8` — cần team thật cùng push 1 branch.
