@@ -232,6 +232,52 @@ def test_answer_without_citation_is_high_risk(tmp_path):
     assert g.store.one("SELECT * FROM legal_gates WHERE session_id='s4'")["risk"] == "high"
 
 
+def test_first_turn_greets_and_discloses_monitoring(tmp_path):
+    """Lượt đầu: nói rõ việc Pháp chế giám sát — nghĩa vụ thông báo, không để footer nhỏ."""
+    store, pf, eng, g = make(tmp_path, ctx={"n_turns": 0})
+    out = consumer.handle({"id": 20, "channel": "lark", "session_id": "s-new",
+                           "payload": {"text": "chào bạn", "chat_id": "oc_u"}},
+                          pf, store, eng, g)
+    assert out.startswith("Mình là **Legal Agent**")
+    assert "được bộ phận Pháp chế giám sát" in out
+    # Không nói cùng một điều hai lần trong một tin nhắn.
+    assert out.count("Pháp chế giám sát") == 1
+
+
+def test_later_turns_do_not_repeat_greeting(tmp_path):
+    store, pf, eng, g = make(tmp_path, ctx={"n_turns": 4})
+    out = consumer.handle({"id": 21, "channel": "lark", "session_id": "s-old",
+                           "payload": {"text": "hỏi tiếp", "chat_id": "oc_u"}},
+                          pf, store, eng, g)
+    assert "Mình là **Legal Agent**" not in out
+    assert "Pháp chế giám sát" in out          # vẫn còn nhắc ở footer
+
+
+def test_high_risk_mentions_reviewers(tmp_path):
+    """Rủi ro cao thì phải @ người trực, không chỉ đổi màu icon."""
+    store, pf, eng, g = make(tmp_path,
+                             engine_answer=EngineAnswer(ok=True, text="chưa quy định"))
+    store.write("INSERT INTO legal_roles (email, role, contract_type, open_id, active) "
+                "VALUES ('thint@hapas.vn','legal_reviewer',NULL,'ou_thint',1)")
+    consumer.handle({"id": 22, "channel": "lark", "session_id": "s-hr",
+                     "payload": {"text": "crypto?", "chat_id": "oc_u"}}, pf, store, eng, g)
+    card = next(m for to, m in pf.sent if to == consumer.GROUP_CHAT_ID)
+    assert "<at id=ou_thint></at>" in card and "cần xem ngay" in card
+
+
+def test_low_risk_does_not_mention_anyone(tmp_path):
+    """@ mọi thứ là cách nhanh nhất để người ta tắt thông báo của group."""
+    store, pf, eng, g = make(tmp_path, engine_answer=EngineAnswer(
+        ok=True, text="ok", citations=[Citation("Quy chế", "https://x/wiki/a", "")]))
+    store.write("INSERT INTO legal_roles (email, role, contract_type, open_id, active) "
+                "VALUES ('thint@hapas.vn','legal_reviewer',NULL,'ou_thint',1)")
+    consumer.handle({"id": 23, "channel": "lark", "session_id": "s-lr",
+                     "payload": {"text": "giờ làm việc?", "chat_id": "oc_u"}},
+                    pf, store, eng, g)
+    card = next(m for to, m in pf.sent if to == consumer.GROUP_CHAT_ID)
+    assert "<at id=" not in card
+
+
 def test_group_chatter_gets_no_reply(tmp_path):
     """Tin thường trong group duyệt → agent im lặng, không trả lời bừa."""
     store, pf, eng, g = make(tmp_path)

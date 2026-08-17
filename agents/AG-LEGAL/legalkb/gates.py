@@ -161,10 +161,22 @@ class Gates:
             return False
         return self.pf.lark_send(self.group, markdown=self.render(gate))
 
+    def mentions(self, role="legal_reviewer"):
+        """Chuỗi @ những người cần đọc ngay. Không có open_id thì bỏ qua, không chèn rác."""
+        ids = [r["open_id"] for r in self.roles(role) if r.get("open_id")]
+        return " ".join(f"<at id={i}></at>" for i in ids)
+
     def render(self, gate):
         p = gate.get("payload") or {}
         mark = RISK_MARK.get(gate.get("risk") or "low", "")
-        lines = [f"**#{gate['id']} · {KIND_LABEL.get(gate['kind'], gate['kind'])}** {mark}"]
+        lines = []
+        # Rủi ro cao thì phải có người đọc NGAY → gắn @; các mức khác chỉ để theo dõi,
+        # @ tất cả mọi thứ là cách nhanh nhất để người ta tắt thông báo của group.
+        if (gate.get("risk") or "low") == "high":
+            at = self.mentions()
+            if at:
+                lines.append(at + " **cần xem ngay**")
+        lines.append(f"**#{gate['id']} · {KIND_LABEL.get(gate['kind'], gate['kind'])}** {mark}")
         if gate.get("title"):
             lines.append(gate["title"])
         for label, key in (("Người yêu cầu", "requester_name"), ("Câu hỏi", "question"),

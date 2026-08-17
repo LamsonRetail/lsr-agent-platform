@@ -45,6 +45,12 @@ WATCHED_NOTE = ("_Nội dung trao đổi được bộ phận Pháp chế giám 
 DEGRADE_MSG = ("Hiện không truy cập được kho tài liệu pháp chế, đã ghi nhận sự cố. "
                "Vui lòng thử lại sau hoặc liên hệ trực tiếp bộ phận Pháp chế.\n\n"
                + DISCLAIMER)
+# Nghĩa vụ thông báo giám sát — nói ở lượt ĐẦU của mỗi hội thoại, đầy đủ một lần,
+# thay vì để người dùng tự suy ra từ dòng footer nhỏ.
+GREETING = ("Mình là **Legal Agent** — trợ lý pháp chế nội bộ của LSR.\n"
+            "Trước khi bắt đầu: nội dung trao đổi này **được bộ phận Pháp chế giám sát** "
+            "để bảo đảm chất lượng tư vấn, và Pháp chế có thể tham gia trực tiếp khi cần.\n\n"
+            "---\n")
 # S2–S5 chưa mở: nói thật, không giả vờ làm được.
 NOT_READY = {
     "s2_create_contract": "soạn hợp đồng từ mẫu",
@@ -185,6 +191,11 @@ def handle_group(job, pf, store, g):
         return f"Không thấy việc `#{gate_id}`. Gõ `#ds` để xem danh sách."
 
     if action == "join":
+        # Cách "thêm người vào thẳng chat" chưa làm được: broker platform chỉ có
+        # send/resolve/chats/resource; `_lark_chat_member` của core dùng
+        # member_id_type=app_id nên chỉ thêm/gỡ BOT, không thêm người, và không expose
+        # cho agent. Đã mở yêu cầu core C6. Vì vậy đường duy nhất hiện nay là RELAY —
+        # và relay chạy cho cả chat nhóm lẫn DM 1-1, nên không ai bị kẹt.
         if not gate.get("session_id"):
             return f"`#{gate_id}` không gắn với hội thoại nào nên không tham gia được."
         g.set_mode(gate["session_id"], "joined", taken_by=who["email"],
@@ -195,7 +206,8 @@ def handle_group(job, pf, store, g):
                          f"hỗ trợ trực tiếp cuộc trao đổi này.")
         return (f"Đã ghi nhận: **{who.get('name') or who['email']}** tham gia hội thoại "
                 f"của `#{gate_id}`. Agent tạm ngừng tự trả lời. "
-                f"Chuyển lời: `#{gate_id} nhắn: <nội dung>` · Xong: `#{gate_id} trả lại`")
+                f"Chuyển lời cho người hỏi: `#{gate_id} nhắn: <nội dung>` · "
+                f"Xong: `#{gate_id} trả lại`")
 
     if action == "release":
         if gate.get("session_id"):
@@ -254,6 +266,9 @@ def handle(job, pf, store, engine, g):
         return None
 
     ctx = pf.context(sid, user_ref=uref, q=q)
+    # n_turns của platform = số lượt đã ghi. Lấy context TRƯỚC khi ghi lượt này nên
+    # 0 nghĩa là đây là lượt đầu của hội thoại → chào + nói rõ việc giám sát.
+    first_turn = int(ctx.get("n_turns") or 0) == 0
     has_file = bool(payload.get("file_key"))
     r = brain.route(q, ctx, has_attachment=has_file)
     intent, risk = r["intent"], r["risk"]
@@ -268,9 +283,13 @@ def handle(job, pf, store, engine, g):
                  f"Mình đã báo bộ phận Pháp chế để có người xử lý cho bạn.\n\n" + DISCLAIMER)
     else:
         ans = answer_s1(q, ctx, sid, engine, store)
-        reply = format_reply(ans, kb_updated_at=store.get_meta("last_sync_at"))
+        # Lượt đầu đã nói rõ việc giám sát ở câu chào → không nhắc lại ở footer cùng tin.
+        reply = format_reply(ans, kb_updated_at=store.get_meta("last_sync_at"),
+                             watched=not first_turn)
         risk = "high" if (ans.ok and not any(c.url for c in ans.citations)) else risk
 
+    if first_turn:
+        reply = GREETING + reply
     record_turns(pf, sid, q, reply, uref, job.get("channel"), model=ctx.get("model"))
 
     # N1 Observe: báo Pháp chế MỌI lượt, gom theo hội thoại, không chặn người dùng.
@@ -286,9 +305,11 @@ def open_observe(g, sid, chat_id, uref, q, reply, risk, intent, channel):
     if cur and cur["status"] in gates_mod.OPEN_STATUSES:
         if risk == "high" and (cur["risk"] or "low") != "high":
             g.store.write("UPDATE legal_gates SET risk='high' WHERE id=?", (cur["id"],))
+            at = g.mentions()
             g.pf.lark_send(g.group, markdown=(
-                f"🔴 **#{cur['id']} — lượt mới có rủi ro cao**\n- **Câu hỏi:** {q[:300]}\n"
-                f"Vào hỗ trợ: `#{cur['id']} tham gia`"))
+                (at + " " if at else "")
+                + f"🔴 **#{cur['id']} — lượt mới có rủi ro cao**\n"
+                  f"- **Câu hỏi:** {q[:300]}\nVào hỗ trợ: `#{cur['id']} tham gia`"))
         return cur["id"]
     return g.open("s1_answer", OBSERVE, risk=risk, session_id=sid, channel=channel,
                   requester_ref=uref, title=None,
