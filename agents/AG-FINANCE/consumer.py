@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import ssl
 import time
 import urllib.error
 import urllib.parse
@@ -23,6 +24,27 @@ import urllib.request
 from data_hub import ask, runtime
 from data_hub.sources.base import SourceError
 from shared.auth import DENY_MESSAGE, is_squad_member_from_payload
+
+
+def _ssl_context() -> ssl.SSLContext | None:
+    """Bản Python tải từ python.org trên macOS KHÔNG kèm CA bundle.
+
+    Không có nó thì mọi lệnh gọi HTTPS chết với CERTIFICATE_VERIFY_FAILED và agent không
+    poll được job nào — đây là lỗi chặn đường, không phải chuyện nhỏ. Trong Docker và trên
+    Linux thì CA có sẵn, hàm này trả None để urllib dùng mặc định.
+
+    Vẫn xác thực chứng chỉ đầy đủ. Không bao giờ tắt verify để cho chạy được.
+    """
+    if os.path.exists(ssl.get_default_verify_paths().openssl_cafile or ""):
+        return None
+    try:
+        import certifi
+    except ImportError:
+        return None
+    return ssl.create_default_context(cafile=certifi.where())
+
+
+SSL_CONTEXT = _ssl_context()
 
 PLATFORM = os.environ.get("LSR_PLATFORM_URL", "https://platform.34-126-154-135.sslip.io").rstrip("/")
 TOKEN = os.environ.get("LSR_AGENT_TOKEN", "")
@@ -65,7 +87,7 @@ def api(method: str, path: str, payload=None, timeout: int = 40):
         method=method,
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {TOKEN}"},
     )
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urllib.request.urlopen(req, timeout=timeout, context=SSL_CONTEXT) as r:
         body = r.read().decode()
         return json.loads(body) if body else {}
 
@@ -128,6 +150,10 @@ def handle(job: dict) -> str:
     sid = job.get("session_id") or f"job-{job['id']}"
     uref = payload.get("sender_open_id") or payload.get("user_ref") or ""
 
+    # Ghi lại AI hỏi GÌ trước khi trả lời. Cần cho việc soát lại các lần bị từ chối, và là
+    # cách duy nhất lấy được open_id để đưa vào whitelist khi app chưa có scope đọc thành viên.
+    print(f"→ job#{job['id']} [{job.get('channel')}] {uref or 'chưa rõ'}: {question[:80]}")
+
     ctx = api(
         "GET",
         f"/v1/self/context?session_id={urllib.parse.quote(sid)}"
@@ -168,6 +194,15 @@ def main() -> None:
         try:
             jobs = api("GET", "/v1/self/jobs?wait=25&max=1")
         except urllib.error.HTTPError as e:
+            if e.code == 401:
+                # Token sai/bị thu hồi. Retry 5 giây một lần chỉ tạo ra một dòng log vô nghĩa
+                # lặp mãi — phải nói rõ nguyên nhân, vì nhìn "poll 401" không ai đoán ra.
+                print(
+                    "poll 401 — LSR_AGENT_TOKEN không còn hợp lệ (sai, hết hạn hoặc bị thu hồi). "
+                    "Xin token mới ở Console rồi cập nhật .env. Thử lại sau 60s."
+                )
+                time.sleep(60)
+                continue
             print(f"poll {e.code}")
             time.sleep(30 if e.code == 403 else 5)
             continue

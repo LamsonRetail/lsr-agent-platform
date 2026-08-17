@@ -1,6 +1,11 @@
 # Phase 0 chỉ cần test. Thêm dependency khi thực sự dùng, không thêm trước.
 pytest>=8.0
 
+# Python tải từ python.org trên macOS KHÔNG kèm CA bundle, urllib gọi HTTPS là chết ngay với
+# CERTIFICATE_VERIFY_FAILED và agent không poll được job nào. consumer.py chỉ dùng tới khi
+# thiếu CA hệ thống; trong Docker và trên Linux có sẵn nên không đụng đến.
+certifi>=2024.0
+
 # Phase 1 — bỏ comment khi bắt đầu implement nguồn dữ liệu:
 # google-api-python-client>=2.0   # đọc Google Sheet
 # google-auth>=2.0                # service account

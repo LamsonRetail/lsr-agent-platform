@@ -11,4 +11,14 @@ services:
       FIN_SQUAD_EMAILS: ${FIN_SQUAD_EMAILS:-}
       FIN_SQUAD_OPEN_IDS: ${FIN_SQUAD_OPEN_IDS:-}
       FIN_SQUAD_CHAT_IDS: ${FIN_SQUAD_CHAT_IDS:-}
+      # Thiếu dòng này thì container chạy ở chế độ nguồn thật và trả lời "chưa truy cập
+      # được nguồn số liệu" — trông như hỏng, thực ra là chưa khai biến.
+      FIN_FAKE_DATA: ${FIN_FAKE_DATA:-}
+      FIN_LARK_APP_ID: ${FIN_LARK_APP_ID:-}
+      FIN_LARK_APP_SECRET: ${FIN_LARK_APP_SECRET:-}
+      FIN_LARK_DOMAIN: ${FIN_LARK_DOMAIN:-}
+      FIN_STALE_HOURS_RECEIVABLE: ${FIN_STALE_HOURS_RECEIVABLE:-}
+      FIN_STALE_HOURS_PAYABLE: ${FIN_STALE_HOURS_PAYABLE:-}
+      FIN_STALE_HOURS_REVENUE: ${FIN_STALE_HOURS_REVENUE:-}
+      FIN_STALE_HOURS_EXPENSE: ${FIN_STALE_HOURS_EXPENSE:-}
     restart: unless-stopped
