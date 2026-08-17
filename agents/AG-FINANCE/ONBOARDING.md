@@ -55,6 +55,17 @@ cd agents/AG-FINANCE
 .venv/bin/python -m pytest tests/ -q
 ```
 
+Xem agent trả lời thật mà **không cần credential nào** — dữ liệu giả đi qua đúng đường
+chuẩn hoá như dữ liệu thật:
+
+```bash
+cd agents/AG-FINANCE
+FIN_FAKE_DATA=1 .venv/bin/python -m data_hub.runtime
+```
+
+In ra nhật ký đồng bộ từng nguồn, dòng nào lỗi, và những hoá đơn lệch số giữa hai nguồn.
+Chưa cần token platform, chưa cần Google Sheet hay MISA.
+
 ## Quy trình làm việc hằng ngày
 
 ```bash
@@ -73,11 +84,28 @@ cd agents/AG-FINANCE && .venv/bin/python -m pytest tests/ -q && cd -
 git add agents/AG-FINANCE
 git commit -m "feat(data_hub): đọc công nợ từ Google Sheet"
 
-# 6. Push và mở PR về feat/ag-finance
+# 6. Kiểm trước khi mở PR — BƯỚC NÀY ĐỪNG BỎ
+bash agents/AG-FINANCE/scripts/pre-pr-check.sh
+
+# 7. Push và mở PR về feat/ag-finance
 git push -u origin fin/huong-doc-google-sheet
 ```
 
 Đừng push trực tiếp vào `feat/ag-finance` hay `main`. Luôn mở PR để người kia xem qua.
+
+### Vì sao bước 6 quan trọng: một cái bẫy của CI
+
+CI `scope-guard` của platform sẽ **chặn oan** nếu nhánh của bạn chậm so với `main`, kèm
+thông báo nói bạn "chạm vào CORE" và liệt kê hàng chục file trong `infra/`,
+`apps/platform-web/`… mà bạn **không hề sửa**.
+
+Bạn không làm gì sai. Workflow so sánh bằng `git diff base head` (hai chấm) nên nó tính cả
+những thay đổi mà `main` có sau điểm nhánh của bạn, rồi hiểu lầm là bạn xoá chúng. Đã xảy
+ra thật ở PR #30: nhánh chậm 49 commit → CI báo 112 file thay vì 51 file thực sự thay đổi.
+
+Chữa: `git merge origin/main` rồi push lại. `pre-pr-check.sh` phát hiện việc này trước khi
+bạn mở PR nên không phải mò. Sửa dứt điểm thì phải đổi `.github/workflows/scope-guard.yml`
+thành `git diff base...head` (ba chấm) — nhưng đó là core, cần maintainer làm.
 
 **Thứ tự bắt buộc: use case → test case → code.** Làm một luồng mới thì cập nhật
 `USECASE.md` và `TESTCASES.md` trước, rồi mới viết code. CI của platform sẽ chặn nếu ngược
