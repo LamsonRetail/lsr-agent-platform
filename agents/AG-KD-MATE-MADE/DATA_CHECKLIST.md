@@ -105,6 +105,32 @@ Nên để **Base riêng** hoặc bảng riêng, tách khỏi số vận hành t
 - [ ] Chốt danh sách người được xem → điền `KD_CONFIDENTIAL_VIEWERS` trong `.env`.
       Để rỗng = **không ai** xem được (fail-closed, cố ý).
 
+## Sổ tay công ty (LAMSON RETAIL INFORMATION_2026) — nạp phần nào
+
+Tài liệu `HJCywftE8ikT6DkwQ14lpIWfgbb` chứa cả bối cảnh thương hiệu lẫn nội quy nhân sự.
+
+- **Phần bối cảnh thương hiệu** (lịch sử, định vị MATE MADE, tầm nhìn, giá trị cốt lõi,
+  lịch họp) — **đã đưa thẳng vào `system_prompt.md`**, không cần sync.
+- **Phần nội quy nhân sự** (phép, lương, phúc lợi, đơn từ) — **không nên nạp**. LYLY khai
+  báo rõ là không xử lý lương thưởng/nhân sự; nạp vào chỉ khiến LYLY trả lời những câu
+  đáng lẽ phải hỏi phòng Nhân sự, mà lại không chịu trách nhiệm được về câu trả lời đó.
+
+Muốn LYLY trả lời cả câu hỏi nhân sự thì đó là **mở rộng phạm vi** — phải sửa `USECASE.md`,
+`system_prompt.md` và bộ test trước, đừng làm bằng cách lặng lẽ nạp thêm tài liệu.
+
+## Chặn secret lọt vào kho
+
+`kd_sync.py` tự **che giá trị** của mọi dòng dạng `password/pass/mật khẩu/secret/api_key/
+token: …`, và các chuỗi dạng `sk-ant-…`, `lsr_tel_…`, `cli_…`, trước khi nộp lên kho.
+
+Có thật trong wiki công ty: mục "Văn hóa Học tập" đang để **tài khoản Brandcamp dùng chung
+kèm mật khẩu**. Không che thì LYLY sẽ đọc lại mật khẩu đó cho bất kỳ ai hỏi.
+
+> Lớp che này là **lưới an toàn cuối**, không phải giải pháp. Gốc rễ là secret không nên
+> nằm trong wiki ai cũng đọc được — báo phòng Nhân sự chuyển sang SSO hoặc tài khoản riêng.
+> `kd_sync` in cảnh báo kèm số chuỗi đã che mỗi lần chạy; nếu con số đó lớn dần thì nghĩa là
+> đang có thêm secret được viết vào tài liệu.
+
 ## Kiểm sau khi nạp
 
 ```bash

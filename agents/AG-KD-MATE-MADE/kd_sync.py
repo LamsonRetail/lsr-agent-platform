@@ -43,6 +43,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -262,9 +263,41 @@ def collect_docs(docs: LarkDocs) -> list[dict]:
     return items
 
 
+# Mật khẩu / khoá viết thẳng trong tài liệu nội bộ. Có thật: wiki công ty đang để tài
+# khoản Brandcamp dùng chung kèm mật khẩu. Nếu để lọt vào kho tri thức thì agent sẽ đọc
+# lại mật khẩu đó cho bất kỳ ai hỏi — che ở đây, trước khi nộp.
+_SECRET_LINE = re.compile(
+    r"^(.*(?:pass(?:word)?|pwd|mật\s*khẩu|mat\s*khau|secret|api[_\s-]?key|token|"
+    r"app[_\s-]?secret)\s*[:=]\s*)(\S.*)$",
+    re.IGNORECASE | re.MULTILINE)
+_SECRET_INLINE = re.compile(r"\b(sk-ant-[\w-]+|lsr_tel_[\w-]+|cli_[a-f0-9]{16,})\b",
+                            re.IGNORECASE)
+
+_redacted = 0
+
+
+def redact(text: str) -> str:
+    """Che giá trị mật khẩu/khoá trước khi nộp lên kho tri thức.
+
+    Che **giá trị**, giữ lại phần mô tả — để câu hướng dẫn ("mật khẩu do IT cấp") vẫn tra
+    được, chỉ mất đúng chuỗi bí mật.
+    """
+    global _redacted
+    out, n = _SECRET_LINE.subn(r"\1[ĐÃ CHE]", text or "")
+    out, n2 = _SECRET_INLINE.subn("[ĐÃ CHE]", out)
+    _redacted += n + n2
+    return out
+
+
 def _item(**kw) -> dict:
-    """Khung một mục tri thức — gom vào đây để mọi nguồn dùng chung đúng schema."""
+    """Khung một mục tri thức — gom vào đây để mọi nguồn dùng chung đúng schema.
+
+    Mọi nguồn đều đi qua đây nên ``redact()`` đặt ở đây là chặn được toàn bộ, không phải
+    nhớ gọi ở từng hàm collect.
+    """
     conf = kw.pop("confidential", False)
+    if "content" in kw:
+        kw["content"] = redact(kw["content"])
     return {
         "kind": "knowledge",
         "scope": "agent" if conf else "shared",
@@ -497,6 +530,11 @@ def run_once(dry_run: bool = False) -> dict:
         "confidential": sum(1 for i in items if i["scope"] == "agent"),
         "shared": sum(1 for i in items if i["scope"] == "shared"),
     }
+    stats["redacted"] = _redacted
+    if _redacted:
+        log.warning("đã che %d chuỗi giống mật khẩu/khoá trong tài liệu nguồn — báo chủ "
+                    "tài liệu chuyển secret ra khỏi wiki, đừng chỉ dựa vào lớp che này",
+                    _redacted)
     if dry_run:
         json.dump(items, sys.stdout, ensure_ascii=False, indent=2)
         print()
