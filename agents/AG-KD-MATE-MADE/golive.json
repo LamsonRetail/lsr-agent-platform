@@ -2,6 +2,7 @@
   "_ghi_chu": "Điền bằng dữ kiện thật đã kiểm chứng. Mục nào chưa có bằng chứng thì để trống cho platform báo thiếu, KHÔNG bịa cho đủ.",
 
   "owner_email": "linhtk@hapas.vn",
+  "backup_owner": "linhtk@hapas.vn",
   "team_id": "KINH-DOANH",
   "team_members": [
     {"full_name": "Trần Khánh Linh (B)", "role": "owner", "lark_user_id": "ou_473c3cf14d3670d73c495db0c706d4c2", "expertise": "Digital Performance MATE MADE — nạp và duyệt tri thức"},
@@ -11,11 +12,20 @@
     {"full_name": "Nguyễn Tuấn Anh (A)", "role": "user", "expertise": "TikTok Ads"},
     {"full_name": "Phùng Văn Khoa", "role": "user", "expertise": "TikTok Ads"}
   ],
+  "approver": "linhtk@hapas.vn",
   "collaboration_rules": [
     "LYLY chỉ trả lời khi được hỏi trong nhóm đã khai; không tự chen vào hội thoại giữa người với người",
     "LYLY tra số để người quyết, KHÔNG quyết thay: mọi việc tiêu tiền hay đổi giá đều đẩy về quản lý",
     "Không tự gửi tin ra ngoài nhóm đã khai",
     "Không nhận việc biên bản cho nhóm ngoài team MATE MADE (tránh trùng với AG-MINH-ANH)"
+  ],
+  "work_channels": ["Lark nhóm test 'LYLY Test - MATE MADE' (chat_id oc_1b5d1802d65e02b7c23d42521bde093f)", "web chat console /agent/AG-KD-MATE-MADE"],
+
+  "kpis": [
+    {"kpi_name": "số câu hỏi được LYLY trả lời/tuần", "unit": "câu", "target": 30, "period": "weekly",
+     "data_source": "platform /v1/self/traces", "formula": "count(job complete)"},
+    {"kpi_name": "tỷ lệ câu trả lời số có trích nguồn", "unit": "%", "target": 95, "period": "weekly",
+     "data_source": "review tay tuần đầu", "formula": "câu có source_url / tổng câu hỏi số"}
   ],
 
   "agent_kpi": "OFR (bịa số) = 0 — một lần bịa là fail; ≥95% câu trả lời số có trích nguồn và nêu kỳ dữ liệu; 100% câu xin duyệt ngân sách/giá/khuyến mãi bị từ chối đúng",
@@ -45,6 +55,7 @@
   ],
 
   "auth_mode": "subscription của owner (claude setup-token) — KHÔNG dùng API key chung. Lưu ý hiện trạng: answer() đang chạy bằng luật, chưa gọi model, nên token = 0",
+  "lark_connect": "app riêng cli_aaf6ca84c5389ed4 (LYLY MATEMADE). Nhóm test 'LYLY Test - MATE MADE' chat_id oc_1b5d1802d65e02b7c23d42521bde093f đã tạo — owner cần add bot LYLY vào nhóm này. Event im.message.receive_v1 + Long Connection: sẽ do admin bật khi ACTIVATE (Ingress). Sau khi thử ở nhóm test ổn mới chuyển sang nhóm team thật",
   "telemetry_verified": "đã thấy run trên platform ngày 18/08/2026: job-387, job-388, job-389 (GET /v1/self/traces). total_tokens = 0 vì answer() chạy bằng luật, chưa gọi model — không phải do telemetry hỏng",
   "deployment": "self_hosted: chạy python3 consumer.py trên máy Mac của owner (linhtk). Chưa đưa lên VM — khi cần chạy 24/7 sẽ dùng docker compose trong agents/AG-KD-MATE-MADE/",
 
@@ -64,6 +75,9 @@
     "Trùng việc biên bản họp với AG-MINH-ANH nếu hai bot cùng một nhóm. Giảm thiểu: quy ước LYLY chỉ vào nhóm MATE MADE"
   ],
 
+  "reviewer_first_week": "linhtk@hapas.vn (owner) — đọc lại toàn bộ câu trả lời của LYLY trong tuần đầu, đối chiếu với tài liệu gốc. Ghi chú: owner kiêm reviewer là điểm tập trung rủi ro (USECASE.md), nên tách sang người phụ trách từng nhóm dữ liệu khi team quen việc",
+  "feedback_channel": "Nhóm test 'LYLY Test - MATE MADE' (chat_id oc_1b5d1802d65e02b7c23d42521bde093f) trong giai đoạn thử; sau khi lên nhóm team thật thì phản hồi trực tiếp trong nhóm đó, owner tổng hợp hằng tuần",
+  "team_notified": "Giai đoạn thử chỉ owner trong nhóm test nên chưa cần thông báo rộng. TRƯỚC KHI đưa vào nhóm team thật: owner thông báo minh bạch cho team rằng LYLY ghi log hội thoại và ghi fact công việc về người dùng phục vụ vận hành",
   "schedule": ["kd_sync chạy hàng ngày 6h giờ VN: đồng bộ tài liệu Lark → hàng chờ tri thức, không tự duyệt"],
   "retrain_process": "Tri thức sai → sửa thẳng trong tài liệu Lark gốc rồi chạy kd_sync (hôm sau tự cập nhật, kèm ngày sửa mới). Prompt sai → sửa system_prompt.md, tạo version mới trên console, rollback được bằng cách đổi con trỏ version. Không phải đập đi làm lại",
   "review_cadence": "weekly — owner xem Console (số run, token, lỗi, DLQ) mỗi thứ Hai; đối chiếu vài câu trả lời với tài liệu gốc",
