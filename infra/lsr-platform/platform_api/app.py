@@ -262,7 +262,8 @@ def _require_role(authorization: str, need: str, agent_id: str | None = None) ->
     p = _principal(authorization, agent_id)
     # Phân biệt rõ: CHƯA đăng nhập → 401 (console đưa về trang login);
     # ĐÃ đăng nhập nhưng không đủ quyền trên phạm vi này → 403 (không đá người dùng ra).
-    if p["kind"] not in ("session", "admin_token"):
+    # "pat" = token cá nhân CLI (lsr-login.sh) — cùng danh tính, cùng RBAC như session.
+    if p["kind"] not in ("session", "pat", "admin_token"):
         raise HTTPException(status_code=401, detail="cần đăng nhập console")
     if not p["role"]:
         raise HTTPException(
@@ -1338,7 +1339,7 @@ def _require_admin(authorization: str) -> None:
 def _actor_of(authorization: str, x_actor: str = "") -> str:
     """Danh tính ghi vào audit: ưu tiên người đăng nhập thật, không tin header."""
     p = _principal(authorization)
-    if p.get("kind") == "session" and p.get("actor"):
+    if p.get("kind") in ("session", "pat") and p.get("actor"):
         return p["actor"]
     return x_actor or "service"
 
@@ -2454,19 +2455,26 @@ def set_status(agent_id: str, body: dict, authorization: str = Header(default=""
     status = body.get("status")
     if status not in ("registered", "testing", "active", "deactivated"):
         raise HTTPException(status_code=422, detail="invalid status")
-    # GATE: chỉ cho golive khi checklist đủ mục bắt buộc (bỏ qua nếu force=true).
-    if status == "active" and not body.get("force"):
+    # GATE golive (chốt lại 18/08): chưa đủ checklist thì KHÔNG active — nhưng không
+    # im lặng: platform NHẮC OWNER đúng những mục còn thiếu. Đủ checklist thì hệ thống
+    # tự đẩy sang admin duyệt (xem submit_checklist). force=true chỉ dành cho admin
+    # xử lý ngoại lệ và luôn bị ghi audit.
+    miss: list = []
+    if status == "active":
         with _db() as conn:
             row = conn.execute(
                 "SELECT payload FROM agent_golive_checklist WHERE agent_id=%s", (agent_id,)
             ).fetchone()
-        miss = missing_checklist((row or {}).get("payload") or {})
-        if miss:
-            raise HTTPException(
-                status_code=409,
-                detail={"error": "golive checklist chưa đủ", "missing": miss,
-                        "hint": "POST /v1/agents/{id}/golive-checklist"},
-            )
+            miss = missing_checklist((row or {}).get("payload") or {})
+            if miss and not body.get("force"):
+                _notify_owner_checklist(conn, agent_id, miss)
+                conn.commit()
+                raise HTTPException(
+                    status_code=409,
+                    detail={"error": "golive checklist chưa đủ — đã nhắc owner bổ sung",
+                            "missing": miss,
+                            "hint": "owner nộp tại POST /v1/agents/{id}/golive-checklist; "
+                                    "đủ mục là hệ thống tự trình admin duyệt"})
     golive = "now()" if status == "active" else "golive_at"
     with _db() as conn:
         cur = conn.execute(
@@ -2484,9 +2492,11 @@ def set_status(agent_id: str, body: dict, authorization: str = Header(default=""
         vm = _agent_vm_action(agent_id, "start" if status == "active" else "stop") \
             if status in ("active", "deactivated") else None
         _audit(conn, x_actor or "admin", "set_status", "agent", agent_id,
-               {"status": status, "forced": bool(body.get("force")), "lark_sync": lark, "vm": vm})
+               {"status": status, "lark_sync": lark, "vm": vm,
+                "checklist_missing": miss})
         conn.commit()
-    return {"agent_id": agent_id, "status": status, "lark_sync": lark, "vm": vm}
+    return {"agent_id": agent_id, "status": status, "lark_sync": lark, "vm": vm,
+            "checklist_missing": miss}
 
 
 # ======================= Second brain của team =======================
@@ -4216,8 +4226,10 @@ def agent_profile_update(agent_id: str, body: dict,
     if caps is not None and not isinstance(caps, list):
         raise HTTPException(status_code=400, detail="capabilities phải là danh sách chuỗi")
     with _db() as conn:
+        # %s::jsonb — psycopg gửi Json() dưới type `json`, cột là `jsonb`;
+        # COALESCE(json, jsonb) không ghép được nên phải cast tường minh.
         n = conn.execute(
-            "UPDATE agents SET capabilities=coalesce(%s, capabilities), "
+            "UPDATE agents SET capabilities=coalesce(%s::jsonb, capabilities), "
             "usage_guide=coalesce(%s, usage_guide), lark_bot_name=coalesce(%s, lark_bot_name) "
             "WHERE agent_id=%s RETURNING agent_id",
             (Json(caps) if caps is not None else None, guide, bot, agent_id)).fetchone()
@@ -4594,7 +4606,8 @@ def a2a_result(req_id: str, authorization: str = Header(default="")) -> dict:
 # Platform agent quan sát & ĐỀ XUẤT; người DUYỆT (rủi ro cao) hoặc hệ thống tự chạy
 # (rủi ro thấp, vẫn ghi log). Không ai tự duyệt việc mình đề xuất.
 
-_ACTION_OK = {"alert", "replay_dlq", "deactivate_agent", "rollback_version",
+_ACTION_OK = {"alert", "replay_dlq", "deactivate_agent", "activate_agent",
+              "rollback_version",
               "cooldown_credential", "pause_routing", "publish_version"}
 
 # --- Kênh admin: Telegram (dùng được ngay) + Lark DM (khi app mở available-range) ---
@@ -4743,6 +4756,28 @@ def _execute_action(conn, action: str, params: dict, actor: str) -> dict:
         aid = params.get("agent_id")
         conn.execute("UPDATE agents SET status='deactivated' WHERE agent_id=%s", (aid,))
         return {"deactivated": aid}
+    if action == "activate_agent":
+        # Admin duyệt golive (checklist đã đủ ở bước nộp). Vẫn kiểm lại lần cuối để
+        # không bật agent bị xoá checklist sau khi trình duyệt.
+        aid = params.get("agent_id")
+        row = conn.execute(
+            "SELECT payload FROM agent_golive_checklist WHERE agent_id=%s", (aid,)).fetchone()
+        miss = missing_checklist((row or {}).get("payload") or {})
+        if miss:
+            _notify_owner_checklist(conn, aid, miss)
+            return {"error": "checklist thiếu lại khi duyệt — đã nhắc owner", "missing": miss}
+        n = conn.execute("UPDATE agents SET status='active', golive_at=coalesce(golive_at, now()) "
+                         "WHERE agent_id=%s RETURNING agent_id", (aid,)).fetchone()
+        if not n:
+            return {"error": "agent không tồn tại", "agent_id": aid}
+        lark = _sync_lark_status(conn, aid, activate=True)
+        vm = _agent_vm_action(aid, "start")
+        owner = (conn.execute("SELECT owner FROM agents WHERE agent_id=%s", (aid,)).fetchone()
+                 or {}).get("owner")
+        if owner:
+            _send_lark(owner, f"🎉 Agent {aid} đã được {actor} DUYỆT GOLIVE và đang chạy. "
+                              f"Kênh Lark/Telegram + A2A đã mở.")
+        return {"activated": aid, "lark_sync": lark, "vm": vm}
     if action == "publish_version":
         aid, ver, env = params.get("agent_id"), params.get("version"), params.get("env", "prod")
         gate = _eval_gate(conn, aid, ver)
@@ -4938,6 +4973,11 @@ def ops_snapshot(authorization: str = Header(default="")) -> dict:
             "GROUP BY connector_id ORDER BY n DESC LIMIT 5").fetchall()
         pending = conn.execute(
             "SELECT count(*) n FROM pending_actions WHERE status='pending'").fetchone()["n"]
+        # Binding "bắt tất": không khai app_id lẫn chat_id → hứng MỌI sự kiện của kênh
+        # đó khi không có binding cụ thể hơn. Rất dễ đẩy tin sang nhầm agent.
+        catchall = [dict(r) for r in conn.execute(
+            "SELECT id, channel, agent_id, created_by, created_at FROM routing_binding "
+            "WHERE active AND app_id IS NULL AND chat_id IS NULL ORDER BY id").fetchall()]
         expiring = conn.execute(
             "SELECT id, kind, owner_email, "
             "floor(extract(epoch from (expires_at - now()))/86400)::int AS days_left "
@@ -4952,6 +4992,7 @@ def ops_snapshot(authorization: str = Header(default="")) -> dict:
         "credentials_expiring": [dict(r) for r in expiring],
         "pending_actions": pending,
         "disk": _disk_usage(),
+        "catchall_routes": catchall,
     }
 
 
@@ -5557,11 +5598,58 @@ def missing_checklist(payload: dict) -> list[str]:
     return miss
 
 
+def _notify_owner_checklist(conn, agent_id: str, miss: list[str]) -> None:
+    """Nhắc OWNER những mục checklist còn thiếu (Lark DM, fallback nhóm chung)."""
+    row = conn.execute("SELECT owner, name FROM agents WHERE agent_id=%s", (agent_id,)).fetchone()
+    owner = (row or {}).get("owner") or ""
+    text = (f"📋 Agent {agent_id} ({(row or {}).get('name') or '?'}) chưa golive được: "
+            f"còn thiếu {len(miss)} mục checklist.\n"
+            f"Thiếu: {', '.join(miss)}\n"
+            f"Bổ sung tại Console → Agent → Golive checklist. Đủ mục là hệ thống tự trình "
+            f"admin duyệt, anh/chị không cần xin riêng.")
+    _audit(conn, "system", "golive_blocked", "agent", agent_id,
+           {"missing": miss, "owner_notified": owner})
+    if owner:
+        _send_lark(owner, text)
+
+
+def _request_golive_approval(conn, agent_id: str, actor: str) -> int | None:
+    """Checklist đã đủ → tạo đề xuất ACTIVATE cho admin duyệt (HITL, tách vai).
+
+    Người nộp checklist (owner) là bên đề xuất; admin là bên duyệt — owner không tự
+    bật agent của mình. Trả id đề xuất, hoặc None nếu đã có đề xuất đang chờ.
+    """
+    st = conn.execute("SELECT status, name, owner FROM agents WHERE agent_id=%s",
+                      (agent_id,)).fetchone() or {}
+    if st.get("status") == "active":
+        return None
+    dup = conn.execute(
+        "SELECT id FROM pending_actions WHERE status='pending' AND action='activate_agent' "
+        "AND params->>'agent_id'=%s", (agent_id,)).fetchone()
+    if dup:
+        return dup["id"]
+    row = conn.execute(
+        "INSERT INTO pending_actions(action, params, risk, reason, proposed_by, status) "
+        "VALUES ('activate_agent', %s, 'high', %s, %s, 'pending') RETURNING id",
+        (Json({"agent_id": agent_id}),
+         f"checklist golive ĐỦ — {actor} xin duyệt golive cho {agent_id}", actor)).fetchone()
+    _notify_admins(conn,
+                   f"✅ Agent {agent_id} ({st.get('name') or '?'}) đã ĐỦ golive checklist.\n"
+                   f"Owner: {st.get('owner') or '?'} · người nộp: {actor}\n"
+                   f"Duyệt để agent chạy kênh thật: {APP_PUBLIC_URL}/approvals",
+                   action_id=row["id"])
+    return row["id"]
+
+
 @app.post("/v1/agents/{agent_id}/golive-checklist")
 def submit_checklist(agent_id: str, body: dict, authorization: str = Header(default="")) -> dict:
-    """Owner nộp checklist; dữ liệu team/KPI chảy thẳng vào second brain."""
+    """Owner nộp checklist; đủ mục thì TỰ trình admin duyệt golive.
 
-    _require_admin(authorization)
+    Owner/moderator của agent nộp được (không cần admin platform) — đúng người làm
+    đúng việc; quyền BẬT agent vẫn nằm ở admin.
+    """
+
+    p = _require_role(authorization, "moderator", agent_id)
     _ensure_schema()
     payload = body.get("payload") or body
     miss = missing_checklist(payload)
@@ -5610,12 +5698,25 @@ def submit_checklist(agent_id: str, body: dict, authorization: str = Header(defa
                          k.get("data_source"), k.get("target"), k.get("period"),
                          k.get("weight", 1)),
                     )
+        req_id = None if miss else _request_golive_approval(
+            conn, agent_id, p["actor"] or "owner")
         conn.commit()
-    return {"agent_id": agent_id, "complete": not miss, "missing": miss}
+    if miss:
+        return {"agent_id": agent_id, "complete": False, "missing": miss,
+                "next": "bổ sung các mục còn thiếu rồi nộp lại"}
+    return {"agent_id": agent_id, "complete": True, "missing": [],
+            "approval_request_id": req_id,
+            "next": "đã trình admin duyệt golive — chờ admin bấm Duyệt ở Console → Duyệt việc"}
 
 
 @app.get("/v1/agents/{agent_id}/golive-checklist")
-def get_checklist(agent_id: str) -> dict:
+def get_checklist(agent_id: str, authorization: str = Header(default="")) -> dict:
+    """Xem checklist. CẦN quyền trên agent — payload chứa email, KPI, nguồn dữ liệu nội bộ.
+
+    (Trước 18/08 endpoint này không kiểm quyền; khi mở path qua Caddy cho owner nộp từ
+    máy dev thì hở ra ngoài internet, nên siết lại.)
+    """
+    _require_role(authorization, "user", agent_id)
     _ensure_schema()
     with _db() as conn:
         row = conn.execute(

@@ -14,7 +14,7 @@
 | CORE.4 | Gửi trace với key sai / thiếu | 401 — không ghi gì | ✅ 08-08 |
 | CORE.5 | Trace chứa email/SĐT/thẻ | PII bị che TRƯỚC khi lưu, đếm `pii_flags` | ✅ 08-07 |
 | CORE.6 | Kill-switch: deactivate agent | Collector 403 + gỡ bot khỏi chat Lark + dừng container; KHÔNG xoá dữ liệu | ✅ 08-08 |
-| CORE.7 | Bật lại `active` khi thiếu golive checklist | Bị chặn kèm danh sách mục thiếu (gate golive) | ✅ 08-11 (thấy khi test P1) |
+| CORE.7 | Bật `active` khi thiếu golive checklist | Chặn (409) + **nhắc OWNER** đúng mục còn thiếu; đủ checklist → hệ thống tự trình admin duyệt (xem §19) | ✅ 08-18 |
 | CORE.8 | Thao tác admin (duyệt/xoá/status) | `audit_log` ghi actor thật (X-Actor / agent token) | ✅ 08-08 |
 | CORE.9 | Policy check PreToolUse (deny rule) | Tool bị chặn kèm lý do; fail-open khi service lỗi | ✅ 08-07 |
 | CORE.10 | Quota/cost: vượt ngưỡng ước tính | Cảnh báo trên dashboard Chi phí + quota_alerts | ✅ 08-07 |
@@ -462,7 +462,89 @@ harness trả lời nhầm — xem báo cáo 08-14.)
 
 ---
 
-**Tổng: 244 case — 238 ✅ đã nghiệm thu (98%).**
+## 18. Golive không ma sát + cảnh báo routing bắt tất (✅ 08-18, 6/6 pass)
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| A2.x | ~~Approve bỏ qua checklist~~ | **Đã thay bằng §19** (18/08): checklist là gate, owner bổ sung rồi mới tới admin | ↩︎ |
+| B.1 | Ops snapshot | Phát hiện binding "bắt tất" (app_id + chat_id đều rỗng) | ✅ |
+| B.2 | AG-OPS | Sinh cảnh báo cho TỪNG binding, nêu agent + người tạo + cách xử lý | ✅ |
+| A1 | Caddy carve-out | `/login` `/device` `/api/auth/*` mở (200/307); `/accounts` `/` vẫn 401 basic-auth | ✅ |
+
+---
+
+## 19. Golive 2 chặng: owner đủ checklist → admin duyệt (✅ 08-18, 22/22 pass)
+
+> Quy trình chốt: agent KHÔNG tự lên sóng. Thiếu checklist → platform **nhắc owner**
+> đúng mục thiếu. Đủ 28 mục → hệ thống **tự trình admin duyệt** (HITL, risk=high,
+> owner không tự duyệt việc mình đề xuất). Admin bấm Duyệt → agent chạy kênh thật.
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| GL.1a | Active khi thiếu checklist | 409, không bật | ✅ |
+| GL.1b | Nội dung lỗi | Nói rõ đã nhắc owner + cách bổ sung | ✅ |
+| GL.1c | Danh sách thiếu | Liệt kê đủ 28 mục để owner biết làm gì | ✅ |
+| GL.1d | Audit | Ghi `golive_blocked` + owner đã nhắc | ✅ |
+| GL.1e | Trạng thái agent | Vẫn `registered` — không lọt kênh thật | ✅ |
+| GL.2a | Nộp checklist còn thiếu | `complete=false` + danh sách thiếu | ✅ |
+| GL.2b | Hướng dẫn | Chỉ bước tiếp theo cho owner | ✅ |
+| GL.2c | Trình admin | CHƯA trình khi còn thiếu | ✅ |
+| GL.3a–c | Nộp đủ checklist | `complete=true`, tự tạo đề xuất duyệt, owner biết đang chờ admin | ✅ |
+| GL.3d | Mức rủi ro | `risk=high` → bắt buộc người duyệt | ✅ |
+| GL.3e | Sau khi nộp đủ | KHÔNG tự bật agent (owner không tự golive) | ✅ |
+| GL.3f | Nộp lại nhiều lần | Không tạo đề xuất trùng | ✅ |
+| GL.4a–d | Admin duyệt | Thực thi `activate_agent` → `active` + `golive_at` + kênh Lark `queued` | ✅ |
+| GL.5a–b | **Chống lách**: xoá checklist rồi mới duyệt | Chặn tại lúc thực thi + nhắc owner; agent không bị bật | ✅ |
+| GL.6a–b | Admin `force` (ngoại lệ) | Vẫn bật được nhưng audit ghi rõ thiếu mục gì | ✅ |
+
+---
+
+### 19.1 Owner tự nộp bằng token cá nhân (✅ 08-18, 10/10 pass)
+
+> Bắt **1 bug thật**: `_require_role` (guard trung tâm) chưa nhận token cá nhân PAT →
+> MỌI endpoint cấp moderator đều 401 khi gọi từ CLI. Cùng họ bug session-vs-PAT đã sửa
+> ở `/auth/me` và `_require_admin`; nay sửa tận guard chung + `_actor_of` (audit ghi
+> đúng người thay vì "service").
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| S.1 | Owner (moderator agent) chạy `lsr-login.sh` | Lấy được token cá nhân | ✅ |
+| S.2a | Nộp checklist bằng PAT | Nộp được, KHÔNG cần admin platform | ✅ |
+| S.2b | Nộp 3/28 mục | Trả đúng 25 mục còn thiếu | ✅ |
+| S.2c | — | Chưa trình admin | ✅ |
+| S.3a | Nộp đủ 28 mục | Tự tạo đề xuất duyệt | ✅ |
+| S.3b | `proposed_by` | Ghi đúng email người nộp (không phải "service") | ✅ |
+| S.3c | — | Owner không tự bật agent | ✅ |
+| S.4 | Owner tự duyệt đề xuất của mình | 403 — tách vai | ✅ |
+| S.5a–b | Admin duyệt | AG-HARRY golive **đúng luồng, không force** | ✅ |
+
+---
+
+### 19.2 Owner nộp TỪ MÁY DEV qua Caddy (✅ 08-18, 8/8 pass — Linh báo lỗi)
+
+> Bắt **2 bug thật** + **1 lỗ bảo mật**. Bài học lặp lần 3: test chạy trên VM
+> (`localhost:8090`) **bỏ qua Caddy**, nên mọi carve-out thiếu đều không lộ ra. Test của
+> tính năng owner-facing PHẢI đi từ máy dev qua domain thật.
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| C.1 | `/v1/agents/*/golive-checklist|spec|profile` từ máy dev | Không còn 403 của Caddy (401 = đã tới app) | ✅ |
+| C.2 | `/v1/auth/tokens`, `/v1/roles/catalog` | Mở cho CLI | ✅ |
+| C.3 | `/v1/accounts`, `/v1/model-auth/*`, `/v1/routing` | **Vẫn 403** — ranh giới admin không bị nới | ✅ |
+| E.1–3 | Device-login từ máy dev qua Caddy | Lấy được token cá nhân | ✅ |
+| E.4 | POST checklist rỗng qua Caddy | App trả đúng 28 mục thiếu | ✅ |
+| E.5–6 | `scripts/submit-golive.sh` chạy từ máy dev | Nộp được + in mã đề xuất đã trình admin | ✅ |
+| E.7 | GET checklist bằng token cá nhân | Đọc được payload của agent mình | ✅ |
+| E.8 | GET checklist KHÔNG token | **401** — trước đây endpoint này không kiểm quyền, mở qua Caddy là hở email/KPI/nguồn dữ liệu ra internet | ✅ |
+
+Bug đã sửa: (1) Caddy `@selfserve` thiếu route golive-checklist → owner 403; dùng
+`path_regexp` vì `path` matcher không khớp wildcard giữa đường dẫn. (2) `submit-golive.sh`
+pipe response vào `python3 - <<EOF` → heredoc chiếm stdin, script luôn crash khi nộp.
+(3) `GET /golive-checklist` chưa kiểm quyền → thêm `_require_role(user, agent_id)`.
+
+---
+
+**Tổng: 285 case — 279 ✅ đã nghiệm thu (98%).**
 
 **7 case còn lại, chia 2 nhóm:**
 - **Cần bạn xử lý (2):** `P1.1` — bot Admin App chưa được add vào nhóm nào (`/v1/lark/chats` rỗng — add bot vào 1 nhóm là xong); `ST.8` — cần team thật cùng push 1 branch.

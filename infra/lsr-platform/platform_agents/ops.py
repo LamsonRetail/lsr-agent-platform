@@ -104,6 +104,16 @@ def diagnose(snap: dict) -> list[tuple]:
                                          f"`ssh lsr-gcp \"sudo docker image prune -f\"`"},
                     "low", f"đĩa {pct}% ≥ ngưỡng {DISK_WARN_PCT}%"))
 
+    # Routing "bắt tất" (không khai app_id lẫn chat_id): mọi tin Lark/Telegram chưa có
+    # binding cụ thể sẽ chảy nhầm vào agent này. Báo admin để gỡ hoặc khai rõ phạm vi.
+    for r in (snap.get("catchall_routes") or []):
+        out.append(("alert", {"message":
+            f"⚠️ Routing BẮT TẤT #{r['id']}: kênh `{r.get('channel')}` không khai app_id "
+            f"lẫn chat_id → mọi tin chưa có binding riêng đều chảy vào **{r.get('agent_id')}** "
+            f"(người tạo: {r.get('created_by') or '?'}).\n"
+            f"Nên: khai rõ app_id/chat_id cho binding này, hoặc gỡ ở Console → Ingress."},
+            "low", f"catchall routing #{r['id']}"))
+
     errs = snap.get("connector_errors_24h") or []
     for e in errs:
         if int(e.get("n", 0)) >= ERR_TH:

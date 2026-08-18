@@ -40,6 +40,11 @@ Sau đó **đọc `agents/<ID>/CLAUDE.md`** — đó là hướng dẫn chính c
    **ACTIVE luôn**; người khác → `registered`, test web chat được ngay, admin duyệt
    mới chạy kênh thực (Lark/Telegram) + A2A.
 
+5. **GOLIVE 2 chặng** — agent test được qua web chat ngay, nhưng để chạy kênh thật
+   (Lark/Telegram) + A2A thì: owner điền `agents/<ID>/golive.json` (mẫu ở
+   `templates/golive.example.json`) → `bash scripts/submit-golive.sh <ID>` → đủ 28 mục
+   là hệ thống tự trình admin duyệt. Chi tiết: [docs/GOLIVE.md](docs/GOLIVE.md).
+
 ## Cấu trúc repo (tham khảo nhanh)
 
 - `agents/` — project của từng agent (mỗi agent 1 docker, tự chạy được)
