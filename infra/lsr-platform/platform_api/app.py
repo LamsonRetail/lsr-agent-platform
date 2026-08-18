@@ -5710,7 +5710,13 @@ def submit_checklist(agent_id: str, body: dict, authorization: str = Header(defa
 
 
 @app.get("/v1/agents/{agent_id}/golive-checklist")
-def get_checklist(agent_id: str) -> dict:
+def get_checklist(agent_id: str, authorization: str = Header(default="")) -> dict:
+    """Xem checklist. CẦN quyền trên agent — payload chứa email, KPI, nguồn dữ liệu nội bộ.
+
+    (Trước 18/08 endpoint này không kiểm quyền; khi mở path qua Caddy cho owner nộp từ
+    máy dev thì hở ra ngoài internet, nên siết lại.)
+    """
+    _require_role(authorization, "user", agent_id)
     _ensure_schema()
     with _db() as conn:
         row = conn.execute(

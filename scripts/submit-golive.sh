@@ -28,9 +28,14 @@ RES=$(curl -sS -X POST "$PLATFORM/v1/agents/$AID/golive-checklist" \
   -H "Authorization: Bearer $(cat "$TOKEN_FILE")" \
   -H "Content-Type: application/json" -d "$BODY")
 
-echo "$RES" | python3 - <<'PY'
+# Lưu ý: KHÔNG pipe vào `python3 - <<EOF` — heredoc chiếm stdin, python sẽ đọc rỗng.
+# Truyền qua argv cho chắc.
+python3 - "$RES" <<'PY'
 import json, sys
-d = json.load(sys.stdin)
+try:
+    d = json.loads(sys.argv[1])
+except Exception:
+    print("✗ platform trả về nội dung không đọc được:", sys.argv[1][:300]); raise SystemExit(1)
 if d.get("detail"):
     print("✗ platform từ chối:", d["detail"]); raise SystemExit(1)
 if d.get("complete"):
