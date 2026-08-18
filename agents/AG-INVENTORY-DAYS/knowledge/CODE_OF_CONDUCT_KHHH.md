@@ -675,14 +675,21 @@ Học phần này trong ngày đầu tiên.
 
 ---
 
-## GHI CHÚ CHO BẢN v2 — cần chị Thảo chốt
+## GHI CHÚ CHO BẢN v2 — trạng thái xác nhận
 
-1. **Phần 1 (8 nguyên tắc)** — em suy ra từ cách chị và team làm việc thật; nguyên tắc 1, 3, 5, 7 giờ đã có dẫn chứng trực tiếp từ chat. Cần chị chốt giữ/bỏ/sửa từng điều.
-2. **Phần 4 là ảnh chụp tại thời điểm 17/08/2026.** Nhiều rule trong đây được chốt qua chat và có thể đã thay đổi — đặc biệt: ngày chốt PR (có đề xuất chuyển từ T6 sang T3/T4 mà em chưa thấy kết luận cuối), PIC Planning Bán lẻ (đã đổi từ Phương Thảo sang Thành Khôi từ T7), và tần suất chuyển kho hoả tốc.
-3. **⚠️ Bảo mật:** trong nhóm KHHH nội bộ đang có ít nhất 5 tài khoản + mật khẩu hệ thống được gửi thẳng dạng text (Vietful, WMS, SAPO, OMS Flash Thái, Brandcamp). Em cố ý **không** đưa vào tài liệu này. Chị nên cân nhắc chuyển sang cấp tài khoản riêng theo email công ty hoặc dùng một kho mật khẩu.
-4. **Whiteboard** trong THÔNG TIN KHHH (sơ đồ nhóm KHHH, quy trình đặt hàng, quy trình PTSP) em không đọc được nội dung — cần chị bổ sung hoặc export ra ảnh.
-5. **"16 Nguyên tắc làm việc"** được nhắc trong LAMSON RETAIL INFORMATION_2026 nhưng nội dung nằm trong embed em không đọc được. Nếu bổ sung được thì nên đặt ngay sau mục 0.2.
-6. **Vị trí "Chuyên viên 2"** trong danh mục công việc KHHH còn khuyết — nếu tuyển mới thì nên có phụ lục riêng cho vị trí đó.
+*Cập nhật 18/08/2026 sau khi chị Thảo rà soát.*
+
+| # | Nội dung | Trạng thái |
+|---|---|---|
+| 1 | **Nhịp chốt PR = thứ 6** (có đề xuất chuyển sang T3/T4 trong chat nhưng không chốt) | ✅ Giữ **thứ 6** |
+| 2 | **PIC Planning Bán lẻ** đổi Phương Thảo → **Trần Công Thành Khôi** từ T7/2026 | ✅ Đúng |
+| 3 | **Bảo mật:** nhóm KHHH nội bộ có ít nhất 5 tài khoản + mật khẩu hệ thống gửi dạng text (Vietful, WMS, SAPO, OMS Flash Thái, Brandcamp). Cố ý **không** đưa vào tài liệu này | ✅ Đã báo, chị đã nắm |
+| 4 | **Whiteboard** trong THÔNG TIN KHHH (sơ đồ nhóm, quy trình đặt hàng, quy trình PTSP) — không đọc được nội dung | ⏸️ Tạm bỏ qua |
+| 5 | **8 nguyên tắc ở Phần 1** — suy ra từ cách team làm việc thật, nguyên tắc 1/3/5/7 có dẫn chứng trực tiếp từ chat | 🔄 Chị đang rà |
+| 6 | **"16 Nguyên tắc làm việc"** — tiêu đề nằm cuối mục *IV. Giá trị cốt lõi* của LAMSON RETAIL INFORMATION_2026, ngay sau giá trị INTEGRITY và trước mục *V. Người sáng lập và đội ngũ BOD*. Nội dung nằm trong file nhúng, không đọc được | ❓ Cần bản đọc được |
+| 7 | **Vị trí "Chuyên viên 2"** trong danh mục công việc KHHH còn khuyết | ❓ Chờ |
+
+**Phần 4 là ảnh chụp tại 17/08/2026** — các quy tắc được chốt qua chat và có thể thay đổi. Ai sửa quy trình thì sửa luôn tài liệu này.
 
 ---
 

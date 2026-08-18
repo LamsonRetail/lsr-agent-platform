@@ -17,7 +17,7 @@ services:
       DRY_RUN: ${DRY_RUN:-true}
 
       # Nhóm bot phục vụ, cách nhau bởi dấu phẩy. Để trống = MỌI nhóm bot được add.
-      CHAT_IDS: ${CHAT_IDS:-oc_618134792f49a95d2f455314261c0215}
+      CHAT_IDS: ${CHAT_IDS:-oc_2659fb0822ebf7de6291f11c1f5ce37c}
 
       # Bỏ trống = chỉ trả lời câu hỏi quy trình (Code of Conduct).
       EXCEL_PATH: ${EXCEL_PATH:-}

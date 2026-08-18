@@ -27,7 +27,8 @@ lark:
     scopes_missing:
       - im:message.group_msg    # ĐỌC tin nhắn nhóm — cần nếu muốn agent trả lời câu hỏi
     chat_ids:
-      - oc_618134792f49a95d2f455314261c0215   # "test AI" — nhóm test, đổi sang nhóm S&OP thật khi golive
+      - oc_2659fb0822ebf7de6291f11c1f5ce37c   # "KHHH nội bộ" — nhóm làm việc thật
+      # - oc_618134792f49a95d2f455314261c0215 # "test AI" — nhóm test
     event_webhook: https://collector.lsr.internal/lark/events
 
 runtime:

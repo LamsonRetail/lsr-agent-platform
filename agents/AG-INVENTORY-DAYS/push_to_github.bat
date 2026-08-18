@@ -42,8 +42,14 @@ echo [3/6] Lay ban moi nhat tu GitHub...
 git fetch origin || (echo LOI: khong ket noi duoc GitHub & exit /b 1)
 
 echo.
-echo [4/6] Tao branch %BRANCH% tu origin/main...
-git checkout -B %BRANCH% origin/main || (echo LOI: khong tao duoc branch & exit /b 1)
+echo [4/6] Chuyen sang branch %BRANCH%...
+REM Branch da co tren GitHub thi noi tiep vao no, chua co thi tao tu main.
+git rev-parse --verify origin/%BRANCH% >nul 2>&1 && (
+  git checkout -B %BRANCH% origin/%BRANCH%
+) || (
+  git checkout -B %BRANCH% origin/main
+)
+if errorlevel 1 (echo LOI: khong chuyen duoc branch & exit /b 1)
 
 echo.
 echo [5/6] Commit thu muc AG-INVENTORY-DAYS...
@@ -51,7 +57,7 @@ git add agents/AG-INVENTORY-DAYS
 git reset -q agents/AG-INVENTORY-DAYS/push_log.txt 2>nul
 git rm -r -q --cached --ignore-unmatch agents/AG-INVENTORY-DAYS/src/__pycache__ 2>nul
 git status --short agents/AG-INVENTORY-DAYS
-git commit -m "feat(AG-INVENTORY-DAYS): Code of Conduct KHHH lam kien thuc nen + deploy docker" -m "Agent tra loi duoc cau hoi quy trinh van hanh phong KHHH, khong chi ton kho." -m "- knowledge/CODE_OF_CONDUCT_KHHH.md: so tay van hanh 50 muc" -m "- src/coc.py: tra cuu bang tu khoa co trong so IDF, tra loi kem so muc" -m "- Chi tra loi khi duoc @mention hoac tra ra dap an chac chan" -m "- tests/test_coc.py: khoa hanh vi hoi-gi-ra-muc-nao va ca phai im lang" -m "- Dockerfile + docker-compose.yml + DEPLOY.md: chay 24/7 tren VM" -m "Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+git commit -m "feat(AG-INVENTORY-DAYS): bao cao KHHH tu dong + chay nen tren may" -m "- src/khhh_report.py: doc Base QL KE HOACH HANG HOA, gop theo BST, dung anh bao cao va gui vao nhom duoi ten bot. Tu sinh muc CAN XU LY tu nguong NTK." -m "- bot_nen_START.vbs / bot_nen_STOP.bat / _bot_loop.bat: chay bot an, tu khoi dong lai neu crash, ghi bot_log.txt." -m "- Cap nhat Code of Conduct theo ra soat: chot PR van T6, PIC Ban le = Thanh Khoi." -m "Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 if errorlevel 1 (echo LOI: commit that bai - doc dong loi phia tren. & exit /b 1)
 
 echo.
@@ -62,7 +68,7 @@ git show --stat --oneline HEAD | find /c "|"
 
 echo.
 echo [6/6] Push len GitHub...
-git push -u origin %BRANCH% --force-with-lease
+git push -u origin %BRANCH%
 if errorlevel 1 (
   echo.
   echo LOI: push that bai. Doc ky dong loi ngay phia tren.

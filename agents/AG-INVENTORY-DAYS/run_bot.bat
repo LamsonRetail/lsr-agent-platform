@@ -8,7 +8,9 @@ REM  Muon tra ca ton kho: sua dong SET EXCEL= ben duoi tro tro toi file excel.
 REM ============================================================
 setlocal
 
-REM --- Nhom Lark bot se phuc vu. Doi sang nhom that khi golive. ---
+REM --- Nhom Lark bot se phuc vu. ---
+REM   oc_2659fb0822ebf7de6291f11c1f5ce37c = KHHH noi bo (nhom that)
+REM   oc_618134792f49a95d2f455314261c0215 = test AI
 set CHAT_ID=oc_618134792f49a95d2f455314261c0215
 
 REM --- De trong = chi tra loi cau hoi quy trinh (Code of Conduct). ---
