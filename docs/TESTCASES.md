@@ -14,7 +14,7 @@
 | CORE.4 | Gửi trace với key sai / thiếu | 401 — không ghi gì | ✅ 08-08 |
 | CORE.5 | Trace chứa email/SĐT/thẻ | PII bị che TRƯỚC khi lưu, đếm `pii_flags` | ✅ 08-07 |
 | CORE.6 | Kill-switch: deactivate agent | Collector 403 + gỡ bot khỏi chat Lark + dừng container; KHÔNG xoá dữ liệu | ✅ 08-08 |
-| CORE.7 | Bật `active` khi thiếu golive checklist | **Đổi 18/08**: KHÔNG chặn nữa — admin approve là chạy; API trả `checklist_missing` + ghi audit để console hiển thị cảnh báo | ✅ 08-18 |
+| CORE.7 | Bật `active` khi thiếu golive checklist | Chặn (409) + **nhắc OWNER** đúng mục còn thiếu; đủ checklist → hệ thống tự trình admin duyệt (xem §19) | ✅ 08-18 |
 | CORE.8 | Thao tác admin (duyệt/xoá/status) | `audit_log` ghi actor thật (X-Actor / agent token) | ✅ 08-08 |
 | CORE.9 | Policy check PreToolUse (deny rule) | Tool bị chặn kèm lý do; fail-open khi service lỗi | ✅ 08-07 |
 | CORE.10 | Quota/cost: vượt ngưỡng ước tính | Cảnh báo trên dashboard Chi phí + quota_alerts | ✅ 08-07 |
@@ -466,17 +466,40 @@ harness trả lời nhầm — xem báo cáo 08-14.)
 
 | ID | Kịch bản | Kỳ vọng | TT |
 |---|---|---|---|
-| A2.1 | Admin approve agent chưa đủ checklist, KHÔNG dùng `force` | `active` ngay (trước đây 409) | ✅ |
-| A2.2 | Response của approve | Có `checklist_missing` để console cảnh báo | ✅ |
-| A2.3 | Audit | Ghi lại mục checklist còn thiếu — truy vết được ai duyệt khi thiếu gì | ✅ |
-| A2.4 | Ingest kênh thật sau approve | `queued` — chạy ngay, không bước xác nhận nào nữa | ✅ |
+| A2.x | ~~Approve bỏ qua checklist~~ | **Đã thay bằng §19** (18/08): checklist là gate, owner bổ sung rồi mới tới admin | ↩︎ |
 | B.1 | Ops snapshot | Phát hiện binding "bắt tất" (app_id + chat_id đều rỗng) | ✅ |
 | B.2 | AG-OPS | Sinh cảnh báo cho TỪNG binding, nêu agent + người tạo + cách xử lý | ✅ |
 | A1 | Caddy carve-out | `/login` `/device` `/api/auth/*` mở (200/307); `/accounts` `/` vẫn 401 basic-auth | ✅ |
 
 ---
 
-**Tổng: 251 case — 245 ✅ đã nghiệm thu (98%).**
+## 19. Golive 2 chặng: owner đủ checklist → admin duyệt (✅ 08-18, 22/22 pass)
+
+> Quy trình chốt: agent KHÔNG tự lên sóng. Thiếu checklist → platform **nhắc owner**
+> đúng mục thiếu. Đủ 28 mục → hệ thống **tự trình admin duyệt** (HITL, risk=high,
+> owner không tự duyệt việc mình đề xuất). Admin bấm Duyệt → agent chạy kênh thật.
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| GL.1a | Active khi thiếu checklist | 409, không bật | ✅ |
+| GL.1b | Nội dung lỗi | Nói rõ đã nhắc owner + cách bổ sung | ✅ |
+| GL.1c | Danh sách thiếu | Liệt kê đủ 28 mục để owner biết làm gì | ✅ |
+| GL.1d | Audit | Ghi `golive_blocked` + owner đã nhắc | ✅ |
+| GL.1e | Trạng thái agent | Vẫn `registered` — không lọt kênh thật | ✅ |
+| GL.2a | Nộp checklist còn thiếu | `complete=false` + danh sách thiếu | ✅ |
+| GL.2b | Hướng dẫn | Chỉ bước tiếp theo cho owner | ✅ |
+| GL.2c | Trình admin | CHƯA trình khi còn thiếu | ✅ |
+| GL.3a–c | Nộp đủ checklist | `complete=true`, tự tạo đề xuất duyệt, owner biết đang chờ admin | ✅ |
+| GL.3d | Mức rủi ro | `risk=high` → bắt buộc người duyệt | ✅ |
+| GL.3e | Sau khi nộp đủ | KHÔNG tự bật agent (owner không tự golive) | ✅ |
+| GL.3f | Nộp lại nhiều lần | Không tạo đề xuất trùng | ✅ |
+| GL.4a–d | Admin duyệt | Thực thi `activate_agent` → `active` + `golive_at` + kênh Lark `queued` | ✅ |
+| GL.5a–b | **Chống lách**: xoá checklist rồi mới duyệt | Chặn tại lúc thực thi + nhắc owner; agent không bị bật | ✅ |
+| GL.6a–b | Admin `force` (ngoại lệ) | Vẫn bật được nhưng audit ghi rõ thiếu mục gì | ✅ |
+
+---
+
+**Tổng: 268 case — 262 ✅ đã nghiệm thu (98%).**
 
 **7 case còn lại, chia 2 nhóm:**
 - **Cần bạn xử lý (2):** `P1.1` — bot Admin App chưa được add vào nhóm nào (`/v1/lark/chats` rỗng — add bot vào 1 nhóm là xong); `ST.8` — cần team thật cùng push 1 branch.
