@@ -258,16 +258,40 @@ _SYNONYMS = (
 )
 
 
-def expand_query(q: str) -> str:
-    """Thêm từ đồng nghĩa vào câu truy vấn gửi cho RAG.
+# Hư từ và từ để hỏi. RAG của platform khớp theo **AND trên mọi từ**, nên chỉ cần một
+# từ không có trong tài liệu là CẢ câu hỏi trượt:
+#     "slogan"                     -> 1 kết quả
+#     "slogan của MATE MADE là gì" -> 0 kết quả
+# Tức là mọi câu hỏi tiếng Việt tự nhiên đều rỗng, và LYLY trả "chưa có dữ liệu" dù dữ
+# liệu nằm ngay đó. Phải bỏ những từ này trước khi tra.
+_STOPWORDS = {
+    "của", "là", "gì", "ai", "nào", "thế", "sao", "bao", "nhiêu", "có", "không",
+    "được", "cho", "với", "và", "thì", "mà", "ở", "trong", "các", "những", "này",
+    "đó", "em", "anh", "chị", "tôi", "mình", "ạ", "nhé", "vậy", "vào", "ra", "đang",
+    "bên", "hả", "ha", "à", "ừ", "cái", "con", "còn", "đi", "rồi", "chưa", "sẽ",
+    "bị", "khi", "về", "theo", "như", "hơn", "nữa", "lại", "cứ", "hay", "hoặc",
+    "tại", "vì", "nên", "để", "từ", "đến", "trên", "dưới", "một", "hai", "the",
+    "what", "is", "how", "much", "many", "of", "for", "in", "on",
+}
 
-    Chỉ dùng để TÌM, không đổi câu hỏi hiển thị cho người dùng. Thêm từ chỉ nới rộng
-    kết quả tìm được, không làm sai câu trả lời — vì mọi thứ trả về vẫn phải là tri thức
-    đã duyệt và vẫn kèm nguồn.
+
+def clean_query(q: str) -> str:
+    """Bỏ hư từ, giữ từ mang nghĩa. Rỗng thì trả lại câu gốc."""
+    words = re.findall(r"[\wÀ-ỹ]+", q or "")
+    keep = [w for w in words if w.lower() not in _STOPWORDS]
+    return " ".join(keep) if keep else (q or "")
+
+
+def expand_query(q: str) -> str:
+    """Câu truy vấn gửi cho RAG: bỏ hư từ, rồi thêm từ đồng nghĩa của ngành.
+
+    Chỉ dùng để TÌM, không đổi câu hỏi hiển thị cho người dùng. Việc này chỉ nới rộng
+    thứ tìm được, không làm sai câu trả lời — mọi thứ trả về vẫn là tri thức đã duyệt
+    và vẫn kèm nguồn để người đọc tự đối chiếu.
     """
     low = (q or "").lower()
     extra = [syn for pattern, syn in _SYNONYMS if re.search(pattern, low)]
-    return f"{q} {' '.join(extra)}" if extra else q
+    return " ".join([clean_query(q)] + extra).strip()
 
 
 def data_period(hits: list[dict]) -> str:
