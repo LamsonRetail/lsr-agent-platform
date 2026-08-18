@@ -90,6 +90,19 @@ services:
       LARK_DOMAIN_CONST: LARK
     restart: unless-stopped
 
+  # Long-connection cho app Lark của LYLY (KD Mate Made — AG-KD-MATE-MADE).
+  event_gateway_lyly:
+    build: ./event_gateway
+    depends_on: [platform_api]
+    environment:
+      PLATFORM_URL: http://platform_api:8090
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
+      LARK_APP_ID: ${LYLY_LARK_APP_ID:-}
+      LARK_APP_SECRET: ${LYLY_LARK_APP_SECRET:-}
+      LARK_DOMAIN_CONST: LARK
+    restart: unless-stopped
+
   # Long-connection cho app Lark "Magic LSR" (squad FA — AG-HARRY).
   event_gateway_harry:
     build: ./event_gateway
@@ -203,7 +216,8 @@ services:
       LARK_EXTRA_APPS: '{"${SAWADEE_LARK_APP_ID:-}": "${SAWADEE_LARK_APP_SECRET:-}",
                          "${SOURCING_LARK_APP_ID:-}": "${SOURCING_LARK_APP_SECRET:-}",
                          "${DATA_LARK_APP_ID:-}": "${DATA_LARK_APP_SECRET:-}",
-                         "${HARRY_LARK_APP_ID:-}": "${HARRY_LARK_APP_SECRET:-}"}'
+                         "${HARRY_LARK_APP_ID:-}": "${HARRY_LARK_APP_SECRET:-}",
+                         "${LYLY_LARK_APP_ID:-}": "${LYLY_LARK_APP_SECRET:-}"}'
       LARK_NOTIFY_CHAT_ID: ${LARK_NOTIFY_CHAT_ID:-}
       LARK_DOMAIN: ${LARK_DOMAIN:-https://open.larksuite.com}
       # P10: đăng nhập console qua Lark OAuth + kiểm tra ORG + quyền mặc định
