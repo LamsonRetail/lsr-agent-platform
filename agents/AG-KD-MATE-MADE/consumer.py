@@ -36,7 +36,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import bq_tool
 import meeting_note
+import memory
 
 PLATFORM = os.environ.get("LSR_PLATFORM_URL", "https://platform.34-126-154-135.sslip.io").rstrip("/")
 # HAI tên biến vì có HAI đường chạy: docker-compose / chạy tay truyền LSR_AGENT_TOKEN,
@@ -58,6 +60,15 @@ CONFIDENTIAL_VIEWERS = {
 
 DISCLAIMER = ("_Số lấy từ kho nội bộ đã duyệt — check link nguồn trước khi quyết ngân sách "
               "hay đổi giá nhé._")
+
+# Ai được hỏi số trực tiếp từ BigQuery. Truy vấn chạy bằng quyền CÁ NHÂN của owner, nên
+# danh sách này chính là thứ ngăn LYLY thành đường vòng qua phân quyền của BigQuery:
+# không có nó, ai cũng đọc được mọi thứ owner đọc được. RỖNG = không ai (fail-closed).
+BQ_VIEWERS = {
+    v.strip().lower()
+    for v in os.environ.get("KD_BQ_VIEWERS", "").split(",")
+    if v.strip()
+}
 
 # Câu từ chối chuẩn khi không có dữ liệu. Cố định một câu để team quen và nhận ra ngay
 # rằng LYLY KHÔNG biết, thay vì đọc lướt một đoạn dài rồi tưởng là có.
@@ -171,6 +182,62 @@ def needs_knowledge(q: str, user_ref: str = "") -> bool:
     return True
 
 
+def may_use_bq(user_ref: str) -> bool:
+    """Người này có được hỏi số trực tiếp từ BigQuery không. Fail-closed."""
+    return bool(user_ref) and user_ref.strip().lower() in BQ_VIEWERS
+
+
+# Truy vấn mẫu cho các câu hỏi hay gặp. Đây là phần dùng được NGAY, khi answer() còn chạy
+# bằng luật. Khi nối model thật, model sinh SQL tự do — bq_tool đã có sẵn bốn lớp chặn cho
+# trường hợp đó; các mẫu dưới đây vẫn giữ làm đường nhanh và làm ví dụ tham chiếu.
+# {ds} thay bằng dataset đầu tiên trong KD_BQ_DATASETS.
+_SQL_TEMPLATES = (
+    (r"doanh thu.*(7 ngày|tuần)|tuần.*doanh thu",
+     "SELECT DATE(order_date) AS ngay, SUM(revenue) AS doanh_thu\n"
+     "FROM `{ds}.orders`\n"
+     "WHERE DATE(order_date) >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)\n"
+     "GROUP BY 1 ORDER BY 1 DESC"),
+    (r"doanh thu.*(hôm qua|hôm nay|ngày)",
+     "SELECT DATE(order_date) AS ngay, SUM(revenue) AS doanh_thu\n"
+     "FROM `{ds}.orders`\n"
+     "WHERE DATE(order_date) = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)\n"
+     "GROUP BY 1"),
+)
+
+
+def build_sql(question: str, ds: str) -> str:
+    """SQL cho câu hỏi này, rỗng = không dựng được.
+
+    <<< ĐIỂM NỐI MODEL: thay phần dưới bằng lời gọi model sinh SQL. Không cần tự viết
+    kiểm tra an toàn — ``bq_tool.run()`` đã chặn DDL/DML, dataset lạ và bytes vượt cap. >>>
+    """
+    low = (question or "").lower()
+    for pattern, sql in _SQL_TEMPLATES:
+        if re.search(pattern, low):
+            return sql.format(ds=ds)
+    return ""
+
+
+def try_bigquery(question: str, user_ref: str) -> str:
+    """Trả lời từ BigQuery. Rỗng = không áp dụng, người gọi đi tiếp nhánh khác.
+
+    Cố ý trả rỗng (không phải thông báo lỗi) khi người hỏi ngoài danh sách: người ngoài
+    phạm vi thậm chí không nên biết là LYLY có đường vào BigQuery.
+    """
+    if not bq_tool.enabled() or not may_use_bq(user_ref):
+        return ""
+    ds = sorted(bq_tool.DATASETS)[0]
+    sql = build_sql(question, ds)
+    if not sql:
+        return ""
+    try:
+        return bq_tool.format_answer(bq_tool.run(sql)) + f"\n\n{DISCLAIMER}"
+    except bq_tool.BQError as exc:
+        # Báo thẳng lý do: hết hạn mức, chưa đăng nhập, SQL sai. Im lặng rồi trả "chưa có
+        # dữ liệu" sẽ khiến người ta tưởng kho rỗng và đi tìm nhầm chỗ.
+        return f"Em chưa lấy được số từ warehouse ạ — {exc}"
+
+
 def data_period(hits: list[dict]) -> str:
     """Kỳ dữ liệu của các mục tri thức dùng để trả lời.
 
@@ -240,9 +307,15 @@ def answer(q: str, ctx: dict, user_ref: str = "") -> str:
                 "Anh/chị hỏi **quản lý** giúp em nhé, nói rõ mục đích dùng. Nếu anh/chị cần "
                 "xem thường xuyên thì đề nghị quản lý thêm mình vào danh sách được duyệt ạ.")
 
+    # (5) Người trong danh sách hỏi số có sẵn trong warehouse → lấy thẳng từ BigQuery.
+    # Đặt SAU nhánh dữ liệu hạn chế: người ngoài phạm vi đã bị chặn ở trên rồi.
+    from_bq = try_bigquery(q, user_ref)
+    if from_bq:
+        return from_bq
+
     hits = ctx.get("knowledge") or []
 
-    # (5) Không có căn cứ đã duyệt → KHÔNG đưa số, KHÔNG ước lượng.
+    # (6) Không có căn cứ đã duyệt → KHÔNG đưa số, KHÔNG ước lượng.
     # Cố ý KHÔNG kèm DISCLAIMER ở đây: câu disclaimer nói "số lấy từ kho đã duyệt, check
     # link nguồn" — dán nó vào một câu trả lời không có số và không có link thì vô nghĩa,
     # và tệ hơn là khiến câu từ chối trông như một câu trả lời có căn cứ.
@@ -253,7 +326,7 @@ def answer(q: str, ctx: dict, user_ref: str = "") -> str:
                 "• Nếu số này có trong Base rồi mà em chưa thấy, báo em để team đưa vào kho "
                 "— lần sau em trả lời được ngay ạ.")
 
-    # (6) Có căn cứ → trả lời gọn: số + nguồn + kỳ dữ liệu.
+    # (7) Có căn cứ → trả lời gọn: số + nguồn + kỳ dữ liệu.
     return ("**Trả lời**\n" + cite(hits) + "\n\n"
             f"**📅 Kỳ dữ liệu:** {data_period(hits)} — số chỉ đúng tới kỳ này, "
             "hôm nay có thể đã khác.\n\n"
@@ -312,6 +385,12 @@ def handle(job: dict) -> str:
         print(f"[DRY_RUN] không gửi ra {job['reply_to'].get('channel')}: {reply_text[:80]}")
     else:
         api("POST", f"/v1/self/jobs/{job['id']}/reply", {"text": reply_text})
+
+    # Ghi fact công việc về người hỏi (nhóm chuyên môn, SKU/campaign phụ trách). Fact nằm
+    # ở DB platform, KHÔNG nhét vào prompt — lượt sau /v1/self/context tự trả về.
+    # Chỉ ghi khi chủ đề lặp ≥2 lần, xem memory.py.
+    for fact in memory.remember(api, uref, q, ctx):
+        print(f"  ↳ nhớ về {uref[:12]}…: {fact}")
 
     api("POST", "/v1/self/session/turn", {"session_id": sid, "role": "user", "text": q,
                                           "user_ref": uref, "channel": job.get("channel")})

@@ -31,8 +31,11 @@ ngày từ **Lark Base** → số đổi là sửa trong Base, không phải s�
 | `consumer.py` | Poll job từ mọi kênh, xử lý **cả** hỏi đáp **lẫn** biên bản họp | service `agent` |
 | `meeting_note.py` | Logic biên bản họp | **module**, do `consumer.py` gọi |
 | `kd_sync.py` | Đồng bộ Lark Base + Drive → hàng chờ tri thức, hàng ngày 6h VN | service `kd_sync` |
+| `memory.py` | Bộ nhớ theo người — fact công việc, lưu ở DB platform | module |
+| `bq_tool.py` | Truy vấn BigQuery bằng quyền owner, 4 lớp chặn | module + CLI |
 | `lark_docs.py` | Client **chỉ-đọc** Lark Wiki/Docx/Base/Drive | module |
 | `transcribe.py` | Client Whisper transcription server | module |
+| `try_local.py` | Thử LYLY trên máy, không cần token | CLI |
 
 > `meeting_note.py` **không** chạy thành service riêng: chỉ được có **một** tiến trình poll
 > `/v1/self/jobs`. Hai process cùng poll sẽ giành job của nhau và tin nhắn rơi ngẫu nhiên
@@ -82,6 +85,46 @@ Admin gán ở Console → Ingress. Agent không cần biết tin đến từ k�
 | Web chat (Chat thử) | có sẵn |
 | Lark | channel `lark` + chat_id nhóm KD |
 | Telegram | channel `telegram` + chat_id |
+
+## Bộ nhớ theo từng người
+
+LYLY nhớ **fact công việc** về mỗi người: thuộc nhóm nào, phụ trách SKU/campaign nào, hay
+hỏi chỉ số gì. Chỉ ghi khi chủ đề **lặp lại ≥2 lần** — hỏi một lần không có nghĩa là phụ
+trách.
+
+Fact nằm trong **Postgres của platform** (`POST /v1/self/facts`), **không nằm trong prompt**.
+Mỗi lượt hỏi, `/v1/self/context` tự trả fact của đúng người đó. Nghĩa là đổi prompt không
+mất trí nhớ, và trí nhớ không làm phình prompt.
+
+**Không lưu nội dung hội thoại.** (Lưu ý: session memory của platform — `/v1/self/session/turn`
+— vẫn lưu lượt hội thoại để nối mạch nhiều lượt. Đó là cơ chế riêng của platform.)
+
+Xem fact của một người:
+
+```bash
+curl -sS "$LSR_PLATFORM_URL/v1/self/facts?user_ref=<open_id>" -H "Authorization: Bearer $LSR_AGENT_TOKEN"
+```
+
+## BigQuery
+
+Chạy bằng **quyền cá nhân của owner** (ADC), nên bị khoá sau hai lớp:
+
+- `KD_BQ_DATASETS` rỗng → **BigQuery tắt hẳn** (mặc định).
+- `KD_BQ_VIEWERS` rỗng → **không ai** dùng được. Người ngoài danh sách hỏi số thì LYLY trả
+  lời như bình thường, **không lộ ra là có đường vào BigQuery**.
+
+Bốn lớp chặn: chỉ SELECT · allowlist dataset · dry-run ước lượng bytes · `maximum_bytes_billed`.
+Mọi câu trả lời **luôn kèm SQL đã chạy + số bytes quét** — với SQL do model sinh, đó là cách
+duy nhất phát hiện số đúng-kỹ-thuật nhưng sai-ý.
+
+```bash
+gcloud auth application-default login   # một lần
+pip install google-cloud-bigquery
+python3 bq_tool.py --self-test          # kiểm cấu hình + các lớp chặn
+```
+
+> ⚠️ Log BigQuery ghi **owner** là người chạy mọi truy vấn, kể cả khi câu hỏi đến từ người
+> khác. Nếu sau này có tranh cãi ai đã đọc dữ liệu gì, dấu vết trỏ về owner.
 
 ## Ranh giới phải giữ
 

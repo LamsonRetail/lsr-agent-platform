@@ -78,7 +78,50 @@ Bộ có nhãn để chấm 6 chỉ số hành vi: `tests/agent_tests.yaml`
 | 35 | **Sửa trước khi chốt** | chủ trì nhắn "sửa: hạn là 20/8" | Cập nhật nháp, xin chốt lại, vẫn CHƯA CHỐT |
 | 36 | **Transcript lỗi** | server transcript trả lỗi | Job vào DLQ replay được; **không** dựng biên bản rỗng |
 
-## F. Đồng bộ dữ liệu (`kd_sync.py`)
+## F. Bộ nhớ theo từng người (`memory.py`)
+
+| # | Kịch bản | Kỳ vọng |
+|---|----------|---------|
+| M1 | **Hỏi lần đầu** về ROAS | **Không** ghi fact nào — một lần hỏi chưa nói lên điều gì |
+| M2 | **Hỏi lần hai** cùng chủ đề | Ghi fact "thường hỏi về quảng cáo — nhiều khả năng thuộc nhóm ADS" |
+| M3 | **Fact đã có** | Không ghi trùng (`md5(fact)` chống trùng ở tầng DB) |
+| M4 | **Tên rác** ("campaign này", "sku nào") | Không nhớ thành tên riêng |
+| M5 | **Không biết người hỏi** (`user_ref` rỗng) | Không ghi gì |
+| M6 | **Quá 12 fact** | Ngừng ghi thêm, không làm loãng ngữ cảnh |
+| M7 | **Fact chỉ về công việc** | Không lưu nội dung câu hỏi nguyên văn, không lưu số liệu |
+| M8 | **Ghi fact lỗi** (platform 500) | Câu trả lời vẫn tới người dùng bình thường |
+| M9 | **Fact không rò sang người khác** | `GET /v1/self/facts?user_ref=A` không trả fact của B |
+| M10 | **Restart agent** | Bộ đếm về 0 (fact đã ghi vẫn còn) — người dùng phải hỏi lại vài lần mới được nhớ thêm |
+
+> ⚠️ **Platform chưa có endpoint xoá fact.** Đây là dữ liệu về nhân viên, nên trước khi mở
+> cho cả team dùng cần một đường xoá — hiện phải nhờ admin xoá thẳng trong Postgres
+> (`user_facts WHERE agent_id='AG-KD-MATE-MADE' AND user_ref=...`). Việc bổ sung
+> `POST /v1/self/facts/{id}/delete` nằm ở core, phải nhờ maintainer.
+
+## G. BigQuery (`bq_tool.py`)
+
+Chạy tự kiểm: `python3 bq_tool.py --self-test`
+
+| # | Kịch bản | Kỳ vọng |
+|---|----------|---------|
+| Q1 | **Chưa khai `KD_BQ_DATASETS`** | BigQuery **tắt hẳn** — mặc định an toàn, không phải lỗi |
+| Q2 | **Người ngoài `KD_BQ_VIEWERS`** hỏi số | Không chạy BQ **và không lộ ra là có BQ** — trả lời như bình thường từ kho tri thức |
+| Q3 | `DROP TABLE` | Từ chối trước khi gửi lên BigQuery |
+| Q4 | `UPDATE` / `DELETE` / `MERGE` | Từ chối — LYLY chỉ đọc |
+| Q5 | **Câu ghép** `SELECT ...; DELETE ...` | Từ chối |
+| Q6 | **Dataset ngoài allowlist** | Từ chối, nêu tên dataset bị chặn |
+| Q7 | **Vượt cap bytes** | Từ chối **trước khi chạy** → không tốn tiền; báo rõ cần thu hẹp |
+| Q8 | **Chưa đăng nhập gcloud** | Báo đúng câu lệnh cần chạy, không im lặng trả "chưa có dữ liệu" |
+| Q9 | **Truy vấn thành công** | Trả bảng + **SQL đã chạy** + số bytes quét |
+| Q10 | **Kết quả bị cắt** ở `KD_BQ_MAX_ROWS` | Nói rõ đang hiện bao nhiêu/bao nhiêu dòng |
+| Q11 | **Tên sản phẩm chứa chữ khoá** (vd `'update pack'`) | **Không** bị chặn oan — chuỗi literal được bỏ qua khi soi từ khoá |
+
+> **Q9 là test quan trọng nhất của nhóm này.** Vì SQL do model sinh, rủi ro lớn nhất không
+> phải là SQL độc mà là **SQL sai cho ra số sai trông vẫn hợp lý** (sai join, sai filter
+> ngày). Người đọc phải nhìn thấy câu truy vấn mới phát hiện được. Trước khi tin LYLY, chạy
+> vài câu bạn **đã biết đáp án** để đối chiếu.
+
+## H. Đồng bộ dữ liệu (`kd_sync.py`)
 
 | # | Kịch bản | Kỳ vọng |
 |---|----------|---------|
