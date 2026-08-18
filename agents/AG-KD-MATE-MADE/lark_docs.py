@@ -80,14 +80,30 @@ class LarkDocs:
         self._token_exp = time.time() + int(data.get("expire", 7200))
         return self._token
 
+    def _json(self, r, path: str, verb: str) -> dict:
+        """Đọc body JSON. Lark trả HTML/text khi lỗi hạ tầng — báo rõ thay vì ném
+        JSONDecodeError khó lần ra nguyên nhân."""
+        try:
+            data = r.json()
+        except ValueError as exc:
+            raise LarkDocsError(
+                f"{verb} {path} trả về không phải JSON (HTTP {r.status_code}): "
+                f"{r.text[:120]}") from exc
+        if data.get("code") != 0:
+            raise LarkDocsError(f"{verb} {path} lỗi {data.get('code')}: {data.get('msg')}")
+        return data.get("data") or {}
+
     def _get(self, path: str, params: dict | None = None) -> dict:
         r = requests.get(f"{self.domain}{path}", params=params or {},
                          headers={"Authorization": f"Bearer {self._tenant_token()}"},
                          timeout=self.timeout)
-        data = r.json()
-        if data.get("code") != 0:
-            raise LarkDocsError(f"GET {path} lỗi {data.get('code')}: {data.get('msg')}")
-        return data.get("data") or {}
+        return self._json(r, path, "GET")
+
+    def _post(self, path: str, body: dict) -> dict:
+        r = requests.post(f"{self.domain}{path}", json=body,
+                          headers={"Authorization": f"Bearer {self._tenant_token()}"},
+                          timeout=self.timeout)
+        return self._json(r, path, "POST")
 
     def _paged(self, path: str, params: dict, key: str = "items") -> list[dict]:
         """Gom hết trang. Lark trả ``page_token`` rỗng khi hết."""
@@ -147,11 +163,14 @@ class LarkDocs:
         đụng vẫn hiện "sync hôm nay" — người đọc tưởng số mới, quyết theo số cũ. Ngày sửa
         tài liệu mới là thứ nói lên dữ liệu cũ hay mới.
         """
+        # Endpoint này là POST (batch_query), không phải GET.
         try:
-            data = self._get("/open-apis/drive/v1/metas/batch_query",
-                             {"request_docs": json.dumps(
-                                 [{"doc_token": token, "doc_type": obj_type or "docx"}])})
-        except LarkDocsError:
+            data = self._post("/open-apis/drive/v1/metas/batch_query",
+                              {"request_docs": [{"doc_token": token,
+                                                 "doc_type": obj_type or "docx"}]})
+        except (LarkDocsError, requests.RequestException):
+            # Không lấy được ngày sửa thì vẫn sync tiếp — mất phần "cập nhật ngày nào"
+            # chứ không mất cả tài liệu.
             return ""
         metas = data.get("metas") or []
         if not metas:

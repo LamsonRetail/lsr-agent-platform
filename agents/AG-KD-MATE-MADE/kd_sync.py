@@ -52,8 +52,17 @@ import requests
 
 from lark_docs import LarkDocs, LarkDocsError
 
-PLATFORM = os.environ.get("LSR_PLATFORM_URL", "http://platform_api:8090").rstrip("/")
+PLATFORM = os.environ.get(
+    "LSR_PLATFORM_URL", "https://platform.34-126-154-135.sslip.io").rstrip("/")
+# Ưu tiên TOKEN AGENT: endpoint /v1/self/brain/* nhận token agent và chỉ cho ghi item của
+# chính agent này. Admin token chỉ cần khi muốn ghi vào brain của agent KHÁC — việc mà job
+# này không làm. Trước đây mặc định dùng admin token khiến chủ agent phải đi xin admin
+# một cách không cần thiết.
 ADMIN = os.environ.get("PLATFORM_ADMIN_TOKEN", "")
+AGENT_TOKEN = (os.environ.get("LSR_AGENT_TOKEN")
+               or os.environ.get("LSR_TELEMETRY_API_KEY") or "")
+_USE_SELF = bool(AGENT_TOKEN)
+_BRAIN = "/v1/self/brain/items" if _USE_SELF else "/v1/brain/items"
 AGENT_ID = os.environ.get("LSR_AGENT_ID", "AG-KD-MATE-MADE")
 RUN_HOUR = int(os.environ.get("KD_SYNC_HOUR", "6"))
 RUN_ON_START = os.environ.get("KD_SYNC_ON_START", "false").lower() == "true"
@@ -61,6 +70,9 @@ MAX_CHARS = int(os.environ.get("KD_CHUNK_CHARS", "1800"))
 ROWS_PER_ITEM = int(os.environ.get("KD_ROWS_PER_ITEM", "20"))
 SHEET_ROWS = int(os.environ.get("KD_SHEET_ROWS", "200"))
 STALE_DAYS = int(os.environ.get("KD_STALE_DAYS", "45"))
+# Tri thức vào kho ở trạng thái nào. Mặc định 'pending' để giữ hàng rào người duyệt —
+# endpoint /v1/self/brain/items tự đặt 'approved' nếu không nói gì.
+AUTO_APPROVE = os.environ.get("KD_AUTO_APPROVE", "false").lower() == "true"
 SYNC_WIKI = os.environ.get("KD_SYNC_WIKI", "false").lower() == "true"
 TZ = timezone(timedelta(hours=7))  # Asia/Ho_Chi_Minh
 
@@ -70,7 +82,8 @@ KD_WIKI_SPACE = os.environ.get("KD_WIKI_SPACE", "7496094770155061279")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("kd-sync")
 
-_H = {"Authorization": f"Bearer {ADMIN}", "Content-Type": "application/json"}
+_H = {"Authorization": f"Bearer {AGENT_TOKEN or ADMIN}",
+      "Content-Type": "application/json"}
 
 
 def today() -> str:
@@ -318,10 +331,23 @@ def _item(**kw) -> dict:
 
     Mọi nguồn đều đi qua đây nên ``redact()`` đặt ở đây là chặn được toàn bộ, không phải
     nhớ gọi ở từng hàm collect.
+
+    **Ngày cập nhật được nhét vào TITLE**, không chỉ vào ``source_ref``. Lý do: RAG của
+    platform (``_rag_search``) chỉ trả ``item_id, kind, title, content, domain,
+    source_url, scope`` — **không** trả ``source_ref``. Nếu chỉ ghi vào ``source_ref``
+    thì lúc trả lời agent không thấy ngày, và câu "luôn nêu kỳ dữ liệu" âm thầm hỏng
+    thành "không ghi rõ" — đúng loại lỗi nguy hiểm nhất của agent này.
     """
     conf = kw.pop("confidential", False)
     if "content" in kw:
         kw["content"] = redact(kw["content"])
+    ref = kw.get("source_ref") or ""
+    m = re.search(r"cập nhật (\d{2}/\d{2}/\d{4})", ref)
+    if m and "cập nhật" not in kw.get("title", ""):
+        kw["title"] = f"{kw['title']} · cập nhật {m.group(1)}"
+    # pending = giữ hàng rào người duyệt. /v1/self/brain/items mặc định 'approved'
+    # ("owner tự quản"), nên phải nói rõ nếu muốn có cổng duyệt.
+    kw.setdefault("status", "approved" if AUTO_APPROVE else "pending")
     return {
         "kind": "knowledge",
         "scope": "agent" if conf else "shared",
@@ -333,10 +359,17 @@ def _item(**kw) -> dict:
 
 
 def _docx_items(docs, obj, title, label, domain, conf, when) -> list[dict]:
+    """Docx → mục tri thức, mỗi mục là một đoạn theo heading.
+
+    ``item_id`` phải kèm **số thứ tự đoạn**: một mục dài hơn ``MAX_CHARS`` bị cắt thành
+    nhiều phần nhưng tất cả cùng ``block_id`` của một heading. Thiếu số thứ tự thì các
+    phần đè lên nhau — chỉ phần cuối sống sót, phần đầu mất im lặng, và mỗi lần sync lại
+    ghi đè tiếp nên không ai phát hiện.
+    """
     out = []
-    for s in docs.docx_sections(obj, doc_title=title, max_chars=MAX_CHARS):
+    for n, s in enumerate(docs.docx_sections(obj, doc_title=title, max_chars=MAX_CHARS), 1):
         out.append(_item(
-            item_id=f"kd_dx_{obj[:12]}_{(s['block_id'] or 'x')[:12]}",
+            item_id=f"kd_dx_{obj[:12]}_{(s['block_id'] or 'x')[:12]}_{n:03d}",
             title=f"{title} › {s['title']}" if s["title"] != title else title,
             content=s["content"], domain=domain, tags=["lark-docx", label],
             confidential=conf,
@@ -498,16 +531,20 @@ def collect(docs: LarkDocs) -> list[dict]:
 
 # ----------------------------- nộp lên platform -----------------------------
 
-def existing_content() -> dict[str, str]:
-    """Nội dung tri thức đã có: ``{item_id: content}``.
+def existing_content() -> dict[str, tuple]:
+    """Tri thức đã có: ``{item_id: (title, content)}``.
 
     Dùng để bỏ qua mục không đổi — tránh upsert làm mất trạng thái 'approved'.
+
+    So cả TITLE chứ không chỉ content: ngày cập nhật nằm trong title (xem ``_item()``),
+    nên tài liệu được sửa mà nội dung đoạn đó không đổi thì vẫn phải nộp lại để ngày mới
+    tới được người đọc.
     """
-    out: dict[str, str] = {}
+    out: dict[str, tuple] = {}
     for params in ({"scope": "shared", "limit": 500},
                    {"scope": "agent", "agent_id": AGENT_ID, "limit": 500}):
         try:
-            r = requests.get(PLATFORM + "/v1/brain/items", headers=_H, params=params,
+            r = requests.get(PLATFORM + _BRAIN, headers=_H, params=params,
                              timeout=60)
             rows = r.json() if r.ok else []
         except Exception as exc:
@@ -518,8 +555,19 @@ def existing_content() -> dict[str, str]:
                         "lại và phải duyệt lại", params["scope"])
         for row in rows:
             if str(row.get("item_id", "")).startswith("kd_"):
-                out[row["item_id"]] = row.get("content") or ""
+                out[row["item_id"]] = (row.get("title") or "", row.get("content") or "")
     return out
+
+
+def _norm(s: str) -> str:
+    """Chuẩn hoá khoảng trắng để so sánh.
+
+    Mục bị cắt đúng ngưỡng ``MAX_CHARS`` hay rơi vào giữa khoảng trắng; khi lưu xuống DB
+    phần thừa bị gọt, nên bản đọc về khác bản gửi đi đúng một dấu cách. Không chuẩn hoá
+    thì mục đó bị coi là "đã đổi" mỗi lần chạy và **bị duyệt lại mỗi ngày** dù nội dung
+    y nguyên — người duyệt sẽ nhanh chóng bấm duyệt cho xong, và hàng rào mất tác dụng.
+    """
+    return " ".join((s or "").split())
 
 
 def submit(items: list[dict]) -> dict:
@@ -527,10 +575,11 @@ def submit(items: list[dict]) -> dict:
     have = existing_content()
     stats = {"submitted": 0, "unchanged": 0, "failed": 0}
     for it in items:
-        if have.get(it["item_id"]) == it["content"]:
+        cur = have.get(it["item_id"])
+        if cur and (_norm(cur[0]), _norm(cur[1])) == (_norm(it["title"]), _norm(it["content"])):
             stats["unchanged"] += 1
             continue
-        r = requests.post(PLATFORM + "/v1/brain/items", headers=_H, timeout=30, json=it)
+        r = requests.post(PLATFORM + _BRAIN, headers=_H, timeout=30, json=it)
         if r.ok:
             stats["submitted"] += 1
         else:

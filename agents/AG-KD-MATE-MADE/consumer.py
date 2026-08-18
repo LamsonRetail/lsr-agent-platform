@@ -238,6 +238,38 @@ def try_bigquery(question: str, user_ref: str) -> str:
         return f"Em chưa lấy được số từ warehouse ạ — {exc}"
 
 
+# RAG của platform tìm theo TỪ KHOÁ (Postgres full-text + unaccent), không hiểu ngữ
+# nghĩa. Người Việt hỏi "tệp khách hàng mục tiêu" trong khi tài liệu viết "TARGET
+# AUDIENCE" → 0 kết quả, và LYLY trả "chưa có dữ liệu" dù dữ liệu nằm ngay đó. Đây là
+# kiểu hỏng khó chịu nhất với người dùng: họ biết tài liệu có, mà agent bảo không.
+# Nới câu hỏi bằng từ đồng nghĩa của đúng ngành này trước khi tra.
+_SYNONYMS = (
+    (r"tệp khách|khách hàng mục tiêu|đối tượng khách|chân dung khách|target",
+     "target audience tệp khách hàng"),
+    (r"doanh thu|\bdt\b", "doanh thu GMV revenue"),
+    (r"lợi nhuận|\blndg\b|\blnđg\b", "lợi nhuận LNĐG BLG"),
+    (r"quảng cáo|\bads\b|chạy ads", "ads quảng cáo ROAS campaign"),
+    (r"tồn kho|còn hàng|hết hàng", "tồn kho SKU"),
+    (r"thương hiệu|brand|định vị", "thương hiệu brand slogan nhận diện"),
+    (r"quy trình|\bsop\b|cách làm", "quy trình SOP"),
+    (r"phân công|trách nhiệm|ai làm", "RACI phân công trách nhiệm"),
+    (r"hoa hồng|affiliate|\baff\b|\bkoc\b", "affiliate KOC hoa hồng"),
+    (r"giá bán|bảng giá|phân khúc giá", "giá phân khúc sản phẩm"),
+)
+
+
+def expand_query(q: str) -> str:
+    """Thêm từ đồng nghĩa vào câu truy vấn gửi cho RAG.
+
+    Chỉ dùng để TÌM, không đổi câu hỏi hiển thị cho người dùng. Thêm từ chỉ nới rộng
+    kết quả tìm được, không làm sai câu trả lời — vì mọi thứ trả về vẫn phải là tri thức
+    đã duyệt và vẫn kèm nguồn.
+    """
+    low = (q or "").lower()
+    extra = [syn for pattern, syn in _SYNONYMS if re.search(pattern, low)]
+    return f"{q} {' '.join(extra)}" if extra else q
+
+
 def data_period(hits: list[dict]) -> str:
     """Kỳ dữ liệu của các mục tri thức dùng để trả lời.
 
@@ -246,7 +278,10 @@ def data_period(hits: list[dict]) -> str:
     """
     periods = []
     for h in hits:
-        p = h.get("source_ref") or h.get("updated_at") or h.get("created_at") or ""
+        # Ưu tiên ngày nhét trong TITLE: RAG của platform không trả source_ref, nên đây
+        # là chỗ DUY NHẤT ngày cập nhật còn sống tới lúc trả lời. Xem kd_sync._item().
+        m = re.search(r"cập nhật (\d{2}/\d{2}/\d{4})", h.get("title") or "")
+        p = m.group(1) if m else (h.get("source_ref") or h.get("updated_at") or "")
         if p and p not in periods:
             periods.append(str(p))
     return " · ".join(periods[:3]) if periods else "không ghi rõ trong nguồn"
@@ -370,7 +405,8 @@ def handle(job: dict) -> str:
     is_meeting = meeting_note.is_meeting_job(job)
     if is_meeting or needs_knowledge(q, uref):
         ctx = api("GET", f"/v1/self/context?session_id={urllib.parse.quote(sid)}"
-                         f"&user_ref={urllib.parse.quote(uref)}&q={urllib.parse.quote(q[:200])}")
+                         f"&user_ref={urllib.parse.quote(uref)}"
+                         f"&q={urllib.parse.quote(expand_query(q)[:400])}")
     else:
         ctx: dict = {}
 
