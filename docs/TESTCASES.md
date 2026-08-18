@@ -520,7 +520,31 @@ harness trả lời nhầm — xem báo cáo 08-14.)
 
 ---
 
-**Tổng: 277 case — 271 ✅ đã nghiệm thu (98%).**
+### 19.2 Owner nộp TỪ MÁY DEV qua Caddy (✅ 08-18, 8/8 pass — Linh báo lỗi)
+
+> Bắt **2 bug thật** + **1 lỗ bảo mật**. Bài học lặp lần 3: test chạy trên VM
+> (`localhost:8090`) **bỏ qua Caddy**, nên mọi carve-out thiếu đều không lộ ra. Test của
+> tính năng owner-facing PHẢI đi từ máy dev qua domain thật.
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| C.1 | `/v1/agents/*/golive-checklist|spec|profile` từ máy dev | Không còn 403 của Caddy (401 = đã tới app) | ✅ |
+| C.2 | `/v1/auth/tokens`, `/v1/roles/catalog` | Mở cho CLI | ✅ |
+| C.3 | `/v1/accounts`, `/v1/model-auth/*`, `/v1/routing` | **Vẫn 403** — ranh giới admin không bị nới | ✅ |
+| E.1–3 | Device-login từ máy dev qua Caddy | Lấy được token cá nhân | ✅ |
+| E.4 | POST checklist rỗng qua Caddy | App trả đúng 28 mục thiếu | ✅ |
+| E.5–6 | `scripts/submit-golive.sh` chạy từ máy dev | Nộp được + in mã đề xuất đã trình admin | ✅ |
+| E.7 | GET checklist bằng token cá nhân | Đọc được payload của agent mình | ✅ |
+| E.8 | GET checklist KHÔNG token | **401** — trước đây endpoint này không kiểm quyền, mở qua Caddy là hở email/KPI/nguồn dữ liệu ra internet | ✅ |
+
+Bug đã sửa: (1) Caddy `@selfserve` thiếu route golive-checklist → owner 403; dùng
+`path_regexp` vì `path` matcher không khớp wildcard giữa đường dẫn. (2) `submit-golive.sh`
+pipe response vào `python3 - <<EOF` → heredoc chiếm stdin, script luôn crash khi nộp.
+(3) `GET /golive-checklist` chưa kiểm quyền → thêm `_require_role(user, agent_id)`.
+
+---
+
+**Tổng: 285 case — 279 ✅ đã nghiệm thu (98%).**
 
 **7 case còn lại, chia 2 nhóm:**
 - **Cần bạn xử lý (2):** `P1.1` — bot Admin App chưa được add vào nhóm nào (`/v1/lark/chats` rỗng — add bot vào 1 nhóm là xong); `ST.8` — cần team thật cùng push 1 branch.

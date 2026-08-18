@@ -35,7 +35,21 @@
 platform.34-126-154-135.sslip.io {
 	# Self-service: enroll + bootstrap + agent-scoped API (/v1/self*). Mở (không cần
 	# gateway token); auth ở app (enroll token / agent telemetry key). Vẫn rate-limit.
-	@selfserve path /v1/agents/enroll /bootstrap/* /v1/self /v1/self/* /v1/lark/* /v1/chat/* /v1/auth/device/* /v1/auth/me
+	@selfserve path /v1/agents/enroll /bootstrap/* /v1/self /v1/self/* /v1/lark/* /v1/chat/* /v1/auth/device/* /v1/auth/me /v1/auth/tokens /v1/auth/tokens/* /v1/roles/catalog /v1/roles/request
+	# Route theo từng agent mà OWNER cần gọi từ máy dev (golive checklist, spec, master
+	# data). Dùng path_regexp vì path matcher không khớp wildcard giữa đường dẫn.
+	# Auth vẫn do app kiểm: _require_role trên đúng agent_id.
+	@selfagent path_regexp ^/v1/agents/[^/]+/(golive-checklist|spec|profile)$
+	handle @selfagent {
+		rate_limit {
+			zone zselfagent {
+				key {remote_host}
+				events 60
+				window 1m
+			}
+		}
+		reverse_proxy platform_api:8090
+	}
 	handle @selfserve {
 		rate_limit {
 			zone zenroll {
