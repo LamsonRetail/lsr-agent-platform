@@ -15,8 +15,11 @@ Thứ tự làm việc (gate CI `agent-gate` tự chặn nếu bỏ qua):
 ## Chạy & test
 
 ```bash
-python3 -m pytest tests/ -q          # offline, không cần secret (39 case, ~0.2s)
+python3 -m pytest tests/ -q          # 88 case offline, không cần secret (~1s)
 ```
+
+CI của repo không chạy bộ này (`testpaths` ở gốc chỉ trỏ `tests/` của core) → tự chạy
+trước khi commit.
 
 ```bash
 cp .env.example .env && vi .env && docker compose up
