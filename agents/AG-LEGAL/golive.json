@@ -1,0 +1,97 @@
+{
+  "_trang_thai": "BẢN NHÁP — chưa nộp. Còn 3 mục phụ thuộc việc admin/Pháp chế làm (đánh dấu CHỜ:). Nộp bằng: bash ../../scripts/submit-golive.sh AG-LEGAL",
+
+  "owner_email": "thint@hapas.vn",
+  "backup_owner": "CHỜ: email Nguyễn Thị Anh (Legal) — cần để làm backup owner và nạp legal_roles",
+  "team_id": "SQ-LEGAL",
+  "team_members": [
+    {"full_name": "Nguyễn Trần Thi", "role": "owner", "expertise": "BOD, chủ agent"},
+    {"full_name": "Nguyễn Thị Anh", "role": "approver", "expertise": "Pháp chế — duyệt bản thảo, digest, kết quả review"}
+  ],
+  "approver": "Nguyễn Trần Thi (BOD) và Nguyễn Thị Anh (Legal) — cả hai đều duyệt được; platform chặn tự duyệt việc của chính mình nên luôn có người thứ hai",
+  "collaboration_rules": [
+    "Trong group phê duyệt oc_2c44821d37e5e12a2c1651251cfd4efb: agent CHỈ phản hồi lệnh (#id duyệt/sửa/huỷ/tham gia/trả lại/nhắn/#ds), tin nhắn thường thì im lặng",
+    "Mọi câu trả lời cho nhân viên đều được báo về group để Pháp chế theo dõi; rủi ro cao thì @ trực tiếp",
+    "Pháp chế gõ '#id tham gia' là agent ngừng tự trả lời hội thoại đó, người xử lý trực tiếp",
+    "Agent không quyết thay người: bản thảo hợp đồng, digest văn bản luật và kết luận review đều phải có người duyệt"
+  ],
+  "work_channels": [
+    "Lark group phê duyệt & thông báo: oc_2c44821d37e5e12a2c1651251cfd4efb",
+    "Lark chat của nhân viên (gán qua Console → Ingress, khai rõ app_id + chat_id — KHÔNG để binding bắt tất)",
+    "web chat console: /agent/AG-LEGAL"
+  ],
+
+  "kpis": [
+    {"kpi_name": "câu hỏi pháp chế được trả lời", "unit": "câu", "target": 40, "period": "weekly", "data_source": "jobs của agent trên Console", "formula": "count(job status=done, intent=s1_qa)"},
+    {"kpi_name": "thời gian chờ bản thảo hợp đồng", "unit": "giờ làm việc", "target": 4, "period": "weekly", "data_source": "legal_gates (created_at → decided_at, kind=s2_draft)", "formula": "avg(decided_at - created_at)"},
+    {"kpi_name": "việc rà soát Pháp chế tiết kiệm được", "unit": "hồ sơ", "target": 10, "period": "monthly", "data_source": "contract_reviews + signing_dossiers", "formula": "count(review + dossier đã xử lý)"}
+  ],
+  "agent_kpi": "≥90% câu trả lời S1 có ít nhất 1 trích dẫn link Lark hợp lệ; 0 bản thảo hợp đồng tới tay người yêu cầu mà chưa có quyết định của Pháp chế; 0 digest được gửi/nạp KB khi chưa duyệt",
+  "alert_thresholds": [
+    "gate quá hạn SLA (mặc định 4h) → nhắc trong group; quá 2 lần nhắc → báo owner",
+    "NotebookLM lỗi xác thực → cảnh báo ngay, agent degrade và KHÔNG trả lời bằng kiến thức model",
+    "sync KB lỗi 2 chu kỳ liên tiếp (6h) → báo owner",
+    "1 nguồn crawl lỗi → ghi last_error của nguồn đó, không chết pipeline; ≥3 nguồn lỗi cùng lúc → báo owner",
+    "agent im lặng > 24h khi có routing → cảnh báo AG-OPS"
+  ],
+
+  "data_sources_allowed": [
+    "Lark Wiki space pháp chế 7595876759661186785 (chỉ đọc)",
+    "Lark Drive folder văn bản luật MIx2fFd8rlzWJBd9bQGlcLQegCd (đọc + ghi file văn bản luật crawl về)",
+    "Lark Drive folder mẫu hợp đồng (CHỜ: legal team chỉ định token folder)",
+    "Lark Drive folder lưu bản thảo LEGAL_DRAFT_FOLDER (CHỜ: chỉ định token folder)",
+    "NotebookLM: notebook 'LSR Legal KB' + 'Legal Updates' (nguồn đã sync từ 2 mục trên)",
+    "Nguồn luật public: thuvienphapluat.vn, luatvietnam.vn, chinhphu.vn, congbao.chinhphu.vn",
+    "file hợp đồng do chính người dùng đính kèm trong chat (tải qua /v1/lark/resource)"
+  ],
+  "data_forbidden": [
+    "lương, hợp đồng lao động, dữ liệu nhân sự cá nhân",
+    "báo cáo tài chính chi tiết",
+    "dữ liệu khách hàng cá nhân",
+    "nội dung hội thoại của người khác — không tiết lộ chéo giữa các người dùng",
+    "tư vấn pháp lý cá nhân của nhân viên (việc riêng, không liên quan công ty)"
+  ],
+  "skills": ["notebooklm-kb", "lark-wiki-drive", "legal-gates", "contract-docx", "legal-news"],
+  "writes": [
+    "ghi file bản thảo hợp đồng (dấu DRAFT) vào Drive folder bản thảo",
+    "ghi file digest văn bản luật vào Drive folder văn bản luật",
+    "nạp source vào notebook 'Legal Updates' — CHỈ sau khi Pháp chế duyệt digest",
+    "ghi session turn / user_facts / brain item của chính agent trên platform",
+    "gửi tin Lark qua broker platform (group phê duyệt + chat người yêu cầu)"
+  ],
+
+  "auth_mode": "subscription của owner (claude setup-token) — KHÔNG dùng API key chung",
+  "lark_connect": "app Lark của platform (gửi/nhận qua broker /v1/lark/*, agent không cầm app_secret). CHỜ: admin add bot vào group oc_2c44821d37e5e12a2c1651251cfd4efb và cấp scope wiki:wiki:readonly, drive:drive:readonly, docx:document:readonly, drive:file:upload, im:resource. Ngoại lệ đã ghi nhận: đọc/ghi Wiki-Drive còn dùng tenant token trực tiếp vì broker chưa có nhóm endpoint này (yêu cầu core C1)",
+  "telemetry_verified": "CHỜ: xác nhận thấy run/token trên Console → Agent → AG-LEGAL sau khi deploy runtime",
+  "deployment": "self_hosted: docker compose service AG-LEGAL trên VM platform /opt/lsr-platform. MỘT tiến trình duy nhất chứa cả chat + kb-sync + news-crawl + gate worker, vì NotebookLM chỉ cho một phiên mỗi tài khoản",
+
+  "tests_passed": "python3 -m pytest tests/ -q → 77/77 pass (offline, không cần secret) ngày 18/08/2026. Còn phải chạy: bash ../../scripts/agent-test.sh AG-LEGAL sau khi có LSR_AGENT_TOKEN",
+  "escalation_rules": [
+    "KB không có căn cứ → nói thẳng 'tài liệu hiện chưa quy định', hướng về Pháp chế, KHÔNG suy diễn",
+    "NotebookLM lỗi → trả thông báo degrade rõ ràng, tuyệt đối không trả lời bằng kiến thức nền của model",
+    "câu hỏi rủi ro cao hoặc không có trích dẫn nào → @ Pháp chế trong group để có người xem ngay",
+    "model lỗi khi rà soát hợp đồng → báo 'chưa rà soát được', KHÔNG kết luận hợp đồng sạch",
+    "Bước 5 trình ký phát hiện lỗi mức chặn → đề nghị quay lại Bước 4; tối đa 2 lần, lần 3 escalate trưởng Pháp chế"
+  ],
+  "risks": [
+    "notebooklm-py là API không chính thức → bọc interface AnswerEngine, plan B Gemini File Search; engine lỗi thì degrade rõ, cảnh báo admin",
+    "Hợp đồng do agent soạn/rà soát bị dùng luôn → mọi bản đóng dấu DRAFT, bắt buộc qua gate Pháp chế, disclaimer ở mọi câu trả lời",
+    "Pháp chế quá tải thông báo → gom theo hội thoại (1 gate/hội thoại), chỉ rủi ro cao mới @; đo lượng tin/ngày trong 2 tuần chạy thử để hiệu chỉnh",
+    "Giám sát hội thoại ảnh hưởng riêng tư nhân viên → câu chào lượt đầu nói rõ việc giám sát; chỉ người trong legal_roles thấy",
+    "legal_gates lưu ở SQLite trong volume của container → mất hàng đợi nếu volume không bền; phải kiểm khi deploy",
+    "S5 chưa nối Lark Approval (chờ core C5) → chạy shadow, không gắn vào quy trình chính thức",
+    "Checklist đầu mục hồ sơ hiện là bộ khởi tạo của dev → báo cáo Bước 3 ghi rõ là tham khảo tới khi Pháp chế chốt"
+  ],
+  "reviewer_first_week": "CHỜ: Nguyễn Thị Anh (Legal) đọc lại toàn bộ câu trả lời tuần đầu qua group giám sát — mọi lượt đều có card nên không cần mở Console",
+
+  "schedule": [
+    "kb-sync: mỗi 3 giờ (thread trong consumer) — Wiki/Drive pháp chế + registry mẫu hợp đồng → NotebookLM",
+    "news-crawl: mỗi ngày 6h (thread trong consumer) — crawl nguồn luật → tóm tắt → MỞ GATE chờ Pháp chế duyệt",
+    "gate worker: mỗi 10 phút — nhắc SLA quá hạn, nạp lại instruction khi có version mới"
+  ],
+  "retrain_process": "Tài liệu sai → legal team sửa trên Lark Wiki/Drive, chu kỳ sync sau tự cập nhật (footer câu trả lời ghi thời điểm KB cập nhật). Hành vi agent sai → sửa INSTRUCTION.md, publish version mới qua Console; agent nạp lại trong ≤10 phút, không cần deploy. Rollback bằng cách publish lại version cũ",
+  "feedback_channel": "Group Lark oc_2c44821d37e5e12a2c1651251cfd4efb — Pháp chế thấy mọi câu trả lời và phản hồi ngay tại card; nhân viên phản hồi trực tiếp trong hội thoại với agent",
+  "review_cadence": "weekly — owner xem Console (số run, token, lỗi) và hàng đợi gate (#ds) mỗi thứ Hai; monthly — Pháp chế soát log các cảnh báo mức thấp mà Bước 5 phát hiện để hiệu chỉnh checklist",
+  "team_notified": "CHỜ: thông báo cho các phòng ban dùng agent trước khi mở kênh thật — nội dung: agent ghi log hội thoại và bộ phận Pháp chế giám sát để bảo đảm chất lượng tư vấn (câu chào của agent cũng nói rõ điều này ở lượt đầu mỗi hội thoại)",
+  "scope_confirmed": "Owner xác nhận agent chỉ làm đúng phạm vi USECASE.md: hỏi đáp có trích dẫn, soạn bản thảo hợp đồng từ mẫu, rà soát hợp đồng đối tác, hỗ trợ hồ sơ trình ký, tổng hợp văn bản luật. Agent KHÔNG tư vấn pháp lý chính thức, KHÔNG ký/phát hành hợp đồng, KHÔNG quyết thay Pháp chế"
+}

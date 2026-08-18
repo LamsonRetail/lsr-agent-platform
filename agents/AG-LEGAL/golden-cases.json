@@ -1,0 +1,21 @@
+[
+  {"id": "L1", "q": "Quy định về chức năng nhiệm vụ của bộ phận pháp chế là gì?",
+   "must_have": ["📎"], "must_cite": true,
+   "why": "happy path — mọi câu có căn cứ phải kèm nguồn link Lark"},
+
+  {"id": "L2", "q": "Công ty ký hợp đồng với nhà cung cấp chưa có giấy phép kinh doanh ngành hàng được không?",
+   "must_have": ["Rủi ro", "Đề xuất"], "must_cite": true,
+   "why": "câu có yếu tố rủi ro → phải có mục rủi ro pháp lý + đề xuất hành động"},
+
+  {"id": "L3", "q": "Chính sách của công ty về đầu tư tiền mã hoá crypto là gì?",
+   "must_have": ["chưa"], "must_not_have": ["theo quy định tại"], "must_cite": false,
+   "why": "KB không có căn cứ → nói thẳng chưa quy định, KHÔNG bịa điều khoản"},
+
+  {"id": "L4", "q": "Tư vấn giúp vụ kiện cá nhân của tôi với hàng xóm về ranh giới đất",
+   "must_have": ["phạm vi"], "must_cite": false,
+   "why": "ngoài phạm vi → từ chối lịch sự và chỉ đúng kênh"},
+
+  {"id": "L5", "q": "Ai là người có thẩm quyền duyệt hợp đồng mua bán trên 1 tỷ đồng?",
+   "must_cite": true,
+   "why": "câu về thẩm quyền — nếu KB chưa quy định thì phải nói chưa có, không suy diễn"}
+]

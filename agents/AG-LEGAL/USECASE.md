@@ -10,7 +10,7 @@ chế tốn nhiều thời gian trả lời câu hỏi lặp lại, điền hợ
 nhân viên thì chờ lâu hoặc tự làm sai. Văn bản pháp luật mới (nghị định, thông tư,
 hướng dẫn) cũng cần được theo dõi thủ công.
 
-AG-LEGAL giải quyết 4 việc (S1–S4):
+AG-LEGAL giải quyết 5 việc (S1–S5):
 
 - **S1 — Hỏi đáp pháp chế**: trả lời câu hỏi về quy định/chính sách công ty **có
   trích dẫn** từ kho tài liệu chính thức (Lark Wiki pháp chế + Drive văn bản luật),
@@ -61,19 +61,33 @@ Người duyệt hiện tại: **Nguyễn Trần Thi** (BOD) và **Nguyễn Th�
 1. "Tạo hợp đồng nguyên tắc mua bán với nhà cung cấp X."
 2. Agent liệt kê template phù hợp → hỏi lần lượt các trường còn thiếu (lưu state,
    tiếp tục được giữa các phiên) → xác nhận tóm tắt.
-3. Điền docx → upload Drive → gửi file + link, đóng dấu **DRAFT**.
+3. Điền docx (đóng dấu **DRAFT**) → upload Drive → **chuyển Pháp chế kiểm tra**.
+4. Pháp chế duyệt → agent gửi link cho người yêu cầu. Yêu cầu sửa → agent quy góp ý về
+   field và làm lại; góp ý không quy được về field thì **hỏi lại người**, không đoán.
 
 ### S3 — Review hợp đồng (Phase 4)
 1. Người dùng gửi file hợp đồng đối tác kèm ghi chú loại hợp đồng.
 2. Agent đối chiếu checklist pháp chế (trên Wiki) + chính sách → trả báo cáo rủi ro
    (mức độ, điều khoản, đề xuất sửa).
-3. Người dùng nộp lại bản đã xử lý → hết vấn đề → agent gửi tóm tắt + file cho người
-   có thẩm quyền duyệt (Lark DM ✅/❌) → báo kết quả cho người nộp.
+3. Người dùng nộp lại bản đã xử lý → hết vấn đề → agent mở gate cho người có thẩm quyền
+   (duyệt bằng lệnh trong group) → báo kết quả cho người nộp.
+   Model lỗi → báo "chưa rà soát được", **không bao giờ kết luận hợp đồng sạch**.
 
 ### S4 — Tổng hợp văn bản luật (Phase 5)
-1. Hằng ngày, worker crawl danh sách nguồn uy tín (quản lý trong console).
-2. Văn bản mới → tóm tắt tác động tới LSR → lưu file về Drive folder văn bản luật
-   → sync vào KB → digest gửi Lark group legal team.
+1. Hằng ngày (6h), thread crawl danh sách nguồn RSS uy tín, dedupe theo số hiệu văn bản.
+2. Văn bản mới → tóm tắt phạm vi/hiệu lực/tác động tới LSR. **Mục không trích được link
+   nguồn thì bị loại.**
+3. Digest ở trạng thái chờ → **Pháp chế duyệt trong group** → mới gửi group + lưu file về
+   Drive folder văn bản luật + nạp notebook "Legal Updates". Chưa duyệt = không gửi, không nạp KB.
+
+### S5 — Hỗ trợ trình ký (Phase 6, đang chạy shadow)
+1. **Bước 3**: hồ sơ vào → Agent đối chiếu danh mục đầu mục theo loại hợp đồng + rà soát
+   nội dung → báo cáo đính kèm hồ sơ, DM người khởi tạo nếu thiếu giấy tờ.
+2. **Bước 4**: Pháp chế rồi Tài chính/Nhân sự rà soát (người làm, Agent không tham gia).
+3. **Bước 5**: Agent cross-check bản cuối. Mức chặn → đề nghị quay lại Bước 4; mức thấp →
+   cảnh báo tham khảo, Admin vẫn trình ký.
+4. Quá SLA 30 phút hoặc Agent lỗi → hồ sơ **vẫn đi tiếp** kèm ghi chú "chưa rà soát kịp".
+   Agent không bao giờ là lý do hồ sơ bị treo.
 
 ## Ngoài phạm vi (không làm)
 
@@ -90,7 +104,8 @@ Người duyệt hiện tại: **Nguyễn Trần Thi** (BOD) và **Nguyễn Th�
 |---|---|---|
 | Lark Wiki pháp chế | space_id `7595876759661186785` | Bot cần được thêm vào space (Read) — **đang chờ admin** |
 | Drive folder văn bản luật | `MIx2fFd8rlzWJBd9bQGlcLQegCd` | Bot đọc được ✅ |
-| Drive folder template hợp đồng | (chưa chỉ định) | Chờ legal team |
+| Drive folder template hợp đồng | (chưa chỉ định — env `LEGAL_TEMPLATE_FOLDER`) | Chờ legal team |
+| Drive folder lưu bản thảo DRAFT | (chưa chỉ định — env `LEGAL_DRAFT_FOLDER`) | Chờ chỉ định |
 | NotebookLM | 2 notebook: "LSR Legal KB" + "LSR Legal Updates"; tài khoản Google cá nhân, auth storage_state.json | Chờ chủ tài khoản login |
 | Nguồn luật public | thuvienphapluat.vn, luatvietnam.vn, chinhphu.vn… (danh sách trong console) | Public |
 

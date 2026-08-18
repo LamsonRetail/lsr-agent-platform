@@ -69,6 +69,93 @@ CREATE TABLE IF NOT EXISTS session_modes (
   chat_id        TEXT,
   since          REAL
 );
+
+-- ===== S2: tạo hợp đồng (Phase 3) =====
+CREATE TABLE IF NOT EXISTS contract_templates (
+  key          TEXT PRIMARY KEY,   -- drive:<file_token>
+  name         TEXT NOT NULL,      -- "Hợp đồng dịch vụ"
+  file_token   TEXT,
+  lark_url     TEXT,
+  fields       TEXT,               -- JSON: [{"key":"ten_ben_a","label":"...","required":true}]
+  edit_ts      TEXT,
+  status       TEXT NOT NULL DEFAULT 'active',
+  updated_at   REAL
+);
+-- State hội thoại đa lượt của S2. Ở BẢNG, không nhồi vào prompt.
+CREATE TABLE IF NOT EXISTS contract_drafts (
+  session_id   TEXT PRIMARY KEY,
+  template_key TEXT,
+  values_json  TEXT NOT NULL DEFAULT '{}',
+  asking       TEXT,               -- field đang hỏi
+  status       TEXT NOT NULL DEFAULT 'collecting',
+                                   -- collecting|confirming|pending_review|revising|done|cancelled
+  gate_id      INTEGER,
+  out_url      TEXT,
+  requester    TEXT,
+  chat_id      TEXT,
+  round        INTEGER NOT NULL DEFAULT 1,
+  updated_at   REAL
+);
+
+-- ===== S3: review hợp đồng đối tác (Phase 4) =====
+CREATE TABLE IF NOT EXISTS contract_reviews (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id    TEXT,
+  requester     TEXT,
+  chat_id       TEXT,
+  file_name     TEXT,
+  contract_type TEXT,
+  findings      TEXT,              -- JSON: [{"severity","clause","issue","suggestion"}]
+  status        TEXT NOT NULL DEFAULT 'received',
+                                   -- received|issues_sent|resolved|pending_approval|approved|rejected
+  gate_id       INTEGER,
+  round         INTEGER NOT NULL DEFAULT 1,
+  created_at    REAL,
+  updated_at    REAL
+);
+
+-- ===== S4: tổng hợp văn bản luật (Phase 5) =====
+CREATE TABLE IF NOT EXISTS legal_news_sources (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  url        TEXT NOT NULL UNIQUE,
+  kind       TEXT NOT NULL DEFAULT 'rss',   -- rss | html
+  active     INTEGER NOT NULL DEFAULT 1,
+  last_run   REAL,
+  last_error TEXT,
+  n_items    INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS legal_news_items (
+  key        TEXT PRIMARY KEY,     -- số hiệu văn bản, hoặc url khi không có số hiệu
+  source_id  INTEGER,
+  doc_no     TEXT,
+  title      TEXT,
+  url        TEXT,
+  summary    TEXT,
+  status     TEXT NOT NULL DEFAULT 'new',   -- new|in_digest|published|dropped
+  found_at   REAL
+);
+
+-- ===== S5: hỗ trợ trình ký (Phase 6) =====
+CREATE TABLE IF NOT EXISTS dossier_checklists (
+  contract_type TEXT PRIMARY KEY,
+  items         TEXT NOT NULL,     -- JSON: ["Giấy ĐKKD đối tác", "Báo giá", ...]
+  updated_at    REAL
+);
+CREATE TABLE IF NOT EXISTS signing_dossiers (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  instance_code TEXT UNIQUE,       -- mã instance Lark Approval (shadow: mã tự sinh)
+  contract_type TEXT,
+  requester     TEXT,
+  chat_id       TEXT,
+  step          TEXT,              -- step3 | step4 | step5 | done
+  step3_report  TEXT,
+  step5_report  TEXT,
+  bounce_count  INTEGER NOT NULL DEFAULT 0,
+  status        TEXT NOT NULL DEFAULT 'open',
+  created_at    REAL,
+  updated_at    REAL
+);
 """
 
 

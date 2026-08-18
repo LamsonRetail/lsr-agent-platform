@@ -35,18 +35,41 @@ Kế hoạch đầy đủ: `~/LSR Legal Agent/PLAN-AG-LEGAL.md` (ngoài repo, kh
 ## Cấu trúc
 
 ```
-consumer.py        vòng nhận job → router → S1 → gate; lệnh duyệt trong group
+consumer.py        điều phối: poll job → router → gọi flow → gate; lệnh duyệt trong group
 seed_roles.py      nạp legal_roles (2 người duyệt) + resolve open_id
+seed_news.py       nạp nguồn luật (S4) + checklist đầu mục hồ sơ (S5)
+golden_run.py      golden set — phép kiểm CHỐNG BỊA NGUỒN (--selfcheck chạy offline)
+golive.json        checklist golive 28 mục (nộp bằng scripts/submit-golive.sh)
 sync_worker.py     chạy sync TAY (chỉ khi consumer đang dừng)
 INSTRUCTION.md     nguồn của instruction_block
 legalkb/
   platform.py      MỌI lời gọi platform (bộ nhớ, job, Lark broker)
   brain.py         gọi Claude (`claude -p`, subscription) + dựng prompt + nén hội thoại
   gates.py         khung Pháp chế in the loop + parser lệnh `#12 duyệt`
+  flows.py         luồng S2–S5 + hệ quả sau khi Pháp chế quyết (dispatch_decision)
+  contracts.py     S2: registry mẫu, điền docx, state đa lượt, quy góp ý về field
+  review.py        S3: checklist từ KB + đối chiếu + state machine
+  news.py          S4: crawl RSS, dedupe theo số hiệu, digest, phát hành sau khi duyệt
+  signing.py       S5: Bước 3/Bước 5 trình ký (shadow — chờ core C5)
+  extract.py       trích text PDF/DOCX (không dùng /v1/extract vì nó đòi admin)
   engine.py        NotebookLM (AnswerEngine — có thể swap sang Gemini File Search)
-  lark_kb.py       đọc Wiki/Drive (ngoại lệ C1)
-  sync.py store.py đồng bộ KB + SQLite (legal_sources, legal_gates, legal_roles…)
+  lark_kb.py       đọc/ghi Wiki-Drive (ngoại lệ C1)
+  sync.py store.py đồng bộ KB + SQLite (13 bảng)
 ```
+
+## Luật riêng của từng skill — đừng "tối giản" mấy chỗ này
+
+| Chỗ | Luật | Vì sao |
+|---|---|---|
+| S2 | Bản thảo **không** gửi thẳng người yêu cầu; luôn qua gate `s2_draft` | Review §A.1 |
+| S2 | Field thiếu để nguyên `{{...}}` trong docx | Xoá âm thầm = tạo hợp đồng thiếu điều khoản |
+| S2 | Góp ý không quy được về field → **hỏi người**, không đoán giá trị | Đoán giá trị hợp đồng là rủi ro pháp lý |
+| S3 | Model lỗi → `clean=False` | Không bao giờ được kết luận "hợp đồng sạch" khi chưa rà được |
+| S4 | Mục thiếu link nguồn → **loại** khỏi digest | Review §B, chống bịa nguồn |
+| S4 | Chưa duyệt = **không gửi, không nạp KB** | Review §B |
+| S5 | Quá SLA 30' hoặc model lỗi → `auto_passed` | Máy không được làm nghẽn quy trình người |
+| S5 | Tối đa 2 lần quay lại Bước 4, lần 3 escalate | Chống vòng lặp vô hạn |
+| Mọi gate | Quá hạn chỉ **NHẮC**, không tự thông qua (trừ `observe`) | Điểm an toàn cốt lõi |
 
 ## Pháp chế in the loop
 

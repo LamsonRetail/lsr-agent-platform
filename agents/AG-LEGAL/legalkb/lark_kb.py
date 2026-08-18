@@ -13,6 +13,7 @@ Cần các scope (admin duyệt trên Lark Developer Console):
   wiki:wiki:readonly · drive:drive:readonly · docx:document:readonly
 Và bot phải là member (Read) của wiki space pháp chế.
 """
+import hashlib
 import json
 import time
 import urllib.error
@@ -146,3 +147,44 @@ class LarkKB:
 
     def drive_file_url(self, file_token, file_type="file"):
         return f"https://{self.tenant_domain}/{file_type}/{file_token}"
+
+    def drive_upload(self, folder_token, file_name, data):
+        """Upload file vào Drive folder → trả file_token.
+
+        Dùng cho S2 (bản thảo hợp đồng) và S4 (văn bản luật crawl về). Gửi file cho người
+        dùng bằng LINK DRIVE chứ không đính kèm qua Lark IM: broker platform chỉ gửi
+        text/markdown, không gửi file (gap C7) — mà link Drive lại đúng hơn về quản trị
+        (quyền do Lark quản, legal team thấy được ở folder).
+        Cần scope `drive:file:upload`.
+        """
+        boundary = "----lsrlegal" + hashlib.md5(file_name.encode()).hexdigest()[:12]
+        parts = []
+
+        def field(name, value):
+            parts.append(f"--{boundary}\r\nContent-Disposition: form-data; "
+                         f'name="{name}"\r\n\r\n{value}\r\n'.encode())
+
+        field("file_name", file_name)
+        field("parent_type", "explorer")
+        field("parent_node", folder_token)
+        field("size", str(len(data)))
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; '
+                     f'filename="{file_name}"\r\n'
+                     f"Content-Type: application/octet-stream\r\n\r\n".encode())
+        parts.append(data)
+        parts.append(f"\r\n--{boundary}--\r\n".encode())
+        body = b"".join(parts)
+
+        req = urllib.request.Request(
+            self.base + "/open-apis/drive/v1/files/upload_all", data=body, method="POST",
+            headers={"Authorization": f"Bearer {self.tenant_token()}",
+                     "Content-Type": f"multipart/form-data; boundary={boundary}"})
+        try:
+            with urllib.request.urlopen(req, timeout=300) as r:
+                j = json.loads(r.read().decode())
+        except urllib.error.HTTPError as e:
+            raise LarkError(e.code, e.read()[:200].decode(errors="replace"), http=e.code)
+        if j.get("code", 0) != 0:
+            raise LarkError(j["code"], j.get("msg", "upload thất bại"))
+        return (j.get("data") or {}).get("file_token")
+

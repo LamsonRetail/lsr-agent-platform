@@ -40,10 +40,13 @@ RISK_MARK = {"high": "🔴", "medium": "🟠", "low": "🟢"}
 SLA_ACTION = {OBSERVE: "auto_passed", GATE: "remind"}
 
 
-def _plain(s):
-    """Bỏ dấu + hạ chữ để so lệnh: 'Duyệt' == 'duyet'."""
+def plain(s):
+    """Bỏ dấu + hạ chữ để so khớp tiếng Việt: 'Duyệt' == 'duyet'."""
     s = unicodedata.normalize("NFD", s or "")
     return "".join(c for c in s if not unicodedata.combining(c)).lower().strip()
+
+
+_plain = plain          # tên cũ dùng trong module này
 
 
 _CMD_RE = re.compile(r"^\s*#\s*(\d+)\s+(.+)$", re.S)

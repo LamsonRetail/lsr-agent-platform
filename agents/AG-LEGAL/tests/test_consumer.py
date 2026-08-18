@@ -10,8 +10,11 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("NLM_NOTEBOOK_KB_ID", "nb-test")
 
+import pytest
+
 import consumer
 from legalkb.engine import Citation, EngineAnswer
+from legalkb.flows import Bundle
 from legalkb.gates import Gates
 from legalkb.store import SourceStore
 
@@ -76,13 +79,17 @@ class FakePlatform:
     def lark_chats(self, app_id=""):
         return [{"chat_id": consumer.GROUP_CHAT_ID}]
 
+    def poll(self, wait=25, n=5):
+        raise KeyboardInterrupt          # dừng vòng lặp main() trong test
 
-def make(tmp_path, ctx=None, engine_answer=None):
+
+def make(tmp_path, ctx=None, engine_answer=None, lark=None):
     store = SourceStore(str(tmp_path / "t.db"))
     pf = FakePlatform(ctx)
     eng = FakeEngine(engine_answer or EngineAnswer(ok=True, text="ok"))
     g = Gates(store, pf, consumer.GROUP_CHAT_ID, sla_hours=1)
-    return store, pf, eng, g
+    b = Bundle(pf=pf, store=store, engine=eng, gates=g, lark=lark)
+    return store, pf, eng, g, b
 
 
 # ---------------- hợp đồng câu trả lời ----------------
@@ -101,7 +108,7 @@ def test_format_reply_full_contract():
 
 
 def test_degrade_on_engine_error(tmp_path):
-    store, pf, _, _ = make(tmp_path)
+    store, pf, _, _, b = make(tmp_path)
     eng = FakeEngine(EngineAnswer(ok=False, error="RPCError: boom"))
     ans = consumer.answer_s1("câu hỏi", {}, "s1", eng, store)
     out = consumer.format_reply(ans)
@@ -116,7 +123,7 @@ def test_kb_question_carries_platform_context(tmp_path):
     ctx = {"rolling_summary": "Đang hỏi về chính sách đổi trả khách sỉ.",
            "recent_turns": [{"role": "user", "text": "khách sỉ đổi trả thế nào?"}],
            "user_facts": ["phụ trách mua hàng miền Bắc"]}
-    store, pf, eng, _ = make(tmp_path, ctx)
+    store, pf, eng, _, b = make(tmp_path, ctx)
     consumer.answer_s1("vậy còn khách lẻ?", ctx, "sess-A", eng, store)
     sent_question = eng.calls[0][0]
     assert "chính sách đổi trả khách sỉ" in sent_question
@@ -125,17 +132,17 @@ def test_kb_question_carries_platform_context(tmp_path):
 
 
 def test_turns_written_back_to_platform(tmp_path):
-    store, pf, eng, g = make(tmp_path, ctx={"instruction_block": "x"})
+    store, pf, eng, g, b = make(tmp_path, ctx={"instruction_block": "x"})
     job = {"id": 1, "channel": "lark", "session_id": "s9",
            "payload": {"text": "quy định abc?", "chat_id": "oc_user", "sender_open_id": "ou_u"}}
-    consumer.handle(job, pf, store, eng, g)
+    consumer.handle(job, b)
     roles = [r for _, r, _ in pf.turns]
     assert roles == ["user", "assistant"]
 
 
 def test_conversation_id_is_optimisation_not_memory(tmp_path):
     """conversation_id vẫn được giữ per-session, nhưng lỗi thì KHÔNG ghi đè cái cũ."""
-    store, pf, _, _ = make(tmp_path)
+    store, pf, _, _, b = make(tmp_path)
     eng = FakeEngine(EngineAnswer(ok=True, text="ok", conversation_id="conv-9"))
     consumer.answer_s1("câu 1", {}, "sess-A", eng, store)
     consumer.answer_s1("câu 2", {}, "sess-A", eng, store)
@@ -182,16 +189,16 @@ def test_no_telegram_in_scope():
 
 # ---------------- router + luồng không sẵn sàng ----------------
 
-def test_unimplemented_skill_says_so(tmp_path, monkeypatch):
-    """S2–S5 chưa mở thì phải nói thật, không giả vờ làm được."""
-    store, pf, eng, g = make(tmp_path)
+def test_s2_without_templates_says_so(tmp_path, monkeypatch):
+    """Chưa cấu hình kho mẫu thì nói thật, không giả vờ soạn được hợp đồng."""
+    store, pf, eng, g, b = make(tmp_path)
     monkeypatch.setattr(consumer.brain, "route",
                         lambda *a, **k: {"intent": "s2_create_contract", "risk": "medium",
                                          "contract_type": "", "reason": ""})
     job = {"id": 2, "channel": "lark", "session_id": "s2",
            "payload": {"text": "tạo hợp đồng dịch vụ", "chat_id": "oc_u"}}
-    out = consumer.handle(job, pf, store, eng, g)
-    assert "đang được xây" in out and "Pháp chế" in out
+    out = consumer.handle(job, b)
+    assert "chưa được cấu hình" in out and "Pháp chế" in out
     assert eng.calls == []                 # không hỏi KB cho việc không thuộc S1
 
 
@@ -204,11 +211,11 @@ def test_attachment_routes_to_review_even_if_router_fails(tmp_path, monkeypatch)
 # ---------------- Pháp chế in the loop ----------------
 
 def test_answer_opens_observe_gate_and_notifies_group(tmp_path):
-    store, pf, eng, g = make(tmp_path)
+    store, pf, eng, g, b = make(tmp_path)
     job = {"id": 3, "channel": "lark", "session_id": "s3",
            "payload": {"text": "quy định pháp chế?", "chat_id": "oc_user",
                        "sender_open_id": "ou_emp"}}
-    consumer.handle(job, pf, store, eng, g)
+    consumer.handle(job, b)
     assert pf.sent and pf.sent[0][0] == consumer.GROUP_CHAT_ID
     gate = g.store.one("SELECT * FROM legal_gates WHERE session_id='s3'")
     assert gate["kind"] == "s1_answer" and gate["level"] == "observe"
@@ -216,28 +223,26 @@ def test_answer_opens_observe_gate_and_notifies_group(tmp_path):
 
 def test_one_observe_gate_per_conversation(tmp_path):
     """Gom theo hội thoại — không mỗi lượt một card, tránh làm ồn group."""
-    store, pf, eng, g = make(tmp_path)
+    store, pf, eng, g, b = make(tmp_path)
     for i in range(3):
         consumer.handle({"id": 10 + i, "channel": "lark", "session_id": "same",
-                         "payload": {"text": f"câu {i}", "chat_id": "oc_u"}},
-                        pf, store, eng, g)
+                         "payload": {"text": f"câu {i}", "chat_id": "oc_u"}}, b)
     assert len(g.store.query("SELECT * FROM legal_gates WHERE session_id='same'")) == 1
 
 
 def test_answer_without_citation_is_high_risk(tmp_path):
-    store, pf, eng, g = make(tmp_path,
+    store, pf, eng, g, b = make(tmp_path,
                              engine_answer=EngineAnswer(ok=True, text="chưa quy định"))
     consumer.handle({"id": 4, "channel": "lark", "session_id": "s4",
-                     "payload": {"text": "crypto?", "chat_id": "oc_u"}}, pf, store, eng, g)
+                     "payload": {"text": "crypto?", "chat_id": "oc_u"}}, b)
     assert g.store.one("SELECT * FROM legal_gates WHERE session_id='s4'")["risk"] == "high"
 
 
 def test_first_turn_greets_and_discloses_monitoring(tmp_path):
     """Lượt đầu: nói rõ việc Pháp chế giám sát — nghĩa vụ thông báo, không để footer nhỏ."""
-    store, pf, eng, g = make(tmp_path, ctx={"n_turns": 0})
+    store, pf, eng, g, b = make(tmp_path, ctx={"n_turns": 0})
     out = consumer.handle({"id": 20, "channel": "lark", "session_id": "s-new",
-                           "payload": {"text": "chào bạn", "chat_id": "oc_u"}},
-                          pf, store, eng, g)
+                           "payload": {"text": "chào bạn", "chat_id": "oc_u"}}, b)
     assert out.startswith("Mình là **Legal Agent**")
     assert "được bộ phận Pháp chế giám sát" in out
     # Không nói cùng một điều hai lần trong một tin nhắn.
@@ -245,53 +250,64 @@ def test_first_turn_greets_and_discloses_monitoring(tmp_path):
 
 
 def test_later_turns_do_not_repeat_greeting(tmp_path):
-    store, pf, eng, g = make(tmp_path, ctx={"n_turns": 4})
+    store, pf, eng, g, b = make(tmp_path, ctx={"n_turns": 4})
     out = consumer.handle({"id": 21, "channel": "lark", "session_id": "s-old",
-                           "payload": {"text": "hỏi tiếp", "chat_id": "oc_u"}},
-                          pf, store, eng, g)
+                           "payload": {"text": "hỏi tiếp", "chat_id": "oc_u"}}, b)
     assert "Mình là **Legal Agent**" not in out
     assert "Pháp chế giám sát" in out          # vẫn còn nhắc ở footer
 
 
 def test_high_risk_mentions_reviewers(tmp_path):
     """Rủi ro cao thì phải @ người trực, không chỉ đổi màu icon."""
-    store, pf, eng, g = make(tmp_path,
+    store, pf, eng, g, b = make(tmp_path,
                              engine_answer=EngineAnswer(ok=True, text="chưa quy định"))
     store.write("INSERT INTO legal_roles (email, role, contract_type, open_id, active) "
                 "VALUES ('thint@hapas.vn','legal_reviewer',NULL,'ou_thint',1)")
     consumer.handle({"id": 22, "channel": "lark", "session_id": "s-hr",
-                     "payload": {"text": "crypto?", "chat_id": "oc_u"}}, pf, store, eng, g)
+                     "payload": {"text": "crypto?", "chat_id": "oc_u"}}, b)
     card = next(m for to, m in pf.sent if to == consumer.GROUP_CHAT_ID)
     assert "<at id=ou_thint></at>" in card and "cần xem ngay" in card
 
 
 def test_low_risk_does_not_mention_anyone(tmp_path):
     """@ mọi thứ là cách nhanh nhất để người ta tắt thông báo của group."""
-    store, pf, eng, g = make(tmp_path, engine_answer=EngineAnswer(
+    store, pf, eng, g, b = make(tmp_path, engine_answer=EngineAnswer(
         ok=True, text="ok", citations=[Citation("Quy chế", "https://x/wiki/a", "")]))
     store.write("INSERT INTO legal_roles (email, role, contract_type, open_id, active) "
                 "VALUES ('thint@hapas.vn','legal_reviewer',NULL,'ou_thint',1)")
     consumer.handle({"id": 23, "channel": "lark", "session_id": "s-lr",
-                     "payload": {"text": "giờ làm việc?", "chat_id": "oc_u"}},
-                    pf, store, eng, g)
+                     "payload": {"text": "giờ làm việc?", "chat_id": "oc_u"}}, b)
     card = next(m for to, m in pf.sent if to == consumer.GROUP_CHAT_ID)
     assert "<at id=" not in card
 
 
 def test_group_chatter_gets_no_reply(tmp_path):
     """Tin thường trong group duyệt → agent im lặng, không trả lời bừa."""
-    store, pf, eng, g = make(tmp_path)
+    store, pf, eng, g, b = make(tmp_path)
     job = {"id": 5, "channel": "lark", "session_id": "grp",
            "payload": {"text": "trưa nay ăn gì", "chat_id": consumer.GROUP_CHAT_ID,
                        "sender_open_id": "ou_thint"}}
-    assert consumer.handle(job, pf, store, eng, g) is None
+    assert consumer.handle(job, b) is None
 
 
 def test_agent_silent_while_human_joined(tmp_path):
-    store, pf, eng, g = make(tmp_path)
+    store, pf, eng, g, b = make(tmp_path)
     g.set_mode("s-join", "joined", taken_by="thint@hapas.vn")
     job = {"id": 6, "channel": "lark", "session_id": "s-join",
            "payload": {"text": "hỏi tiếp", "chat_id": "oc_u", "sender_open_id": "ou_u"}}
-    assert consumer.handle(job, pf, store, eng, g) is None
+    assert consumer.handle(job, b) is None
     assert eng.calls == []                          # không gọi KB
     assert pf.turns == [("s-join", "user", "hỏi tiếp")]   # vẫn ghi lượt, không mất lịch sử
+
+
+def test_warns_when_claude_cli_missing(tmp_path, monkeypatch, capsys):
+    """Degrade âm thầm là thứ khó phát hiện nhất — phải cảnh báo lúc khởi động."""
+    monkeypatch.setattr(consumer.brain, "available", lambda: False)
+    store, pf, eng, g, b = make(tmp_path)
+    monkeypatch.setattr(consumer, "build", lambda: b)
+    monkeypatch.setattr(consumer, "apply_instruction", lambda *a: None)
+    monkeypatch.setattr(consumer.threading, "Thread",
+                        lambda *a, **k: type("T", (), {"start": lambda s: None})())
+    with pytest.raises(KeyboardInterrupt):
+        consumer.main()
+    assert "KHÔNG tìm thấy CLI `claude`" in capsys.readouterr().err

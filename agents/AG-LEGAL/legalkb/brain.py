@@ -11,6 +11,7 @@ Hai việc:
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -39,6 +40,21 @@ Tin nhắn:
 ---
 {msg}
 ---"""
+
+
+def available():
+    """CLI `claude` có trong PATH không.
+
+    Quan trọng vì cả router lẫn S2–S5 đều đi qua đây. Không có `claude` thì agent vẫn
+    chạy (S1 hỏi đáp dùng NotebookLM) nhưng router rơi về mặc định và S2–S5 chỉ trả
+    thông báo "chưa rà soát được" — degrade âm thầm là thứ khó phát hiện nhất, nên
+    consumer kiểm và cảnh báo ngay lúc khởi động.
+
+    Runtime chính thức của platform (`POST /v1/self/deploy`) chạy AGENT_RUNNER_IMAGE có
+    sẵn `claude` + biến CLAUDE_CODE_OAUTH_TOKEN. Còn `docker compose up` bằng image của
+    agent này thì KHÔNG có — xem Dockerfile.
+    """
+    return shutil.which("claude") is not None
 
 
 def call_claude(prompt, model=None, timeout=None):

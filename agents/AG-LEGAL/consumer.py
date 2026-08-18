@@ -26,8 +26,9 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from legalkb import brain, gates as gates_mod
+from legalkb import brain, contracts, flows, gates as gates_mod, news
 from legalkb.engine import NotebookLMEngine
+from legalkb.flows import Bundle
 from legalkb.gates import GATE, OBSERVE, Gates
 from legalkb.lark_kb import LarkKB
 from legalkb.platform import Platform
@@ -51,18 +52,21 @@ GREETING = ("Mình là **Legal Agent** — trợ lý pháp chế nội bộ củ
             "Trước khi bắt đầu: nội dung trao đổi này **được bộ phận Pháp chế giám sát** "
             "để bảo đảm chất lượng tư vấn, và Pháp chế có thể tham gia trực tiếp khi cần.\n\n"
             "---\n")
-# S2–S5 chưa mở: nói thật, không giả vờ làm được.
-NOT_READY = {
-    "s2_create_contract": "soạn hợp đồng từ mẫu",
-    "s3_review_contract": "rà soát hợp đồng đối tác",
-    "s4_news": "tổng hợp văn bản luật mới",
-    "s5_signing": "hỗ trợ hồ sơ trình ký",
-}
-
 GROUP_CHAT_ID = os.environ.get("LEGAL_GROUP_CHAT_ID", DEFAULT_GROUP)
 
 
 # ============================ khởi tạo ============================
+
+def make_lark_kb():
+    """LarkKB chỉ để đọc/ghi Wiki-Drive (ngoại lệ C1). None khi chưa cấu hình app."""
+    if not os.environ.get("LARK_APP_ID"):
+        return None
+    return LarkKB(app_id=os.environ["LARK_APP_ID"],
+                  app_secret=os.environ["LARK_APP_SECRET"],
+                  base=os.environ.get("LARK_BASE", "https://open.larksuite.com"),
+                  tenant_domain=os.environ.get("LARK_TENANT_DOMAIN",
+                                               "o4pvcegwn6b.sg.larksuite.com"))
+
 
 def build():
     pf = Platform()
@@ -73,7 +77,8 @@ def build():
                               auth_path=os.environ.get("NLM_AUTH_PATH"), store=store)
     g = Gates(store, pf, GROUP_CHAT_ID,
               sla_hours=float(os.environ.get("GATE_SLA_HOURS", "4")))
-    return pf, store, engine, g
+    b = Bundle(pf=pf, store=store, engine=engine, gates=g, lark=make_lark_kb())
+    return b
 
 
 def apply_instruction(pf, engine, store):
@@ -159,12 +164,14 @@ def record_turns(pf, session_id, question, reply, uref, channel, model=None):
 
 # ============================ lệnh trong group ============================
 
-def handle_group(job, pf, store, g):
+def handle_group(job, b):
     """Tin trong group Pháp chế/Admin: chỉ xử lý LỆNH, còn lại im lặng.
 
     Im lặng là chủ ý: group này người ta còn trao đổi việc khác, agent nhảy vào trả lời
-    mọi câu sẽ thành nhiễu.
+    mọi câu sẽ thành nhiễu — mà đây cũng là group nhận lệnh duyệt, làm ồn là người ta tắt
+    thông báo và mất luôn đường phê duyệt.
     """
+    g = b.gates
     payload = job.get("payload") or {}
     text = payload.get("text", "")
     sender = payload.get("sender_open_id") or ""
@@ -201,7 +208,7 @@ def handle_group(job, pf, store, g):
         g.set_mode(gate["session_id"], "joined", taken_by=who["email"],
                    chat_id=(gate.get("payload") or {}).get("chat_id"))
         g.decide(gate_id, "join", who["email"])
-        notify_requester(pf, gate,
+        notify_requester(b.pf, gate,
                          f"👤 **{who.get('name') or who['email']}** (Pháp chế) đã tham gia "
                          f"hỗ trợ trực tiếp cuộc trao đổi này.")
         return (f"Đã ghi nhận: **{who.get('name') or who['email']}** tham gia hội thoại "
@@ -217,7 +224,7 @@ def handle_group(job, pf, store, g):
     if action == "relay":
         if not arg:
             return f"Thiếu nội dung. Cú pháp: `#{gate_id} nhắn: <nội dung>`"
-        ok = notify_requester(pf, gate,
+        ok = notify_requester(b.pf, gate,
                               f"👤 **Pháp chế ({who.get('name') or who['email']}):** {arg}")
         return "Đã chuyển lời." if ok else "Không chuyển được lời (thiếu chat_id của hội thoại)."
 
@@ -233,9 +240,17 @@ def handle_group(job, pf, store, g):
         return f"`#{gate_id}`: {out['_error']}."
     label = {"approve": "DUYỆT", "changes": "YÊU CẦU SỬA", "reject": "HUỶ"}[action]
     print(f"gate#{gate_id} → {out['status']} bởi {who['email']}", flush=True)
-    return (f"Đã ghi nhận **{label}** cho `#{gate_id}` bởi "
-            f"{who.get('name') or who['email']}."
-            + (f"\nGóp ý: {arg}" if arg else ""))
+
+    # Biến quyết định thành việc thật: gửi bản thảo, phát hành digest, báo kết quả review.
+    extra = None
+    try:
+        extra = flows.dispatch_decision(b, out, action, arg)
+    except Exception as exc:
+        print(f"dispatch #{gate_id} lỗi: {exc}", file=sys.stderr, flush=True)
+        extra = f"⚠️ Đã ghi nhận quyết định nhưng bước thực thi lỗi: {exc}"
+    msg = (f"Đã ghi nhận **{label}** cho `#{gate_id}` bởi "
+           f"{who.get('name') or who['email']}." + (f"\nGóp ý: {arg}" if arg else ""))
+    return msg + (f"\n\n{extra}" if extra else "")
 
 
 def notify_requester(pf, gate, text):
@@ -248,8 +263,9 @@ def notify_requester(pf, gate, text):
 
 # ============================ luồng chính ============================
 
-def handle(job, pf, store, engine, g):
+def handle(job, b):
     """Trả về text để reply, hoặc None nếu cố ý không trả lời."""
+    pf, store, engine, g = b.pf, b.store, b.engine, b.gates
     payload = job.get("payload") or {}
     q = payload.get("text", "")
     sid = job.get("session_id") or f"job-{job['id']}"
@@ -257,7 +273,7 @@ def handle(job, pf, store, engine, g):
     chat_id = payload.get("chat_id") or (job.get("reply_to") or {}).get("chat_id")
 
     if chat_id and chat_id == GROUP_CHAT_ID:
-        return handle_group(job, pf, store, g)
+        return handle_group(job, b)
 
     # Đang có người Pháp chế tham gia → Agent im, nhưng vẫn ghi lượt để không mất lịch sử.
     if g.mode(sid) == "joined":
@@ -269,18 +285,33 @@ def handle(job, pf, store, engine, g):
     # n_turns của platform = số lượt đã ghi. Lấy context TRƯỚC khi ghi lượt này nên
     # 0 nghĩa là đây là lượt đầu của hội thoại → chào + nói rõ việc giám sát.
     first_turn = int(ctx.get("n_turns") or 0) == 0
+    b.model = ctx.get("model")
     has_file = bool(payload.get("file_key"))
-    r = brain.route(q, ctx, has_attachment=has_file)
-    intent, risk = r["intent"], r["risk"]
-    pf.event(job["id"], "route", r)
+
+    # Đang dở luồng tạo hợp đồng thì lượt này thuộc luồng đó — không cho router
+    # phân lại, nếu không "Công ty ABC" sẽ bị hiểu thành câu hỏi mới.
+    draft = b.drafts.get(sid)
+    in_s2 = bool(draft and draft["status"] in ("collecting", "confirming", "revising"))
+
+    if in_s2:
+        intent, risk = "s2_create_contract", "medium"
+    else:
+        r = brain.route(q, ctx, has_attachment=has_file)
+        intent, risk = r["intent"], r["risk"]
+        pf.event(job["id"], "route", r)
 
     if intent == "other":
         reply = ("Câu này ngoài phạm vi pháp chế nội bộ mình hỗ trợ. Nếu là việc pháp lý "
                  "cá nhân, bạn liên hệ luật sư ngoài; việc của công ty thì hỏi bộ phận "
                  "Pháp chế.\n\n" + DISCLAIMER)
-    elif intent in NOT_READY:
-        reply = (f"Việc **{NOT_READY[intent]}** đang được xây, mình chưa nhận được. "
-                 f"Mình đã báo bộ phận Pháp chế để có người xử lý cho bạn.\n\n" + DISCLAIMER)
+    elif intent == "s2_create_contract":
+        reply = flows.s2_create(b, q, sid, uref, chat_id) + "\n\n" + DISCLAIMER
+    elif intent == "s3_review_contract":
+        reply = flows.s3_review(b, job, q, sid, uref, chat_id) + "\n\n" + DISCLAIMER
+    elif intent == "s5_signing":
+        reply = flows.s5_dossier(b, job, q, sid, uref, chat_id) + "\n\n" + DISCLAIMER
+    elif intent == "s4_news":
+        reply = flows.s4_answer(b, q) + "\n\n" + DISCLAIMER
     else:
         ans = answer_s1(q, ctx, sid, engine, store)
         # Lượt đầu đã nói rõ việc giám sát ở câu chào → không nhắc lại ở footer cùng tin.
@@ -293,7 +324,9 @@ def handle(job, pf, store, engine, g):
     record_turns(pf, sid, q, reply, uref, job.get("channel"), model=ctx.get("model"))
 
     # N1 Observe: báo Pháp chế MỌI lượt, gom theo hội thoại, không chặn người dùng.
-    open_observe(g, sid, chat_id, uref, q, reply, risk, intent, job.get("channel"))
+    # S2/S3/S5 đã tự mở gate riêng nên không mở thêm card S1 cho đỡ trùng.
+    if intent in ("s1_qa", "s4_news", "other"):
+        open_observe(g, sid, chat_id, uref, q, reply, risk, intent, job.get("channel"))
     return reply
 
 
@@ -317,47 +350,42 @@ def open_observe(g, sid, chat_id, uref, q, reply, risk, intent, channel):
                            "summary": reply[:300], "intent": intent})
 
 
-def worker(q, pf, store, engine, g):
+def worker(q, b):
     while True:
         job = q.get()
         jid = job["id"]
         # Câu nặng có thể vượt hạn khoá job (120s) → job bị giao lại. Đã trả lời thì bỏ qua.
-        if store.get_meta(f"replied:{jid}"):
+        if b.store.get_meta(f"replied:{jid}"):
             print(f"↷ job#{jid}: đã trả lời trước đó, bỏ qua", flush=True)
             q.task_done()
             continue
         try:
-            pf.event(jid, "progress", {"note": "đang tra cứu tài liệu pháp chế"})
-            reply = handle(job, pf, store, engine, g)
+            b.pf.event(jid, "progress", {"note": "đang tra cứu tài liệu pháp chế"})
+            reply = handle(job, b)
             if reply:
-                pf.reply(jid, reply)
-            store.set_meta(f"replied:{jid}", "1")
-            pf.complete(jid, {"ok": True, "replied": bool(reply)})
+                b.pf.reply(jid, reply)
+            b.store.set_meta(f"replied:{jid}", "1")
+            b.pf.complete(jid, {"ok": True, "replied": bool(reply)})
             print(f"✓ job#{jid}" + ("" if reply else " (cố ý không trả lời)"), flush=True)
         except Exception as exc:
             print(f"✗ job#{jid}: {exc}", file=sys.stderr, flush=True)
-            pf.fail(jid, exc)
+            b.pf.fail(jid, exc)
         finally:
             q.task_done()
 
 
-def sync_loop(engine, store):
-    """Đồng bộ KB định kỳ — CHẠY CHUNG TIẾN TRÌNH với consumer.
+def sync_loop(b):
+    """Đồng bộ KB + registry template định kỳ — CHẠY CHUNG TIẾN TRÌNH với consumer.
 
     Bắt buộc dùng chung engine: NotebookLM xoay cookie sau mỗi phiên, hai tiến trình
     dùng song song cùng tài khoản sẽ vô hiệu hoá phiên của nhau ("Authentication
     expired"). Một tiến trình = một client = một phiên.
     """
     interval = float(os.environ.get("SYNC_INTERVAL_H", "3")) * 3600
-    lark = LarkKB(app_id=os.environ["LARK_APP_ID"],
-                  app_secret=os.environ["LARK_APP_SECRET"],
-                  base=os.environ.get("LARK_BASE", "https://open.larksuite.com"),
-                  tenant_domain=os.environ.get("LARK_TENANT_DOMAIN",
-                                               "o4pvcegwn6b.sg.larksuite.com"))
     while True:
         try:
             rep = sync_once(
-                lark, engine, store,
+                b.lark, b.engine, b.store,
                 space_id=os.environ.get("LEGAL_WIKI_SPACE_ID", DEFAULT_SPACE),
                 drive_folder=os.environ.get("LEGAL_DRIVE_FOLDER", DEFAULT_FOLDER),
                 log=lambda m: print(f"[sync] {m}", flush=True))
@@ -365,49 +393,83 @@ def sync_loop(engine, store):
                   f"lỗi={len(rep['errors'])}", flush=True)
         except Exception as exc:
             print(f"[sync] thất bại: {exc}", file=sys.stderr, flush=True)
+        try:
+            rep = contracts.sync_templates(
+                b.lark, b.store, os.environ.get(flows.TEMPLATE_FOLDER_ENV),
+                log=lambda m: print(m, flush=True))
+            print(f"[template] {rep}", flush=True)
+        except Exception as exc:
+            print(f"[template] thất bại: {exc}", file=sys.stderr, flush=True)
         time.sleep(interval)
 
 
-def gate_loop(pf, engine, store, g):
+def news_loop(b):
+    """S4 hằng ngày: crawl → tóm tắt → MỞ GATE. Không gửi, không nạp KB khi chưa duyệt.
+
+    Thread trong cùng tiến trình vì dùng chung phiên NotebookLM (xem sync_loop).
+    """
+    hour = int(os.environ.get("NEWS_HOUR", "6"))
+    while True:
+        now = time.localtime()
+        if now.tm_hour == hour and b.store.get_meta("news_day") != time.strftime("%Y-%m-%d"):
+            b.store.set_meta("news_day", time.strftime("%Y-%m-%d"))
+            try:
+                flows.news_cycle(b, GROUP_CHAT_ID,
+                                 log=lambda m: print(m, flush=True))
+            except Exception as exc:
+                print(f"[news] chu kỳ lỗi: {exc}", file=sys.stderr, flush=True)
+        time.sleep(600)
+
+
+def gate_loop(b):
     """Nhắc SLA + nạp lại instruction khi có version mới publish."""
     while True:
         try:
-            for what, gid in g.sla_tick():
+            for what, gid in b.gates.sla_tick():
                 print(f"[gate] #{gid} → {what}", flush=True)
-            apply_instruction(pf, engine, store)
+            apply_instruction(b.pf, b.engine, b.store)
         except Exception as exc:
             print(f"[gate] lỗi: {exc}", file=sys.stderr, flush=True)
         time.sleep(float(os.environ.get("GATE_TICK_MIN", "10")) * 60)
 
 
 def main():
-    pf, store, engine, g = build()
-    apply_instruction(pf, engine, store)
-    n = g.sync_roles()
+    b = build()
+    apply_instruction(b.pf, b.engine, b.store)
+    n = b.gates.sync_roles()
     print(f"legal_roles: đã resolve open_id cho {n} người" if n else
           "legal_roles: không có dòng nào cần resolve")
-    if not g.roles():
+    if not b.gates.roles():
         print("⚠️  legal_roles TRỐNG — chưa ai duyệt được. Chạy: python3 seed_roles.py",
               file=sys.stderr, flush=True)
-    check_group(pf)
+    check_group(b.pf)
+    if not brain.available():
+        print("⚠️  KHÔNG tìm thấy CLI `claude` trong PATH — router sẽ dùng mặc định và "
+              "S2–S5 (tạo/rà soát hợp đồng, digest, trình ký) chỉ trả thông báo không rà "
+              "soát được. S1 hỏi đáp vẫn chạy. Cách đúng: deploy qua POST /v1/self/deploy "
+              "(runner image của platform có sẵn claude), hoặc cài Claude Code vào image.",
+              file=sys.stderr, flush=True)
+    if not news.sources(b.store):
+        print("ℹ️  chưa có nguồn luật nào — chạy: python3 seed_news.py", flush=True)
 
-    if os.environ.get("KB_SYNC", "1") == "1" and os.environ.get("LARK_APP_ID"):
-        threading.Thread(target=sync_loop, args=(engine, store), daemon=True,
-                         name="kb-sync").start()
+    if os.environ.get("KB_SYNC", "1") == "1" and b.lark:
+        threading.Thread(target=sync_loop, args=(b,), daemon=True, name="kb-sync").start()
         print("kb-sync chạy nền (chung tiến trình)")
-    threading.Thread(target=gate_loop, args=(pf, engine, store, g), daemon=True,
-                     name="gate").start()
+    if os.environ.get("NEWS_CRAWL", "1") == "1":
+        threading.Thread(target=news_loop, args=(b,), daemon=True, name="news").start()
+        print(f"news-crawl chạy nền (mỗi ngày {os.environ.get('NEWS_HOUR', '6')}h)")
+    threading.Thread(target=gate_loop, args=(b,), daemon=True, name="gate").start()
 
     jobs_q = queue.Queue()
     n_workers = int(os.environ.get("CHAT_WORKERS", "3"))
     for i in range(n_workers):
-        threading.Thread(target=worker, args=(jobs_q, pf, store, engine, g), daemon=True,
+        threading.Thread(target=worker, args=(jobs_q, b), daemon=True,
                          name=f"chat-{i}").start()
     print(f"AG-LEGAL consumer chạy — {n_workers} luồng xử lý, chờ job...")
 
     while True:      # luồng nhận tin: chỉ poll và xếp hàng, không xử lý
         try:
-            for job in pf.poll(wait=25, n=5) or []:
+            for job in b.pf.poll(wait=25, n=5) or []:
                 jobs_q.put(job)
         except Exception as exc:
             code = getattr(exc, "status", 0)

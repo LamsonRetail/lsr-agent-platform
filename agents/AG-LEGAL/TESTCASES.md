@@ -25,7 +25,7 @@
 | P3 | Không tự tích hợp Lark | Không file nào của agent gọi `open-apis/im/...`; `lark_kb.py` không có hàm gửi tin/thu hồi |
 | P4 | Hành vi không hard-code | `consumer.py` không chứa hằng persona; có `INSTRUCTION.md`; không còn `system_prompt.md` |
 | P5 | Telegram ngoài scope | Không còn nhánh code nào nhắc telegram |
-| P6 | Việc chưa mở nói thật | Intent S2–S5 → trả lời "đang được xây", **không gọi KB**, có báo Pháp chế |
+| P6 | Thiếu cấu hình thì nói thật | Chưa có kho mẫu → S2 báo rõ chưa cấu hình, **không gọi KB**, không giả vờ soạn được |
 
 ## Pháp chế in the loop (Phase 2B)
 
@@ -80,3 +80,31 @@
 | 19 | Văn bản mới | Nguồn có nghị định mới | File lưu về Drive folder văn bản luật, digest gửi Lark group, xuất hiện trong KB sau sync |
 | 20 | Nguồn lỗi | 1 nguồn đổi layout/chặn bot | Nguồn đó báo lỗi trong console, các nguồn khác vẫn chạy |
 | 21 | Trùng lặp | Crawl lại văn bản đã có (cùng số hiệu) | Không tạo bản ghi/file trùng |
+
+## S5 — Hỗ trợ trình ký (Phase 6, chạy shadow)
+
+| # | Kịch bản | Đầu vào | Kỳ vọng |
+|---|----------|---------|---------|
+| 22 | Bước 3 thiếu đầu mục | Hồ sơ thiếu "Báo giá" | Báo cáo chỉ rõ mục thiếu, DM người khởi tạo, **không chặn hồ sơ** |
+| 23 | Bước 3 đủ hồ sơ | Hồ sơ đủ danh mục | Báo "đầu mục ✅ đủ" + điểm lưu ý nội dung |
+| 24 | Chưa cấu hình checklist | Loại HĐ chưa khai | Báo cáo ghi rõ phần kiểm hồ sơ chỉ là tham khảo |
+| 25 | Bước 5 phát hiện mức chặn | Sai pháp nhân bên B | `blocking=true` → đề nghị **quay lại Bước 4**, báo Admin tạm dừng |
+| 26 | Bước 5 mức thấp | Góp ý câu chữ | **Cảnh báo tham khảo**, không chặn, Admin vẫn trình ký |
+| 27 | Vòng lặp | Đã quay lại Bước 4 2 lần | Lần 3 **escalate trưởng Pháp chế**, Agent chỉ ghi nhận |
+| 28 | Agent lỗi/timeout | Model không trả kết quả | Báo "chưa rà soát kịp", hồ sơ **vẫn đi tiếp**; gate observe quá SLA → `auto_passed` |
+
+## Phase 7 — Golive & chống bịa nguồn
+
+| # | Kịch bản | Kỳ vọng |
+|---|----------|---------|
+| 29 | Bịa nguồn | Link trong 📎 không có trong `legal_sources` → golden run **FAIL** với lỗi "BỊA NGUỒN" |
+| 30 | Trích dẫn thật | Link tồn tại trong `legal_sources` → pass |
+| 31 | Câu từ chối | Case `must_cite=false` không cần trích dẫn, nhưng **không được** viện dẫn điều khoản |
+| 32 | KB chưa sync | `legal_sources` trống → bỏ qua phép kiểm, **không** báo sai là bịa |
+| 33 | Thiếu CLI `claude` | Consumer **cảnh báo rõ lúc khởi động** (router + S2–S5 sẽ degrade) |
+| 34 | Golive checklist | `golive.json` đủ 28 mục; nộp bằng `scripts/submit-golive.sh AG-LEGAL` |
+
+> **Độ phủ tự động**: `python3 -m pytest tests/ -q` → **88 case offline**, không cần secret.
+> Ánh xạ: `test_consumer.py` (chuẩn platform + S1 + observe) · `test_gates.py` (lệnh duyệt,
+> quyền, SLA) · `test_flows.py` (S2–S5 + hệ quả sau khi duyệt) · `test_golden.py` (chống
+> bịa nguồn + trích text) · `test_sync.py` (đồng bộ KB).
