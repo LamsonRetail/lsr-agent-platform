@@ -499,7 +499,28 @@ harness trả lời nhầm — xem báo cáo 08-14.)
 
 ---
 
-**Tổng: 268 case — 262 ✅ đã nghiệm thu (98%).**
+### 19.1 Owner tự nộp bằng token cá nhân (✅ 08-18, 10/10 pass)
+
+> Bắt **1 bug thật**: `_require_role` (guard trung tâm) chưa nhận token cá nhân PAT →
+> MỌI endpoint cấp moderator đều 401 khi gọi từ CLI. Cùng họ bug session-vs-PAT đã sửa
+> ở `/auth/me` và `_require_admin`; nay sửa tận guard chung + `_actor_of` (audit ghi
+> đúng người thay vì "service").
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| S.1 | Owner (moderator agent) chạy `lsr-login.sh` | Lấy được token cá nhân | ✅ |
+| S.2a | Nộp checklist bằng PAT | Nộp được, KHÔNG cần admin platform | ✅ |
+| S.2b | Nộp 3/28 mục | Trả đúng 25 mục còn thiếu | ✅ |
+| S.2c | — | Chưa trình admin | ✅ |
+| S.3a | Nộp đủ 28 mục | Tự tạo đề xuất duyệt | ✅ |
+| S.3b | `proposed_by` | Ghi đúng email người nộp (không phải "service") | ✅ |
+| S.3c | — | Owner không tự bật agent | ✅ |
+| S.4 | Owner tự duyệt đề xuất của mình | 403 — tách vai | ✅ |
+| S.5a–b | Admin duyệt | AG-HARRY golive **đúng luồng, không force** | ✅ |
+
+---
+
+**Tổng: 277 case — 271 ✅ đã nghiệm thu (98%).**
 
 **7 case còn lại, chia 2 nhóm:**
 - **Cần bạn xử lý (2):** `P1.1` — bot Admin App chưa được add vào nhóm nào (`/v1/lark/chats` rỗng — add bot vào 1 nhóm là xong); `ST.8` — cần team thật cùng push 1 branch.

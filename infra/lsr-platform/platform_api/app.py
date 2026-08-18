@@ -262,7 +262,8 @@ def _require_role(authorization: str, need: str, agent_id: str | None = None) ->
     p = _principal(authorization, agent_id)
     # Phân biệt rõ: CHƯA đăng nhập → 401 (console đưa về trang login);
     # ĐÃ đăng nhập nhưng không đủ quyền trên phạm vi này → 403 (không đá người dùng ra).
-    if p["kind"] not in ("session", "admin_token"):
+    # "pat" = token cá nhân CLI (lsr-login.sh) — cùng danh tính, cùng RBAC như session.
+    if p["kind"] not in ("session", "pat", "admin_token"):
         raise HTTPException(status_code=401, detail="cần đăng nhập console")
     if not p["role"]:
         raise HTTPException(
@@ -1338,7 +1339,7 @@ def _require_admin(authorization: str) -> None:
 def _actor_of(authorization: str, x_actor: str = "") -> str:
     """Danh tính ghi vào audit: ưu tiên người đăng nhập thật, không tin header."""
     p = _principal(authorization)
-    if p.get("kind") == "session" and p.get("actor"):
+    if p.get("kind") in ("session", "pat") and p.get("actor"):
         return p["actor"]
     return x_actor or "service"
 
