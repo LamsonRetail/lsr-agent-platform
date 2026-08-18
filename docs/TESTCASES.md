@@ -14,7 +14,7 @@
 | CORE.4 | Gửi trace với key sai / thiếu | 401 — không ghi gì | ✅ 08-08 |
 | CORE.5 | Trace chứa email/SĐT/thẻ | PII bị che TRƯỚC khi lưu, đếm `pii_flags` | ✅ 08-07 |
 | CORE.6 | Kill-switch: deactivate agent | Collector 403 + gỡ bot khỏi chat Lark + dừng container; KHÔNG xoá dữ liệu | ✅ 08-08 |
-| CORE.7 | Bật lại `active` khi thiếu golive checklist | Bị chặn kèm danh sách mục thiếu (gate golive) | ✅ 08-11 (thấy khi test P1) |
+| CORE.7 | Bật `active` khi thiếu golive checklist | **Đổi 18/08**: KHÔNG chặn nữa — admin approve là chạy; API trả `checklist_missing` + ghi audit để console hiển thị cảnh báo | ✅ 08-18 |
 | CORE.8 | Thao tác admin (duyệt/xoá/status) | `audit_log` ghi actor thật (X-Actor / agent token) | ✅ 08-08 |
 | CORE.9 | Policy check PreToolUse (deny rule) | Tool bị chặn kèm lý do; fail-open khi service lỗi | ✅ 08-07 |
 | CORE.10 | Quota/cost: vượt ngưỡng ước tính | Cảnh báo trên dashboard Chi phí + quota_alerts | ✅ 08-07 |
@@ -462,7 +462,21 @@ harness trả lời nhầm — xem báo cáo 08-14.)
 
 ---
 
-**Tổng: 244 case — 238 ✅ đã nghiệm thu (98%).**
+## 18. Golive không ma sát + cảnh báo routing bắt tất (✅ 08-18, 6/6 pass)
+
+| ID | Kịch bản | Kỳ vọng | TT |
+|---|---|---|---|
+| A2.1 | Admin approve agent chưa đủ checklist, KHÔNG dùng `force` | `active` ngay (trước đây 409) | ✅ |
+| A2.2 | Response của approve | Có `checklist_missing` để console cảnh báo | ✅ |
+| A2.3 | Audit | Ghi lại mục checklist còn thiếu — truy vết được ai duyệt khi thiếu gì | ✅ |
+| A2.4 | Ingest kênh thật sau approve | `queued` — chạy ngay, không bước xác nhận nào nữa | ✅ |
+| B.1 | Ops snapshot | Phát hiện binding "bắt tất" (app_id + chat_id đều rỗng) | ✅ |
+| B.2 | AG-OPS | Sinh cảnh báo cho TỪNG binding, nêu agent + người tạo + cách xử lý | ✅ |
+| A1 | Caddy carve-out | `/login` `/device` `/api/auth/*` mở (200/307); `/accounts` `/` vẫn 401 basic-auth | ✅ |
+
+---
+
+**Tổng: 251 case — 245 ✅ đã nghiệm thu (98%).**
 
 **7 case còn lại, chia 2 nhóm:**
 - **Cần bạn xử lý (2):** `P1.1` — bot Admin App chưa được add vào nhóm nào (`/v1/lark/chats` rỗng — add bot vào 1 nhóm là xong); `ST.8` — cần team thật cùng push 1 branch.

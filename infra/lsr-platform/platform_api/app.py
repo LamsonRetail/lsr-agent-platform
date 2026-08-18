@@ -2454,19 +2454,16 @@ def set_status(agent_id: str, body: dict, authorization: str = Header(default=""
     status = body.get("status")
     if status not in ("registered", "testing", "active", "deactivated"):
         raise HTTPException(status_code=422, detail="invalid status")
-    # GATE: chỉ cho golive khi checklist đủ mục bắt buộc (bỏ qua nếu force=true).
-    if status == "active" and not body.get("force"):
+    # Golive checklist: CẢNH BÁO, không chặn. Quy trình đã chốt 18/08 — agent chỉ cần
+    # đăng ký + admin approve là chạy; checklist còn thiếu thì ghi vào audit + trả về
+    # cho console hiển thị, chứ không bắt admin làm thêm bước confirm.
+    miss: list = []
+    if status == "active":
         with _db() as conn:
             row = conn.execute(
                 "SELECT payload FROM agent_golive_checklist WHERE agent_id=%s", (agent_id,)
             ).fetchone()
         miss = missing_checklist((row or {}).get("payload") or {})
-        if miss:
-            raise HTTPException(
-                status_code=409,
-                detail={"error": "golive checklist chưa đủ", "missing": miss,
-                        "hint": "POST /v1/agents/{id}/golive-checklist"},
-            )
     golive = "now()" if status == "active" else "golive_at"
     with _db() as conn:
         cur = conn.execute(
@@ -2484,9 +2481,11 @@ def set_status(agent_id: str, body: dict, authorization: str = Header(default=""
         vm = _agent_vm_action(agent_id, "start" if status == "active" else "stop") \
             if status in ("active", "deactivated") else None
         _audit(conn, x_actor or "admin", "set_status", "agent", agent_id,
-               {"status": status, "forced": bool(body.get("force")), "lark_sync": lark, "vm": vm})
+               {"status": status, "lark_sync": lark, "vm": vm,
+                "checklist_missing": miss})
         conn.commit()
-    return {"agent_id": agent_id, "status": status, "lark_sync": lark, "vm": vm}
+    return {"agent_id": agent_id, "status": status, "lark_sync": lark, "vm": vm,
+            "checklist_missing": miss}
 
 
 # ======================= Second brain của team =======================
@@ -4940,6 +4939,11 @@ def ops_snapshot(authorization: str = Header(default="")) -> dict:
             "GROUP BY connector_id ORDER BY n DESC LIMIT 5").fetchall()
         pending = conn.execute(
             "SELECT count(*) n FROM pending_actions WHERE status='pending'").fetchone()["n"]
+        # Binding "bắt tất": không khai app_id lẫn chat_id → hứng MỌI sự kiện của kênh
+        # đó khi không có binding cụ thể hơn. Rất dễ đẩy tin sang nhầm agent.
+        catchall = [dict(r) for r in conn.execute(
+            "SELECT id, channel, agent_id, created_by, created_at FROM routing_binding "
+            "WHERE active AND app_id IS NULL AND chat_id IS NULL ORDER BY id").fetchall()]
         expiring = conn.execute(
             "SELECT id, kind, owner_email, "
             "floor(extract(epoch from (expires_at - now()))/86400)::int AS days_left "
@@ -4954,6 +4958,7 @@ def ops_snapshot(authorization: str = Header(default="")) -> dict:
         "credentials_expiring": [dict(r) for r in expiring],
         "pending_actions": pending,
         "disk": _disk_usage(),
+        "catchall_routes": catchall,
     }
 
 
