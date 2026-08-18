@@ -1,0 +1,71 @@
+{
+  "_ghi_chu": "Điền bằng dữ kiện thật đã kiểm chứng. Mục nào chưa có bằng chứng thì để trống cho platform báo thiếu, KHÔNG bịa cho đủ.",
+
+  "owner_email": "linhtk@hapas.vn",
+  "team_id": "KINH-DOANH",
+  "team_members": [
+    {"full_name": "Trần Khánh Linh (B)", "role": "owner", "lark_user_id": "ou_473c3cf14d3670d73c495db0c706d4c2", "expertise": "Digital Performance MATE MADE — nạp và duyệt tri thức"},
+    {"full_name": "Đặng Quỳnh Trang (Nelly)", "role": "user", "expertise": "TN Kinh doanh MATE MADE"},
+    {"full_name": "Phạm Như Quỳnh (Kelly Quinn)", "role": "user", "expertise": "Vận hành sàn TMĐT"},
+    {"full_name": "Lê Thuỳ Dương", "role": "user", "expertise": "Booking Affiliate"},
+    {"full_name": "Nguyễn Tuấn Anh (A)", "role": "user", "expertise": "TikTok Ads"},
+    {"full_name": "Phùng Văn Khoa", "role": "user", "expertise": "TikTok Ads"}
+  ],
+  "collaboration_rules": [
+    "LYLY chỉ trả lời khi được hỏi trong nhóm đã khai; không tự chen vào hội thoại giữa người với người",
+    "LYLY tra số để người quyết, KHÔNG quyết thay: mọi việc tiêu tiền hay đổi giá đều đẩy về quản lý",
+    "Không tự gửi tin ra ngoài nhóm đã khai",
+    "Không nhận việc biên bản cho nhóm ngoài team MATE MADE (tránh trùng với AG-MINH-ANH)"
+  ],
+
+  "agent_kpi": "OFR (bịa số) = 0 — một lần bịa là fail; ≥95% câu trả lời số có trích nguồn và nêu kỳ dữ liệu; 100% câu xin duyệt ngân sách/giá/khuyến mãi bị từ chối đúng",
+  "alert_thresholds": [
+    "DLQ > 5 job",
+    "im lặng > 24h trong giờ làm việc",
+    "tỷ lệ lỗi > 10%/ngày",
+    "kd_sync fail 2 ngày liên tiếp (kho tri thức cũ dần mà không ai biết)"
+  ],
+
+  "data_sources_allowed": [
+    "Lark Wiki TEAM KINH DOANH MATE MADE (space 7496094770155061279) — các tài liệu khai trong KD_DOCS: KINH DOANH MATE MADE, 01_SOP, B2S - SHOPEE",
+    "Kho tri thức của chính agent trên platform (brain scope shared + agent)",
+    "BigQuery: CHƯA bật (KD_BQ_DATASETS rỗng). Khi bật sẽ chỉ chạy trên dataset khai sẵn, SELECT-only, cap 1GB/truy vấn, và chỉ cho người trong KD_BQ_VIEWERS"
+  ],
+  "data_forbidden": [
+    "Giá vốn, biên lợi nhuận, chi phí booking KOC/KOL, hợp đồng affiliate — chặn TRƯỚC khi tra tri thức, chỉ người trong KD_CONFIDENTIAL_VIEWERS mới được trả lời",
+    "Dữ liệu người mua: số điện thoại, địa chỉ khách hàng",
+    "Lương thưởng, hoa hồng cá nhân của nhân viên — ngoài phạm vi, chỉ sang phòng Nhân sự",
+    "MATE MADE - BC DAILY: cố ý CHƯA nạp vì chứa LNĐG/BLG/chi phí ĐTC, chờ chốt phạm vi ai được xem"
+  ],
+  "skills": ["brain-rag", "lark-send", "lark-docs", "lark-task"],
+  "writes": [
+    "Ghi fact công việc về người dùng vào brain riêng của agent (nhóm chuyên môn, SKU/campaign hay hỏi) — không lưu nội dung hội thoại",
+    "Nộp tri thức từ kd_sync vào hàng chờ brain của chính agent",
+    "Khi biên bản họp được CHỦ TRÌ chốt: tạo Lark Docs + tạo task cho từng cam kết. Chưa chốt thì không ghi gì"
+  ],
+
+  "auth_mode": "subscription của owner (claude setup-token) — KHÔNG dùng API key chung. Lưu ý hiện trạng: answer() đang chạy bằng luật, chưa gọi model, nên token = 0",
+  "telemetry_verified": "đã thấy run trên platform ngày 18/08/2026: job-387, job-388, job-389 (GET /v1/self/traces). total_tokens = 0 vì answer() chạy bằng luật, chưa gọi model — không phải do telemetry hỏng",
+  "deployment": "self_hosted: chạy python3 consumer.py trên máy Mac của owner (linhtk). Chưa đưa lên VM — khi cần chạy 24/7 sẽ dùng docker compose trong agents/AG-KD-MATE-MADE/",
+
+  "tests_passed": "bash scripts/agent-test.sh AG-KD-MATE-MADE → 13/17 pass ngày 18/08/2026. 2 case fail do timeout/429 của hạ tầng khi chạy liên tục; 2 case (ROAS, tồn kho) fail vì dữ liệu nguồn BC DAILY cố ý chưa nạp. Toàn bộ case hàng rào an toàn (không tự duyệt ngân sách/giá/khuyến mãi/booking, chặn dữ liệu hạn chế, ngoài phạm vi) đều PASS",
+  "escalation_rules": [
+    "Không tìm thấy dữ liệu đã duyệt → nói 'Cái này em chưa có, anh/chị hỏi lại quản lý nhé', KHÔNG đoán, KHÔNG làm tròn, KHÔNG suy từ SKU tương tự",
+    "Ai đó xin tăng ngân sách / đổi giá / đăng ký khuyến mãi / booking KOC / đền bù ngoài chính sách → không tự quyết, đẩy về quản lý kinh doanh, nhắc đừng đổi trên Seller Center trước khi có duyệt",
+    "Câu hỏi chạm dữ liệu hạn chế mà người hỏi ngoài danh sách → từ chối, không hé lộ một phần, không xác nhận gián tiếp",
+    "Lỗi kỹ thuật 2 lần liên tiếp → job vào DLQ, owner nhận cảnh báo"
+  ],
+  "risks": [
+    "Bịa số vận hành → người tăng ngân sách theo ROAS bịa, đốt tiền thật trong ngày. Giảm thiểu: bắt buộc tra tri thức, không có hit thì từ chối; đo bằng OFR/CTUR",
+    "Trả số ĐÚNG nhưng của kỳ CŨ — lỗi âm thầm, không ai phát hiện ngay. Giảm thiểu: mọi câu trả lời nêu KỲ DỮ LIỆU (ngày cập nhật tài liệu, không phải ngày sync); kd_sync cảnh báo tài liệu quá 45 ngày",
+    "Tự quyết việc tiêu tiền. Giảm thiểu: chặn bằng luật trong consumer.py trước mọi nhánh khác, không phụ thuộc prompt",
+    "Lộ giá vốn/biên lợi nhuận. Giảm thiểu: chặn trước khi gọi /v1/self/context nên nội dung mật không vào ngữ cảnh; fail-closed khi chưa cấu hình danh sách",
+    "RAG của platform khớp theo AND và không hiểu ngữ nghĩa → câu hỏi tự nhiên trượt, LYLY nói 'chưa có' dù dữ liệu có. Giảm thiểu: bỏ hư từ + nới từ đồng nghĩa trước khi tra",
+    "Trùng việc biên bản họp với AG-MINH-ANH nếu hai bot cùng một nhóm. Giảm thiểu: quy ước LYLY chỉ vào nhóm MATE MADE"
+  ],
+
+  "schedule": ["kd_sync chạy hàng ngày 6h giờ VN: đồng bộ tài liệu Lark → hàng chờ tri thức, không tự duyệt"],
+  "retrain_process": "Tri thức sai → sửa thẳng trong tài liệu Lark gốc rồi chạy kd_sync (hôm sau tự cập nhật, kèm ngày sửa mới). Prompt sai → sửa system_prompt.md, tạo version mới trên console, rollback được bằng cách đổi con trỏ version. Không phải đập đi làm lại",
+  "review_cadence": "weekly — owner xem Console (số run, token, lỗi, DLQ) mỗi thứ Hai; đối chiếu vài câu trả lời với tài liệu gốc",
+  "scope_confirmed": "Owner xác nhận LYLY chỉ làm đúng phạm vi trong USECASE.md: tra số vận hành sàn + chính sách, và dựng biên bản họp. KHÔNG soạn tin bán hàng (team không có sale), KHÔNG quyết thay người, KHÔNG thao tác trên Seller Center"
+}

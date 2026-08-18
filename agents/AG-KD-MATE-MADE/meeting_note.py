@@ -340,8 +340,11 @@ def handle_meeting_job(job: dict, ctx: dict, api, transcribe=None) -> str:
     if _CONFIRM.match(text):
         draft = find_pending_draft(ctx)
         if not draft:
-            return ("Tôi không thấy bản nháp nào đang chờ chốt trong luồng này. Gửi "
-                    "recording cuộc họp để tôi dựng biên bản trước nhé.")
+            # Nhắc luôn ai mới chốt được: người hỏi đang định chốt, nói rõ từ đầu thì đỡ
+            # một vòng qua lại — và giữ nguyên tắc "chỉ chủ trì" ở mọi lối vào.
+            return ("Em không thấy bản nháp nào đang chờ chốt trong luồng này ạ. Gửi "
+                    "recording cuộc họp để em dựng biên bản trước nhé — sau đó **chủ trì "
+                    "cuộc họp** trả lời 'chốt' ngay dưới bản nháp là em publish.")
         owner = ((ctx.get("meta") or {}).get("draft_owner")
                  or payload.get("draft_owner") or "")
         if not is_chair(uref, owner):
