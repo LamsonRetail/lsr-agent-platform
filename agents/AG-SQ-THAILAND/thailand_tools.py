@@ -560,6 +560,9 @@ _KB_Q = ("kho tri thức", "kho tri thuc", "master file", "mục lục", "muc lu
 _MM_Q = ("mate made", "matemade")
 _CULTURE_Q = ("văn hoá", "van hoa", "văn hóa", "giá trị cốt lõi", "gia tri cot loi", "giá trị của lsr",
               "keeper test", "nguyên tắc làm việc", "check-in", "chuẩn mực", "tuyên ngôn")
+_LOGISTICS_Q = ("logistic", "kho vận", "kho van", "vận chuyển", "van chuyen", "hàng về",
+                "hang ve", "ffm", "flash", "cung ứng", "cung ung", "nhập hàng", "nhap hang",
+                "hải quan", "hai quan", "3pl", "giao hàng", "giao hang", "lô hàng", "lo hang")
 _DIGEST_Q = ("hôm nay có gì", "hom nay co gi", "bản tin", "ban tin", "digest", "tin mới",
              "tin moi", "cập nhật hôm nay", "có gì mới")
 _COMPANY_Q = ("lịch sử", "lich su", "tầm nhìn", "tam nhin", "sứ mệnh", "su menh", "bod là ai",
@@ -584,6 +587,8 @@ def route(q_low: str) -> str | None:
         parts.append(th_milestone_check())
     if any(k in q_low for k in _SEASON_Q):
         parts.append(th_season_calendar(filter_q=q_low))
+    if any(k in q_low for k in _LOGISTICS_Q):
+        parts.append(th_logistics())
     if any(k in q_low for k in _DIGEST_Q):
         parts.append(th_daily_digest())
     if any(k in q_low for k in _NUMBERS_Q):
@@ -682,6 +687,32 @@ def th_daily_digest() -> str:
     if d.get("rui_ro"):
         lines.append("\n🔴 **Rủi ro:**")
         lines += [f"- {r.get('noi_dung')}" for r in d["rui_ro"][:4]]
+    return "\n".join(lines)
+
+
+@tool("báo-cáo")
+def th_logistics() -> str:
+    """Cập nhật logistics/kho vận/cung ứng TH: lô hàng, FFM, hải quan, tồn kho, chi phí, PO."""
+    d = load_config("th_logistics")
+    if not d:
+        return NO_CONFIG.format(key="th_logistics")
+    if not d.get("as_of"):
+        return ("Em chưa có dữ liệu logistics — job quét 6 nhóm kho vận/cung ứng (08:07 hằng "
+                "ngày) chưa chạy lần đầu. Anh/chị hỏi lại sau 08:07 mai là em có ạ.")
+    lines = [f"**Logistics Thái Lan — {d.get('khoang') or d['as_of']}**"]
+    for key, title in (("lo_hang", "Lô hàng"), ("doi_tac_ffm", "Đối tác FFM/vận chuyển"),
+                       ("hai_quan_nhap_khau", "Hải quan / nhập khẩu"), ("ton_kho", "Tồn kho"),
+                       ("chi_phi", "Chi phí"), ("po", "Đơn đặt NCC"),
+                       ("rui_ro_dang_mo", "🔴 Rủi ro đang mở"), ("quyet_dinh", "Quyết định")):
+        rows = d.get(key) or []
+        if not rows:
+            continue
+        lines.append(f"\n**{title}:**")
+        for r in rows[:4]:
+            txt = r.get("noi_dung") or f"{r.get('chi_so', '')}: {r.get('gia_tri', '')}"
+            extra = " · ".join(x for x in (r.get("trang_thai"), r.get("ngay"),
+                                          r.get("ai_xu_ly"), r.get("deadline")) if x)
+            lines.append(f"- {txt}" + (f" ({extra})" if extra else ""))
     return "\n".join(lines)
 
 
