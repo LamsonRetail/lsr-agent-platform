@@ -1,14 +1,45 @@
 {
-  "owner_config": "Thái (FFM) + Khôi (Kế hoạch)",
-  "as_of": null,
-  "khoang": null,
-  "note": "Job quét Lark hằng ngày (08:07) ghi file này từ 6 nhóm: HAPAS_TH& FFM BST · THAILAND - VẬN HÀNH CUNG ỨNG · HAPAS X FLASH FFM · Check in tiến độ QT kho Thái · NHẬP HÀNG HAPAS TH · NHẬP HÀNG MATE MADE TH. Đang chờ lần quét đầu.",
-  "lo_hang": [],
-  "doi_tac_ffm": [],
+  "owner_config": "Thái (Product Owner/FFM) + Khôi (KHHH)",
+  "as_of": "2026-08-19",
+  "khoang": "quét 19/08/2026 — nhóm FFM BST & Flash FFM có tin tới 19/08; nhóm VẬN HÀNH CUNG ỨNG im từ 04/08",
+  "nguon_quet": ["HAPAS_TH& FFM BST", "HAPAS X FLASH FFM", "THAILAND - VẬN HÀNH CUNG ỨNG"],
+  "lo_hang": [
+    {"noi_dung": "Kiện hàng TRẢ về đang chờ kho xác nhận đã nhận: 260807QKTB644B (TH020691SZFC4A) và 260808S110FJXE (TH267045368077H)", "ngay": "2026-08-19", "trang_thai": "chờ kho xác nhận", "nguon": "HAPAS_TH& FFM BST"}
+  ],
+  "doi_tac_ffm": [
+    {"doi_tac": "Flash Express", "noi_dung": "🔴 Hôm nay KHÔNG có xe vào nhận hàng ('ไม่มีรถเข้ารับงานในเวลานี้') — kho báo trực tiếp trong nhóm", "ngay": "2026-08-19", "nguon": "HAPAS_TH& FFM BST"},
+    {"doi_tac": "Flash Express", "noi_dung": "Đóng gói: đã chốt bọc chống sốc 3 lớp theo tiêu chuẩn VN, kho triển khai ngay", "ngay": "2026-07-19", "nguon": "THAILAND - VẬN HÀNH CUNG ỨNG"},
+    {"doi_tac": "Flash Express", "noi_dung": "Buộc nơ + đóng combo Mother's Day/Songkran: kho đồng ý đóng tại bàn, phụ phí 2–3 THB/đơn. Chờ Thái chốt giá; Khôi gửi list combo/SKU/số lượng", "ngay": "2026-07-19", "nguon": "THAILAND - VẬN HÀNH CUNG ỨNG"},
+    {"doi_tac": "SCG → Flash", "noi_dung": "Đang chuyển kho SCG sang Flash, CHƯA chuyển hết 100%. Vinh yêu cầu Khôi gửi timeline mốc chuyển + tỷ trọng + số lượng", "ngay": "2026-07-19", "nguon": "THAILAND - VẬN HÀNH CUNG ỨNG"},
+    {"doi_tac": "SCG / Flash / Anchanto", "noi_dung": "🔴 Sự cố ghép nối: Anchanto vẫn link kho SCG (tồn mã key ở SCG = 0 vì đã chuyển Flash) → tồn trên sàn nhảy về 0, đơn vẫn đẩy sang SCG nên không đi được đơn. Cần xoá API SCG khỏi Anchanto và TikTok; Shopee đã xoá kho SCG", "ngay": "2026-07-19", "nguon": "THAILAND - VẬN HÀNH CUNG ỨNG"}
+  ],
   "hai_quan_nhap_khau": [],
-  "ton_kho": [],
-  "chi_phi": [],
+  "ton_kho": [
+    {"chi_so": "Tồn Bloom Gift set Songkran (TXT2601141)", "gia_tri": "~600 sản phẩm, ~4 tháng tồn", "ngay": "2026-07-07", "nguon": "THAILAND - VẬN HÀNH CUNG ỨNG"}
+  ],
+  "chi_phi": [
+    {"muc": "Giá vốn NVL — Hộp màu", "gia_tri": "Thái 13 tệ vs Việt Nam ~7 tệ (cao gần 2 lần)", "ngay": "2026-08-04", "nguon": "THAILAND - VẬN HÀNH CUNG ỨNG"},
+    {"muc": "Giá vốn NVL — Ruy băng", "gia_tri": "Thái 2,7 tệ vs Việt Nam ~1,7 tệ", "ngay": "2026-08-04", "nguon": "THAILAND - VẬN HÀNH CUNG ỨNG"},
+    {"muc": "Kịch bản break-even logistics HAPAS T8/T9", "gia_tri": "doanh thu 12 tỷ VND · logistics cost 600 triệu = 0,5% (giữ cost CBM, tăng doanh số)", "ngay": "2026-07-11", "nguon": "THAILAND - VẬN HÀNH CUNG ứNG"},
+    {"muc": "Phụ phí đóng gói tại bàn (Flash)", "gia_tri": "2–3 THB/đơn", "ngay": "2026-07-19", "nguon": "THAILAND - VẬN HÀNH CUNG ỨNG"},
+    {"muc": "Billing Flash", "gia_tri": "Hoá đơn BIL202608000268 đã trả nhưng TRẢ VƯỢT → phần vượt bù cho 3 hoá đơn còn nợ, tổng 20.156,04 THB", "ngay": "2026-08-19", "nguon": "HAPAS X FLASH FFM"}
+  ],
   "po": [],
-  "rui_ro_dang_mo": [],
-  "quyet_dinh": []
+  "rui_ro_dang_mo": [
+    {"noi_dung": "🔴 Giá vốn NVL Thái cao gần 2 lần Việt Nam (hộp 13 vs 7 tệ, ruy băng 2,7 vs 1,7 tệ) → mọi SP tại Thái phải bán giá cao mới đủ BLG/LNĐG. Đây là gốc rễ của việc lợi nhuận hụt", "ai_xu_ly": "Team Cung ứng đề xuất phương án giảm; anh Tín (Head of Supply Chain) chỉ định người phụ trách", "deadline": "chưa có", "nguon": "THAILAND - VẬN HÀNH CUNG ỨNG 04/08"},
+    {"noi_dung": "Không có bảng TIÊU CHUẨN HÀNG HỎNG gửi cho Flash → kho vẫn đóng hộp móp/méo cho khách", "ai_xu_ly": "Hương tổng hợp lỗi từ SCG + kho VN để làm bảng tiêu chuẩn", "deadline": "chưa có", "nguon": "THAILAND - VẬN HÀNH CUNG ỨNG"},
+    {"noi_dung": "Hộp Songkran phai màu nặng (hồng → vàng) sau 4 tháng, còn tồn ~600 sản phẩm mã TXT2601141", "ai_xu_ly": "Kho kiểm hàng tại kho; Team Sản phẩm + Kho đề xuất cách bảo quản (tránh nắng trực tiếp)", "deadline": "chưa có", "nguon": "THAILAND - VẬN HÀNH CUNG ỨNG"},
+    {"noi_dung": "Withholding tax certificate bản gốc chưa gửi tới Flash (phòng kế toán, tầng 7, trụ sở Flash Bangkok) — Flash chờ để phát hành biên nhận", "ai_xu_ly": "Kế toán (Supaporn) + Hiền (kế toán nội bộ)", "deadline": "Flash nhắc lại 19/08", "nguon": "HAPAS X FLASH FFM"}
+  ],
+  "quyet_dinh": [
+    {"noi_dung": "Bọc chống sốc 3 lớp theo tiêu chuẩn VN — kho Flash đã đồng ý và triển khai", "ai_chot": "Hương + kho Flash", "ngay": "2026-07-19", "nguon": "THAILAND - VẬN HÀNH CUNG ỨNG"},
+    {"noi_dung": "Đóng gói combo Mother's Day + Songkran tại bàn, không cần đóng trước", "ai_chot": "kho Flash", "ngay": "2026-07-19", "nguon": "THAILAND - VẬN HÀNH CUNG ỨNG"},
+    {"noi_dung": "Dùng nhóm 'THAILAND - VẬN HÀNH CUNG ỨNG' để báo nhanh sự cố kho/tồn kho và follow tiến độ, không đợi tới họp 1-1", "ai_chot": "Vinh (CM)", "ngay": "2026-07-19", "nguon": "THAILAND - VẬN HÀNH CUNG ỨNG"}
+  ],
+  "cau_hoi_dang_treo": [
+    "Nếu không đạt doanh số thì chi phí FFM tối ưu được tối thiểu bao nhiêu? (Vinh hỏi Thái, 11/07 — chưa thấy trả lời)",
+    "Team KHHH cần forecast/timeline nhập hàng, chuyển hàng thế nào để tối ưu CBM thuê Flash?"
+  ],
+  "tai_lieu": "Phân tích bill/P&L logistics: https://o4pvcegwn6b.sg.larksuite.com/docx/VvRDdaKfooZTnPxL6Z2lRFfigHe · Báo cáo chi phí T7: HTC_Retail_expense_report_202607_TH_EN.xlsx (trong nhóm Flash FFM)",
+  "khong_doc_duoc": ["Nhiều tin trong nhóm FFM BST là ẢNH (screenshot đơn/tồn) — không trích được nội dung trong ảnh"]
 }

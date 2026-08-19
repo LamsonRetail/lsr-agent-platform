@@ -175,7 +175,7 @@ def answer(q: str, ctx: dict, payload: dict, notify=None) -> str:
         return knowledge.save(api, q)
 
     # --- Chặn nội dung nhạy cảm ở mọi câu hỏi ---
-    if knowledge.is_sensitive(low):
+    if knowledge.is_sensitive_query(low):
         return ("Tôi **không** cung cấp/lưu thông tin nhạy cảm (lương, giá vốn, thông tin cá "
                 "nhân khách hàng) qua kênh chung. Anh/chị hỏi đúng bộ phận phụ trách nhé.")
 

@@ -553,7 +553,7 @@ _SEASON_Q = ("mùa vụ", "mua vu", "dịp lễ", "dip le", "noel", "năm mới"
 _TARGET_Q = ("base target", "base nào", "base nao", "target nào", "target nao",
              "target tháng", "target ngày", "rebase")
 _NUMBERS_Q = ("doanh thu", "doanh so", "doanh số", "lợi nhuận", "loi nhuan", "lnđg", "lndg",
-              "mtd", "tình hình", "tinh hinh", "kqkd", "tồn kho", "ton kho", "dòng tiền",
+              "mtd", "tình hình", "tinh hinh", "kqkd", "dòng tiền",
               "dong tien", "bán được bao nhiêu", "số tháng 8", "thang 8 the nao")
 _KB_Q = ("kho tri thức", "kho tri thuc", "master file", "mục lục", "muc luc",
          "file nào", "file nao", "có những file", "tài liệu nào", "tai lieu nao")
@@ -562,11 +562,13 @@ _CULTURE_Q = ("văn hoá", "van hoa", "văn hóa", "giá trị cốt lõi", "gia
               "keeper test", "nguyên tắc làm việc", "check-in", "chuẩn mực", "tuyên ngôn")
 _LOGISTICS_Q = ("logistic", "kho vận", "kho van", "vận chuyển", "van chuyen", "hàng về",
                 "hang ve", "ffm", "flash", "cung ứng", "cung ung", "nhập hàng", "nhap hang",
-                "hải quan", "hai quan", "3pl", "giao hàng", "giao hang", "lô hàng", "lo hang")
+                "hải quan", "hai quan", "3pl", "giao hàng", "giao hang", "lô hàng", "lo hang",
+                "tồn kho", "ton kho", "giá vốn", "gia von", "nvl", "nguyên vật liệu", "hộp",
+                "ruy băng", "packaging", "đóng gói", "dong goi", "scg", "anchanto", "ntk")
 _DIGEST_Q = ("hôm nay có gì", "hom nay co gi", "bản tin", "ban tin", "digest", "tin mới",
              "tin moi", "cập nhật hôm nay", "có gì mới")
 _COMPANY_Q = ("lịch sử", "lich su", "tầm nhìn", "tam nhin", "sứ mệnh", "su menh", "bod là ai",
-              "công ty", "cong ty", "lamson", "lam sơn", "hà túi", "ha tui", "văn phòng", "kho ")
+              "lamson", "lam sơn", "hà túi", "ha tui", "văn phòng công ty", "trụ sở")
 
 
 def route(q_low: str) -> str | None:
@@ -588,7 +590,7 @@ def route(q_low: str) -> str | None:
     if any(k in q_low for k in _SEASON_Q):
         parts.append(th_season_calendar(filter_q=q_low))
     if any(k in q_low for k in _LOGISTICS_Q):
-        parts.append(th_logistics())
+        parts.append(th_logistics(q_low))
     if any(k in q_low for k in _DIGEST_Q):
         parts.append(th_daily_digest())
     if any(k in q_low for k in _NUMBERS_Q):
@@ -603,7 +605,8 @@ def route(q_low: str) -> str | None:
         parts.append(lsr_culture())
     if any(k in q_low for k in _COMPANY_Q):
         parts.append(lsr_company())
-    return "\n\n".join(parts) if parts else None
+    # Ghép tối đa 2 mục — hỏi 1 câu không nên nhận về cả 4 bảng.
+    return "\n\n".join(parts[:2]) if parts else None
 
 
 # ----------------------------- nhóm 7 · LSR chung (văn hoá & công ty) -----------------------------
@@ -691,28 +694,51 @@ def th_daily_digest() -> str:
 
 
 @tool("báo-cáo")
-def th_logistics() -> str:
-    """Cập nhật logistics/kho vận/cung ứng TH: lô hàng, FFM, hải quan, tồn kho, chi phí, PO."""
+def th_logistics(topic: str = "") -> str:
+    """Logistics/kho vận TH. Hỏi chung → rủi ro + tin mới nhất; hỏi cụ thể → chỉ mục đó."""
     d = load_config("th_logistics")
     if not d:
         return NO_CONFIG.format(key="th_logistics")
     if not d.get("as_of"):
-        return ("Em chưa có dữ liệu logistics — job quét 6 nhóm kho vận/cung ứng (08:07 hằng "
-                "ngày) chưa chạy lần đầu. Anh/chị hỏi lại sau 08:07 mai là em có ạ.")
-    lines = [f"**Logistics Thái Lan — {d.get('khoang') or d['as_of']}**"]
-    for key, title in (("lo_hang", "Lô hàng"), ("doi_tac_ffm", "Đối tác FFM/vận chuyển"),
-                       ("hai_quan_nhap_khau", "Hải quan / nhập khẩu"), ("ton_kho", "Tồn kho"),
-                       ("chi_phi", "Chi phí"), ("po", "Đơn đặt NCC"),
-                       ("rui_ro_dang_mo", "🔴 Rủi ro đang mở"), ("quyet_dinh", "Quyết định")):
-        rows = d.get(key) or []
-        if not rows:
-            continue
-        lines.append(f"\n**{title}:**")
-        for r in rows[:4]:
-            txt = r.get("noi_dung") or f"{r.get('chi_so', '')}: {r.get('gia_tri', '')}"
-            extra = " · ".join(x for x in (r.get("trang_thai"), r.get("ngay"),
-                                          r.get("ai_xu_ly"), r.get("deadline")) if x)
-            lines.append(f"- {txt}" + (f" ({extra})" if extra else ""))
+        return ("Em chưa có dữ liệu logistics — job quét 6 nhóm kho vận (08:07 hằng ngày) "
+                "chưa chạy lần đầu ạ.")
+
+    def rows(key, n=3):
+        out = []
+        for r in (d.get(key) or [])[:n]:
+            txt = r.get("noi_dung") or r.get("muc") or r.get("chi_so") or ""
+            if r.get("gia_tri"):
+                txt = f"{txt}: {r['gia_tri']}" if txt else r["gia_tri"]
+            meta = " · ".join(x for x in (r.get("doi_tac"), r.get("ngay"), r.get("ai_xu_ly")) if x)
+            out.append(f"- {txt}" + (f" _({meta})_" if meta else ""))
+        return out
+
+    t = topic.lower()
+    # Hỏi cụ thể → chỉ trả đúng mục đó, gọn.
+    for keys, key, title in (
+        (("chi phí", "chi phi", "giá vốn", "gia von", "hoá đơn", "hoa don", "billing", "thuế", "cbm"),
+         "chi_phi", "Chi phí logistics"),
+        (("tồn kho", "ton kho", "tồn", "ntk"), "ton_kho", "Tồn kho"),
+        (("rủi ro", "rui ro", "sự cố", "su co", "vấn đề", "van de"), "rui_ro_dang_mo", "🔴 Rủi ro đang mở"),
+        (("lô hàng", "lo hang", "hàng về", "hang ve", "hàng trả"), "lo_hang", "Lô hàng"),
+        (("flash", "ffm", "kho ", "vận chuyển", "van chuyen", "scg", "anchanto"),
+         "doi_tac_ffm", "Đối tác FFM / kho"),
+    ):
+        if any(k in t for k in keys) and d.get(key):
+            return f"**{title}** (tới {d['as_of']}):\n" + "\n".join(rows(key, 4))
+
+    # Hỏi chung → rủi ro đang mở + tin mới nhất, không đọc cả bảng.
+    lines = [f"**Logistics Thái Lan — tới {d['as_of']}**"]
+    if d.get("rui_ro_dang_mo"):
+        lines.append("\n🔴 **Đang mở:**")
+        lines += rows("rui_ro_dang_mo", 3)
+    moi = [r for k in ("doi_tac_ffm", "lo_hang") for r in (d.get(k) or [])
+           if r.get("ngay") == d["as_of"]]
+    if moi:
+        lines.append(f"\n**Hôm nay:**")
+        for r in moi[:3]:
+            lines.append(f"- {r.get('noi_dung', '')}")
+    lines.append("\nHỏi cụ thể hơn được: chi phí · tồn kho · Flash/kho · lô hàng.")
     return "\n".join(lines)
 
 

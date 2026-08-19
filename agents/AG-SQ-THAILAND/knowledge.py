@@ -30,8 +30,23 @@ def is_save_request(text: str) -> bool:
 
 
 def is_sensitive(text: str) -> bool:
+    """Dùng cho luồng LƯU vào kho — giữ nguyên chặt (kể cả giá vốn)."""
     low = text.lower()
     return any(w in low for w in SENSITIVE_WORDS)
+
+
+# Vinh 19/08: Ploy phải trả lời được chi phí/giá vốn NVL (hộp, ruy băng, packaging) vì đó là
+# thông tin vận hành của team cung ứng. Chỉ chặn lương/PII và giá vốn theo SKU/sản phẩm.
+_QUERY_BLOCK = ("lương", "luong", "bảng lương", "thu nhập", "thưởng cá nhân", "cmnd", "cccd",
+                "căn cước", "số điện thoại khách", "sdt khách", "thông tin cá nhân",
+                "tài khoản ngân hàng", "mật khẩu", "password", "giá vốn sản phẩm",
+                "giá vốn sku", "giá vốn từng mã", "giá vốn mã")
+
+
+def is_sensitive_query(text: str) -> bool:
+    """Dùng cho luồng TRẢ LỜI câu hỏi — hẹp hơn is_sensitive."""
+    low = text.lower()
+    return any(w in low for w in _QUERY_BLOCK)
 
 
 def extract_source_url(text: str) -> str | None:

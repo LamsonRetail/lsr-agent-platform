@@ -23,3 +23,4 @@
 {"q": "bst tote launching ngày nào", "expect": ["23/09/2026"]}
 {"q": "chốt mẫu BST T10 khi nào", "expect": ["20/07/2026", "QUÁ HẠN"]}
 {"q": "tình hình doanh thu tháng 8 thế nào", "expect": ["8,4 triệu THB", "127%", "73%"]}
+{"q": "có cập nhật gì về logistics thái lan tuần vừa rồi không", "expect": ["13 vs 7 tệ", "Đang mở"]}
