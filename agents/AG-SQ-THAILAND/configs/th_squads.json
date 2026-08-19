@@ -1,21 +1,59 @@
 {
   "owner_config": "Vinh",
+  "source": "Squad Model - Thái Lan (docx) — đọc thật 19/08/2026",
+  "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/T2SvdwBS7oot2FxOrUGlNOjigSh",
+  "note": "Tên trong tài liệu phần lớn là tên gọi/viết tắt — KHÔNG suy đoán họ tên đầy đủ.",
   "squads": [
     {
       "id": "SQ-HAPAS-TH",
       "brand": "HAPAS Thailand",
-      "lead": "Vinh (kiêm CM toàn thị trường)",
-      "members": ["Hương (BM)", "Tùng (MKT Manager)", "Hạnh (Booking)", "Nawin", "Chol", "Ice", "Ngân (MKT account VN-based)", "Khôi (Sản phẩm)", "T.Dương (Sản phẩm)"]
+      "lead": "Vinh — Country Manager thị trường Thái, kiêm Squad Lead HAPAS TH",
+      "kinh_doanh": {
+        "truong": "Hương (Trưởng Kinh doanh HAPAS TH — sàn, affiliate, ads, CSKH nằm dưới)",
+        "members": ["Khuê", "Phúc", "Phương Chi", "Shetsuda", "Siriporn"]
+      },
+      "marketing": {"account": "Ngân (từ VN) + 1 TTS", "nhan_dau_bai_tu": "anh Tùng (MKT Manager TH)"},
+      "van_hanh": {"ke_hoach": "Khôi", "thu_mua": "T.Dương"}
     },
     {
       "id": "SQ-MATEMADE-TH",
       "brand": "MATE MADE Thailand",
-      "lead": "anh Sơn (remote từ VN từ ~20/08, review cơ chế remote cuối T8)",
-      "deputy": "Trang (Business Manager MM, tại Thái)",
-      "members": ["Trang (BM)", "Yến Nhi (MKT account VN-based)", "M.Thảo (Sản phẩm)", "P.Thảo (Sản phẩm)"]
+      "lead": "anh Sơn (CCO) — Squad Lead, làm remote",
+      "kinh_doanh": {
+        "truong": "Trang (Trưởng Kinh doanh MATE MADE TH)",
+        "members": ["H.Dung", "N.Tuyền", "P.Linh", "K.Linh", "Bhornwan", "[đang tuyển] TikTok Ads"]
+      },
+      "marketing": {"truong": "Yến Nhi (từ VN)", "nhan_dau_bai_tu": "anh Tùng"},
+      "van_hanh": {"ke_hoach": "M.Thảo", "thu_mua": "P.Thảo"}
     }
   ],
-  "can_assign": ["Vinh", "Sơn"],
-  "escalation_rule": "Squad lead MM im 24h → escalate cho Trang + Vinh quyết theo khung",
-  "people_ops": "[CẦN XÁC NHẬN PIC] — Ngọc (Pin Muk) xin nghỉ 27/07, dự kiến về VN 09/08; phương án 'giữ vai từ VN' chưa chốt"
+  "chapter_leads": [
+    {"chapter": "Sản phẩm", "lead": "anh Chung (CEO)", "note": "đứng trực tiếp sản phẩm + marketing cho CẢ 2 squad Thái trong 3–6 tháng tới; chốt BST/thiết kế"},
+    {"chapter": "Marketing", "lead": "anh Tài (CMO)", "note": "HQ giữ branding, tham vấn + kiểm duyệt concept"},
+    {"chapter": "Kinh doanh", "lead": "anh Sơn (CCO)", "note": "định hướng KD, traffic, AOV, CR cho cả 2 squad"},
+    {"chapter": "Vận hành", "lead": "anh Thi (COO)", "note": "chuẩn vận hành + S&OP"}
+  ],
+  "dung_chung": {
+    "mkt_manager": "anh Tùng (2 brand) — nhận đầu bài từ squad → xếp lịch → trả kết quả",
+    "booking": "Hạnh (Booking Executive)",
+    "cskh": ["Dịu", "T.Dương", "N.Quỳnh"],
+    "sop": "Tuấn Anh (số S&OP chốt ngày 23 hàng tháng)",
+    "ke_toan": "Hiền tại Thái (backup: chị Hoà)",
+    "nhan_su_phap_ly": ["Kim Ngọc", "Thu"],
+    "ffm": "Thái (tạm thời — đang tìm người ngồi tại Thái để Thái quay về làm Product Owner)",
+    "creative": "Creative Studio (VN) — dùng như agency; squad được chọn HQ hoặc agency tại Thái",
+    "dang_tuyen": ["Sản phẩm – R&D squad (VACANT, cả 2 squad)", "TikTok Ads (MATE MADE)", "HR generalist (Thai) — chưa offer"]
+  },
+  "can_assign": [
+    "Vinh — Squad Lead HAPAS TH + Country Manager: quyết mọi việc trong squad (chịu P&L, như mini-CEO); quyết khi nguồn lực dùng chung (MKT/kho/CSKH) trùng lịch giữa 2 squad; quyết việc ngoài quyền squad (lương thưởng, hợp đồng, pháp lý)",
+    "anh Sơn (CCO) — Squad Lead MATE MADE TH",
+    "anh Chung (CEO) — sản phẩm + marketing cả 2 squad, chốt BST/thiết kế",
+    "anh Tùng — xếp lịch marketing, giao thực thi cho Ngân (HAPAS) / Yến Nhi (MM)",
+    "Hương — giao việc trong team KD HAPAS TH",
+    "Trang — giao việc trong team KD MATE MADE TH",
+    "anh Thi (COO) — chuẩn vận hành + S&OP dùng chung"
+  ],
+  "escalation_rule": "Trưởng squad quyết việc trong squad. Ai không đồng ý phải lên tiếng trong 24h — Chapter Lead/BOD có quyền VETO trong 24h, quá 24h mặc định chạy. MATE MADE: việc gấp mà anh Sơn im 24h → Trang + Vinh quyết luôn, báo lại sau. Nguồn lực dùng chung trùng nhau → Vinh quyết. Traffic/chuyển đổi tụt → chuyển sang họp hàng ngày, phản ứng trong 1–2 ngày, không chờ họp tuần (bài học MATE MADE).",
+  "kpi_model": "KPI là SỐ CHUNG của cả squad (P&L squad) — không còn KPI riêng từng bộ phận; trưởng squad chịu P&L. Nhịp: daily trong squad · 1 buổi/tuần/squad · 1 buổi/tuần họp chung 2 squad · ngày 23 chốt target khớp S&OP.",
+  "people_ops": "Theo danh bạ Lark 19/08/2026: Phạm Thị Kim Ngọc (PINMUK) vẫn là 'People Operation Manager Thailand' (active); doc Squad Model ghi 'Nhân sự - admin: Kim Ngọc, Thu'. KHÔNG TÌM ĐƯỢC tài liệu nào nói đã nghỉ 27/07, cũng không thấy người thay; vị trí 'HR generalist (Thai)' đang tuyển, chưa offer. ⚠️ Cần xác nhận với người thật trước khi dùng để giao việc."
 }
