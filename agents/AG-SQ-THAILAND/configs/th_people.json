@@ -1,0 +1,266 @@
+{
+  "owner_config": "Vinh",
+  "as_of": "2026-08-19",
+  "source": "Danh bạ Lark (contact search 'Thailand') + thành viên nhóm 'KD HAPAS THAILAND' (40 người) — đọc thật 19/08/2026",
+  "luat": [
+    "CHỈ lưu tên + chức danh + open_id (để mention trong Lark). KHÔNG lưu email, số điện thoại, lương, đánh giá cá nhân.",
+    "Danh sách này là ai đang làm việc cho thị trường Thái Lan, không phải sơ đồ tổ chức chính thức — vai trò chính thức xem th_squads.",
+    "Hỏi 'nhân sự Thái Lan có những ai' → trả danh sách theo nhóm chức năng, không kèm thông tin cá nhân."
+  ],
+  "nguoi": [
+    {
+      "ten": "Nguyễn Đức Vinh",
+      "chuc_danh": "Head of Market Expansion — CM Thái Lan",
+      "open_id": "ou_90af9974235187f824d78c45a0f0bcc7",
+      "nhom": "lãnh đạo"
+    },
+    {
+      "ten": "LÊ MẠNH CHUNG",
+      "chuc_danh": "CEO",
+      "open_id": "ou_7698bcf7ea72f101b812998de0477a0b",
+      "nhom": "lãnh đạo"
+    },
+    {
+      "ten": "Nguyễn Trần Thi",
+      "chuc_danh": "BOD / COO",
+      "open_id": "ou_c4a4e1e07b0dce1c484a1e7d3046b66c",
+      "nhom": "lãnh đạo"
+    },
+    {
+      "ten": "Nguyễn Tuấn Việt Sơn (Sonny)",
+      "chuc_danh": "GDKD / CCO",
+      "open_id": "ou_dfefdd9cbe027a4087c354f1a664efc3",
+      "nhom": "lãnh đạo"
+    },
+    {
+      "ten": "Nguyễn Đình Minh",
+      "chuc_danh": "Head of Online Business",
+      "open_id": "ou_88c45ed08b77b8d433f5a5f00be3ebbe",
+      "nhom": "lãnh đạo"
+    },
+    {
+      "ten": "Nguyễn Thị Thu Hương (Hom)",
+      "chuc_danh": "Ecommerce Team Leader Thailand — Trưởng KD HAPAS TH",
+      "open_id": "ou_33d5122cf0f4c38a76cb9dd844aaf4f3",
+      "nhom": "kinh doanh"
+    },
+    {
+      "ten": "Nguyễn Ngọc Khuê",
+      "chuc_danh": "Vận hành TMĐT Thái Lan",
+      "open_id": "ou_2471cf5685d5025b9914513cf45b6c5e",
+      "nhom": "kinh doanh"
+    },
+    {
+      "ten": "Nguyễn Ngọc Tuyền",
+      "chuc_danh": "Facebook/Web Team Leader Thailand",
+      "open_id": "ou_ddba834b9e15b115c9d0f143727bba53",
+      "nhom": "kinh doanh"
+    },
+    {
+      "ten": "Trần An Na",
+      "chuc_danh": "TN Thương mại điện tử HAPAS",
+      "open_id": "ou_e243eca5c426bfff02eaea44abd11283",
+      "nhom": "kinh doanh"
+    },
+    {
+      "ten": "Nguyễn Phương Chi",
+      "chuc_danh": "Booking Affiliate",
+      "open_id": "ou_8f3227fce882dd357e764bcce4e6ae99",
+      "nhom": "booking"
+    },
+    {
+      "ten": "Tưởng Phương Linh (PRIM)",
+      "chuc_danh": "Nhân viên Booking Affiliate",
+      "open_id": "ou_f0ef1b5743728322eb20172994a5abc5",
+      "nhom": "booking"
+    },
+    {
+      "ten": "Trần Phương Thảo",
+      "chuc_danh": "Nhân viên Booking Affiliate",
+      "open_id": "ou_67ea56c8144a54dfe70cce4730f24e96",
+      "nhom": "booking"
+    },
+    {
+      "ten": "Trần Tiến Nghĩa (Nawin)",
+      "chuc_danh": "Influencer partnership",
+      "open_id": "ou_caadb76eed3e238842826fcef92b10c8",
+      "nhom": "booking"
+    },
+    {
+      "ten": "Lê Đức Hạnh",
+      "chuc_danh": "Quan hệ công chúng / booking",
+      "open_id": "ou_2d2823cde79bc119857fbe1428ff5289",
+      "nhom": "booking"
+    },
+    {
+      "ten": "Lộc Thuý Ngân",
+      "chuc_danh": "Marketing Executive (Thailand)",
+      "open_id": "ou_aa0c776840a7c003a4fe85b87f080cea",
+      "nhom": "marketing"
+    },
+    {
+      "ten": "Tống Thanh Ngân",
+      "chuc_danh": "TTS Marketing",
+      "open_id": "ou_89e472380704c88e465195b7349c1302",
+      "nhom": "marketing"
+    },
+    {
+      "ten": "Phạm Sơn Tùng",
+      "chuc_danh": "Creative Services Manager",
+      "open_id": "ou_9d35830c87fd08e2bb7404d24e9ea788",
+      "nhom": "marketing"
+    },
+    {
+      "ten": "Nguyễn Bích Ngọc",
+      "chuc_danh": "Thiết kế",
+      "open_id": "ou_c846b31a2b089d520559a1c4dbb58df1",
+      "nhom": "marketing"
+    },
+    {
+      "ten": "Phạm Hoàng Phúc",
+      "chuc_danh": "TikTok Ads",
+      "open_id": "ou_7cc8ce589c394b6e6789ee1775116c38",
+      "nhom": "ads"
+    },
+    {
+      "ten": "Tạ Viết Huy",
+      "chuc_danh": "Nhân viên TikTok Ads",
+      "open_id": "ou_5d009a5d8c0552fc33a9921ffdd48cd1",
+      "nhom": "ads"
+    },
+    {
+      "ten": "Đinh Hồng Thái",
+      "chuc_danh": "Product Owner — FFM/kho vận",
+      "open_id": "ou_ff57e506fabd9a6dd9c7237fcf6291e0",
+      "nhom": "vận hành"
+    },
+    {
+      "ten": "Trần Công Thành Khôi",
+      "chuc_danh": "Nhân viên KHHH — kế hoạch/mốc BST",
+      "open_id": "ou_44dcd60cf99d0d20d47d48eafbc39f3f",
+      "nhom": "vận hành"
+    },
+    {
+      "ten": "Kim Tuấn Anh",
+      "chuc_danh": "KHHH — S&OP",
+      "open_id": "ou_0be2b5e804491d099251a7fd022b3777",
+      "nhom": "vận hành"
+    },
+    {
+      "ten": "Phạm Thị Thu Thúy",
+      "chuc_danh": "Thu mua",
+      "open_id": "ou_1824071ba5a464734e89bdb6ba6b27e7",
+      "nhom": "vận hành"
+    },
+    {
+      "ten": "Nguyễn Thị Mai Trang",
+      "chuc_danh": "Thu mua",
+      "open_id": "ou_1912db05290dfad921232eb5fc0cf719",
+      "nhom": "vận hành"
+    },
+    {
+      "ten": "Phạm Thị Ngọc Anh",
+      "chuc_danh": "Vận đơn",
+      "open_id": "ou_7226b1c160c344d222595d64ff26fde2",
+      "nhom": "vận hành"
+    },
+    {
+      "ten": "Trần Minh Đức",
+      "chuc_danh": "Digital Transformation",
+      "open_id": "ou_5427b838dd6128bdecb276994fd811e6",
+      "nhom": "vận hành"
+    },
+    {
+      "ten": "Trần Thị Dịu",
+      "chuc_danh": "TNKH — trải nghiệm khách hàng",
+      "open_id": "ou_14a4b8e9560c1e1182e6f360aaab35f0",
+      "nhom": "cskh"
+    },
+    {
+      "ten": "Vũ Thu Trang",
+      "chuc_danh": "TNKH",
+      "open_id": "ou_48dc0966e6f1711bee27eb261916dde6",
+      "nhom": "cskh"
+    },
+    {
+      "ten": "Nguyễn Thị Thùy Dương",
+      "chuc_danh": "NV Trải nghiệm Khách hàng",
+      "open_id": "ou_7270f0f071e2087735ee367127b533a7",
+      "nhom": "cskh"
+    },
+    {
+      "ten": "Nguyễn Thị Thu Giang",
+      "chuc_danh": "TN TNKH",
+      "open_id": "ou_18fdf72af8044b92ae1d1c3fd715211d",
+      "nhom": "cskh"
+    },
+    {
+      "ten": "Phạm Thị Kim Ngọc (PINMUK)",
+      "chuc_danh": "People Operation Manager Thailand",
+      "open_id": "ou_726793599d2d54b8d5512929e7b9fa15",
+      "nhom": "nhân sự"
+    },
+    {
+      "ten": "Nguyễn Thị Thu",
+      "chuc_danh": "Admin Officer",
+      "open_id": "ou_58b8cade8cac5bca0e8115d16465333d",
+      "nhom": "nhân sự"
+    },
+    {
+      "ten": "Trịnh Gia Như (Mia)",
+      "chuc_danh": "Assistant Translator Collaborator",
+      "open_id": "ou_96d8e138eb8b5b5edfb6be07a5317fe0",
+      "nhom": "nhân sự"
+    },
+    {
+      "ten": "Supaporn Promsuk",
+      "chuc_danh": "Accounting Support (nhân sự Thái)",
+      "open_id": "ou_430aa7d5c1ddf753040b879e27fe0e8d",
+      "nhom": "tài chính"
+    },
+    {
+      "ten": "Nguyễn Thanh Hiền",
+      "chuc_danh": "Kế toán nội bộ",
+      "open_id": "ou_96d580c8edff7def564da0de95e785ca",
+      "nhom": "tài chính"
+    },
+    {
+      "ten": "Lý Thị Hòa",
+      "chuc_danh": "Kế toán trưởng",
+      "open_id": "ou_1b52553f6a30f86f14691bc2db9fc947",
+      "nhom": "tài chính"
+    },
+    {
+      "ten": "Đỗ Thu Nga",
+      "chuc_danh": "Business Intelligence",
+      "open_id": "ou_6d748f095fdd84a710ad3afbca623e99",
+      "nhom": "dữ liệu"
+    }
+  ],
+  "mate_made_th_da_dong": {
+    "ghi_chu": "MATE MADE Thái Lan đóng 19/08/2026 — 3 người dưới đây từng phụ trách MM TH, vai trò mới CẦN VINH XÁC NHẬN, em không tự gán.",
+    "nguoi": [
+      {
+        "ten": "Đặng Quỳnh Trang",
+        "chuc_danh_cu": "TN Kinh doanh MATE MADE",
+        "open_id": "ou_eb5d42aa701145cd24cb6cd54c8050b0"
+      },
+      {
+        "ten": "Trương Khánh Linh (LYN)",
+        "chuc_danh_cu": "Booking Affiliate MateMade Thái Lan",
+        "open_id": "ou_7096d7dc061116aeb2b585505388f5ba"
+      },
+      {
+        "ten": "Ngô Thị Minh Nguyệt",
+        "chuc_danh_cu": "NV Booking affiliate Mate Made Thailand",
+        "open_id": "ou_26bfe49fb9985111907b10e0d95e3306"
+      }
+    ]
+  },
+  "bot_trong_nhom_kd_th": [
+    "DASHBOARD THAILAND (cli_a86e4c427b79d010)",
+    "Sonny (cli_aa8814627c789ed0)",
+    "AI Agent Assistant (cli_a9bd0ff8d6619ed1)"
+  ],
+  "chua_lay_duoc": "Danh bạ TOÀN công ty: API /open-apis/contact/v3/departments và /users bị chặn (99991679 — thiếu scope contact:contact.base:readonly cho connector Lark). Đang có: contact search theo từ khoá + thành viên từng nhóm."
+}

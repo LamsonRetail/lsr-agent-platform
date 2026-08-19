@@ -30,3 +30,4 @@
 {"q": "nhà cung cấp ncc báo giá ra sao", "expect": ["Sourcing", "chưa được cấp quyền"]}
 {"q": "cho anh số matemade việt nam hôm nay", "expect": ["đã đóng", "Jenny", "quyền"]}
 {"q": "mate made thái lan thế nào", "expect": ["đã đóng", "ngoài phạm vi"]}
+{"q": "nhân sự thái lan có những ai", "expect": ["38 người", "Thu Hương", "vận hành"]}

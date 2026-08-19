@@ -585,6 +585,8 @@ _LOGISTICS_Q = ("logistic", "kho vận", "kho van", "vận chuyển", "van chuye
                 "hải quan", "hai quan", "3pl", "giao hàng", "giao hang", "lô hàng", "lo hang",
                 "tồn kho", "ton kho", "giá vốn", "gia von", "nvl", "nguyên vật liệu", "hộp",
                 "ruy băng", "packaging", "đóng gói", "dong goi", "scg", "anchanto", "ntk")
+_PEOPLE_Q = ("nhân sự", "nhan su", "có những ai", "co nhung ai", "ai phụ trách", "team gồm",
+             "danh sách người", "bao nhiêu người", "ai làm", "nhân viên")
 _AGENTS_Q = ("agent nào", "danh bạ agent", "bot nào", "agent khác", "gọi agent", "a2a")
 _MEETING_Q = ("biên bản họp", "bien ban hop", "nội dung cuộc họp", "họp hôm", "mino", "gỡ băng",
               "meeting note", "biên bản cuộc họp")
@@ -615,6 +617,8 @@ def route(q_low: str) -> str | None:
         parts.append(th_milestone_check())
     if any(k in q_low for k in _SEASON_Q):
         parts.append(th_season_calendar(filter_q=q_low))
+    if any(k in q_low for k in _PEOPLE_Q):
+        return th_people(q_low)
     if any(k in q_low for k in _AGENTS_Q):
         return th_agents()
     if any(k in q_low for k in _MEETING_Q):
@@ -923,6 +927,32 @@ def th_meeting_notes(topic: str = "") -> str:
                                 "Chỉ trả phần liên quan thị trường Thái Lan, kèm ngày họp.")
 
 
+@tool("lsr-chung")
+def th_people(nhom: str = "") -> str:
+    """Nhân sự thị trường Thái Lan: tên + chức danh, nhóm theo chức năng."""
+    d = load_config("th_people")
+    if not d:
+        return NO_CONFIG.format(key="th_people")
+    rows = d.get("nguoi", [])
+    q = nhom.lower()
+    hit = [r for r in rows if q and (q in r["nhom"] or q in r["chuc_danh"].lower())]
+    if hit:
+        lines = [f"**Nhân sự TH — {hit[0]['nhom']}** ({len(hit)} người):"]
+        lines += [f"- {r['ten']} — {r['chuc_danh']}" for r in hit]
+        return "\n".join(lines)
+    groups = {}
+    for r in rows:
+        groups.setdefault(r["nhom"], []).append(r["ten"])
+    lines = [f"**Nhân sự thị trường Thái Lan — {len(rows)} người** (danh bạ Lark {d.get('as_of')}):"]
+    for g, names in groups.items():
+        lines.append(f"- **{g}** ({len(names)}): " + " · ".join(names))
+    mm = d.get("mate_made_th_da_dong", {})
+    if mm.get("nguoi"):
+        lines.append(f"\n_{mm.get('ghi_chu','')}_ " + " · ".join(x["ten"] for x in mm["nguoi"]))
+    lines.append("\nHỏi hẹp hơn được: kinh doanh · booking · marketing · vận hành · cskh · nhân sự · tài chính.")
+    return "\n".join(lines)
+
+
 def suggest_menu() -> str:
     """Menu 'em trả lời ngay được mấy dạng này' — dạy người dùng cách hỏi khi em bí.
 
@@ -934,7 +964,7 @@ def suggest_menu() -> str:
             "• \"còn mấy ngày tới hạn KOC Tote?\" — đếm ngược mốc BST, cảnh báo quá hạn\n"
             "• \"tháng 12 làm gì?\" — lịch mùa vụ Thái, kèm kết luận làm / không làm\n"
             "• \"ngày launching Travel bag?\" — soi mốc đang lệch giữa các nguồn\n"
-            "• \"đang dùng base target nào?\" — 9,3M THB (tháng) · 8,0M THB (ngày)\n"
+            "• \"đang dùng base target nào?\" — base hiện hành + lịch sử rebase\n"
             "• \"kho tri thức có gì?\" — mục lục nguồn Lark của thị trường TH\n"
             "• dán nội dung họp → em dựng **biên bản**; chủ trì trả lời `chốt` là em lưu "
             "kho + đề xuất đầu việc\n\n"
