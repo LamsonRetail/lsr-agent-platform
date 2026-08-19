@@ -44,9 +44,3 @@ infra/lsr-platform/platform_api/bootstrap/*.bat
 infra/lsr-platform/platform_api/bootstrap/*.zip
 # plugin bake vào agent_runner khi deploy (nguồn: plugins/lsr-telemetry)
 infra/lsr-platform/agent_runner/plugin/
-
-# Khoá truy cập dữ liệu của agent (BigQuery service account...) — chỉ chừa tài liệu/mẫu
-!agents/*/env/
-agents/*/env/*
-!agents/*/env/*.md
-!agents/*/env/*.example

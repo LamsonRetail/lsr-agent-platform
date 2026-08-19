@@ -114,19 +114,44 @@ def _tokens(s: str) -> set[str]:
     return {w for w in _WORD.split((s or "").lower()) if len(w) >= 3 and w not in _STOP}
 
 
+# Từ xuất hiện trong tiêu đề của gần như mọi tài liệu → một mình nó không đủ để kết luận
+# "mục này liên quan câu hỏi".
+_TU_CHUNG = {"quy", "trình", "quytrinh", "định", "nghĩa", "báo", "cáo", "tài", "liệu",
+             "thông", "tin", "hướng", "dẫn", "danh", "sách", "tổng", "hợp", "kế", "hoạch"}
+# Mục seed/DEMO của platform: link giả, không phải tài liệu thật của công ty.
+_NGUON_GIA = ("/demo-", "demo-k", "/DEMO", "example.com", "placeholder", "test-doc")
+
+
+def _la_demo(h: dict) -> bool:
+    """Mục tri thức seed/DEMO của platform → không được dùng để trả lời người thật."""
+    src = (h.get("source_url") or "").lower()
+    tit = (h.get("title") or "").lower()
+    return (any(k.lower() in src for k in _NGUON_GIA)
+            or src.startswith("demo") or tit.startswith("[demo")
+            or "demo" in src.split("/")[-1])
+
+
 def answer_from_knowledge(ctx: dict, q: str = "") -> str | None:
     """Trả lời từ tri thức đã duyệt — luôn kèm nguồn, và CHỈ khi thật sự liên quan.
 
     Platform trả về mục tri thức gần nhất theo RAG, nhưng "gần nhất" không có nghĩa là
-    "liên quan": câu hỏi về văn hoá công ty từng bị gán một mục DEMO của platform. Vì vậy
-    phải soi lại: cần ≥2 từ khoá của câu hỏi xuất hiện trong mục, hoặc 1 từ khoá nằm ngay
-    trong tiêu đề. Không đạt → trả None để lớp sau (tool/model) xử lý.
+    "liên quan". Hai lần đã sai thật:
+      1. câu hỏi văn hoá công ty bị gán một mục DEMO của platform;
+      2. "có những quy trình gì" (19/08) bị gán mục seed DEMO "Quy trình xử lý đổi trả"
+         — quy trình cửa hàng bán lẻ, không liên quan TMĐT Thái Lan.
+
+    Nên có 3 lớp chặn: bỏ mục nguồn DEMO/placeholder · bỏ mục điểm thấp · và đòi trùng
+    ≥2 từ khoá, hoặc 1 từ khoá trong tiêu đề nhưng từ đó phải đặc trưng (không phải
+    "quy trình", "báo cáo"... vốn xuất hiện ở mọi tài liệu). Không đạt → None để lớp sau
+    (tool/model) xử lý.
     """
     hits = ctx.get("knowledge") or []
     if not hits:
         return None
     qt = _tokens(q)
     for h in hits:
+        if _la_demo(h):
+            continue
         score = h.get("score", h.get("similarity"))
         if isinstance(score, (int, float)) and score < 0.5:
             continue
@@ -134,7 +159,8 @@ def answer_from_knowledge(ctx: dict, q: str = "") -> str | None:
             title_t = _tokens(h.get("title"))
             body_t = _tokens((h.get("content") or "")[:800])
             overlap = qt & (title_t | body_t)
-            if not (len(overlap) >= 2 or (overlap & title_t)):
+            manh = {t for t in (overlap & title_t) if len(t) >= 4 and t not in _TU_CHUNG}
+            if not (len(overlap) >= 2 or manh):
                 continue
         src = h.get("source_url") or "kho tri thức nội bộ (chưa có link đối chứng)"
         return f"{h.get('title')}: {(h.get('content') or '')[:400]}\n\n(nguồn: {src})"

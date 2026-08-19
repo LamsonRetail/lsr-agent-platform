@@ -35,3 +35,5 @@
 {"q": "Khôi làm gì trong team", "expect": ["Khôi", "KHHH"]}
 {"q": "ai phụ trách booking", "expect": ["booking", "Chi"]}
 {"q": "Hom là ai", "expect": ["Thu Hương", "Ecommerce"]}
+{"q": "vậy có những quy trình gì", "expect": ["Biên bản họp", "chưa có"]}
+{"q": "em biết trong tổ chức ai tên là Tín không", "expect": ["Mai Quang Tín", "Supply Chain"]}

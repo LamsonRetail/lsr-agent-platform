@@ -800,6 +800,9 @@ def route(q_low: str) -> str | None:
         parts.append(th_kb_index())
     if any(k in q_low for k in _MM_Q):
         return mate_made_answer(q_low)
+    if any(k in q_low for k in ("quy trình", "quy trinh", "qui trình", "qui trinh",
+                                "quy định nội bộ", "sop", "quy chuẩn")):
+        parts.append(th_quy_trinh())
     if any(k in q_low for k in _CULTURE_Q):
         parts.append(lsr_culture())
     if any(k in q_low for k in _COMPANY_Q):
@@ -813,6 +816,23 @@ def route(q_low: str) -> str | None:
 
 
 # ----------------------------- nhóm 7 · LSR chung (văn hoá & công ty) -----------------------------
+
+
+@tool("bối-cảnh")
+def th_quy_trinh() -> str:
+    """Các quy trình Ploy thật sự chạy được — nói đúng cái em làm, không kể quy trình
+    của bộ phận khác. Thư viện SOP thị trường TH thì em CHƯA có (19/08/2026)."""
+    return (
+        "**Quy trình em chạy được:**\n"
+        "- **Biên bản họp**: dán nội dung họp → em dựng nháp; chủ trì trả lời `chốt` thì em "
+        "lưu kho + đề xuất đầu việc. Ai không chủ trì thì em không chốt.\n"
+        "- **Giao việc**: chỉ Vinh giao; em đẩy qua cổng duyệt của console, không tự tạo.\n"
+        "- **Nạp tri thức**: phải có link Lark đối chứng, vào kho ở trạng thái chờ duyệt.\n"
+        "- **Đổi base target**: base cũ không bị xoá, em giữ cả lịch sử rebase để đối chiếu.\n"
+        "- **Mốc BST**: nguồn lệch nhau thì em nêu cả các mốc và xin người chốt, không tự chọn.\n\n"
+        "**Em chưa có:** thư viện SOP/quy trình vận hành của thị trường TH. Anh/chị gửi link "
+        "Lark thì em nạp vào kho."
+    )
 
 
 @tool("lsr-chung")
