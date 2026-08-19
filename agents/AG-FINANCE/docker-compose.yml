@@ -1,0 +1,24 @@
+# Chạy agent ở bất kỳ đâu: docker compose up
+# Whitelist squad để rỗng thì agent từ chối mọi câu hỏi số liệu — đó là chủ ý.
+services:
+  agent:
+    build: .
+    environment:
+      LSR_PLATFORM_URL: ${LSR_PLATFORM_URL:-https://platform.34-126-154-135.sslip.io}
+      LSR_AGENT_ID: ${LSR_AGENT_ID:-AG-FINANCE}
+      LSR_AGENT_TOKEN: ${LSR_AGENT_TOKEN:?cần token — xin ở Console hoặc scripts/lsr_adopt.py}
+      DRY_RUN: ${DRY_RUN:-true}
+      FIN_SQUAD_EMAILS: ${FIN_SQUAD_EMAILS:-}
+      FIN_SQUAD_OPEN_IDS: ${FIN_SQUAD_OPEN_IDS:-}
+      FIN_SQUAD_CHAT_IDS: ${FIN_SQUAD_CHAT_IDS:-}
+      # Thiếu dòng này thì container chạy ở chế độ nguồn thật và trả lời "chưa truy cập
+      # được nguồn số liệu" — trông như hỏng, thực ra là chưa khai biến.
+      FIN_FAKE_DATA: ${FIN_FAKE_DATA:-}
+      FIN_LARK_APP_ID: ${FIN_LARK_APP_ID:-}
+      FIN_LARK_APP_SECRET: ${FIN_LARK_APP_SECRET:-}
+      FIN_LARK_DOMAIN: ${FIN_LARK_DOMAIN:-}
+      FIN_STALE_HOURS_RECEIVABLE: ${FIN_STALE_HOURS_RECEIVABLE:-}
+      FIN_STALE_HOURS_PAYABLE: ${FIN_STALE_HOURS_PAYABLE:-}
+      FIN_STALE_HOURS_REVENUE: ${FIN_STALE_HOURS_REVENUE:-}
+      FIN_STALE_HOURS_EXPENSE: ${FIN_STALE_HOURS_EXPENSE:-}
+    restart: unless-stopped

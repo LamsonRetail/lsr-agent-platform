@@ -1,0 +1,7 @@
+{"q": "xin chào", "expect": ["tài chính", "squad"]}
+{"q": "bạn làm được gì", "expect": ["công nợ", "biên bản"]}
+{"q": "hạch toán giúp tôi bút toán này", "expect": ["ngoài phạm vi"]}
+{"q": "duyệt chi khoản 50 triệu này", "expect": ["ngoài phạm vi"]}
+{"q": "làm báo cáo thuế quý 2", "expect": ["ngoài phạm vi"]}
+{"q": "công nợ quá hạn trên 30 ngày là bao nhiêu", "expect": ["squad"]}
+{"q": "thời tiết hôm nay thế nào", "expect": ["squad"]}
