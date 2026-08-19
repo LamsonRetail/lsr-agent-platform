@@ -52,27 +52,28 @@ git rev-parse --verify origin/%BRANCH% >nul 2>&1 && (
 if errorlevel 1 (echo LOI: khong chuyen duoc branch & exit /b 1)
 
 echo.
-REM Workflow deploy cua agent duoc GIU trong thu muc agent (ban goc), va chep
-REM ra .github/workflows/ khi push. Ly do: giu tat ca thu cua agent o mot cho,
-REM ai clone ve cung co day du, khong phai di xin file roi.
-set WF_SRC=agents\AG-INVENTORY-DAYS\deploy\deploy-ag-inventory-days.yml
-set WF_DST=.github\workflows\deploy-ag-inventory-days.yml
-if exist "%WF_SRC%" (
-  if not exist ".github\workflows" mkdir ".github\workflows"
-  copy /Y "%WF_SRC%" "%WF_DST%" >nul
-  echo   Da cap nhat %WF_DST%
-) else (
-  echo   !! Khong thay %WF_SRC% — CI/CD se khong tu deploy agent len VM.
+REM ---------------------------------------------------------------------
+REM  KHONG tu chep workflow vao .github/workflows/ nua.
+REM  Ly do: scope-guard chan PR cua nguoi khong phai maintainer neu cham
+REM  vao CORE (.github/, infra/, src/, scripts/...). Danh sach maintainer
+REM  o .github/maintainers.txt — hien chi co ntranthi va thienquy71.
+REM  Ban goc workflow van nam o agents/AG-INVENTORY-DAYS/deploy/ (thuoc
+REM  pham vi agent, duoc phep). Maintainer chep ra .github/workflows/ ho.
+REM ---------------------------------------------------------------------
+if exist ".github\workflows\deploy-ag-inventory-days.yml" (
+  echo   Go workflow khoi .github/workflows (scope-guard khong cho nguoi ngoai core sua)
+  git rm --quiet --ignore-unmatch ".github/workflows/deploy-ag-inventory-days.yml" >nul 2>&1
+  del /Q ".github\workflows\deploy-ag-inventory-days.yml" >nul 2>&1
 )
-echo [5/6] Commit thu muc AG-INVENTORY-DAYS + workflow deploy...
+
+echo [5/6] Commit thu muc AG-INVENTORY-DAYS...
 git add agents/AG-INVENTORY-DAYS
 REM Workflow deploy cua agent nam ngoai thu muc agent -> phai add rieng,
 REM khong thi day len ma CI/CD khong bao gio chay.
-if exist ".github\workflows\deploy-ag-inventory-days.yml" git add .github/workflows/deploy-ag-inventory-days.yml
 git reset -q agents/AG-INVENTORY-DAYS/push_log.txt 2>nul
 git rm -r -q --cached --ignore-unmatch agents/AG-INVENTORY-DAYS/src/__pycache__ 2>nul
 git status --short agents/AG-INVENTORY-DAYS
-git commit -m "feat(AG-INVENTORY-DAYS): noi Lark Base + tu dong deploy len VM" -m "- src/lark_base.py: doc ton kho thang tu Base QL KE HOACH HANG HOA thay cho file Excel. Cache 15 phut, Base loi thi dung lai so cu thay vi bao chua co du lieu." -m "- bot_poll.py: them --base, --refresh-minutes, khoa 1 tien trinh (truoc day chay 2 ban thi moi cau tra loi 2 lan)." -m "- coc.py: sua trich nguon sai (heading kieu 8 buoc bi doc thanh muc 8); uu tien muc/dong CO CON SO khi cau hoi la may ngay/bao nhieu." -m "- qa.py: sua _strip_accents khong xu ly duoc chu d (duoc -> duoc), lam hong moi tu khoa co chu d; them cau tra loi tu gioi thieu." -m "- knowledge: Code of Conduct v3 (75 muc) them luan chuyen kho, ghep/tach combo, van hoa LSR." -m "- .github/workflows/deploy-ag-inventory-days.yml: tu deploy agent len VM, co cong chan test va verify bot da chay." -m "Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+git commit -m "docs(AG-INVENTORY-DAYS): them USECASE.md + TESTCASES.md, go workflow khoi core" -m "- USECASE.md + TESTCASES.md: bo sung theo yeu cau cua agent-gate (use case -> test case -> code)." -m "- Go .github/workflows/deploy-ag-inventory-days.yml khoi PR: scope-guard chi cho maintainer cham CORE. Ban goc giu o agents/AG-INVENTORY-DAYS/deploy/ de maintainer chep ra." -m "Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 if errorlevel 1 (echo LOI: commit that bai - doc dong loi phia tren. & exit /b 1)
 
 echo.
