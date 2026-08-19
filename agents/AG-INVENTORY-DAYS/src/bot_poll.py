@@ -196,7 +196,19 @@ def main() -> int:
 
     poller = LarkPoller(app_id, app_secret, domain)
 
-    bot = poller.bot_info()
+    # Mất mạng lúc khởi động thì CHỜ, không được chết — nếu chết thì vòng lặp
+    # bên ngoài restart ngay và quay vòng vô hạn (đã xảy ra đêm 19/08).
+    bot = None
+    for attempt in range(1, 61):
+        try:
+            bot = poller.bot_info()
+            break
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Chưa gọi được Lark (lần %d): %s — thử lại sau 10s.", attempt, exc)
+            time.sleep(10)
+    if bot is None:
+        logger.error("Không kết nối được Lark sau 10 phút. Dừng.")
+        return 1
     bot_open_id, bot_name = bot.get("open_id", ""), bot.get("app_name", "")
     if args.answer_all:
         logger.warning("--answer-all: trả lời MỌI tin trong nhóm.")
@@ -213,7 +225,11 @@ def main() -> int:
             return {cid: cid for cid in args.chat_id}
         return {c["chat_id"]: c.get("name", "") for c in poller.list_chats()}
 
-    chats = current_chats()
+    try:
+        chats = current_chats()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Chưa lấy được danh sách nhóm (%s) — sẽ thử lại trong vòng lặp.", exc)
+        chats = {cid: cid for cid in (args.chat_id or [])}
     logger.info("Bắt đầu poll mỗi %.1fs (DRY_RUN=%s) — %d nhóm: %s",
                 args.interval, dry_run, len(chats), ", ".join(chats.values()) or "(chưa có)")
 
@@ -268,7 +284,10 @@ def main() -> int:
                     else:
                         poller.send(chat_id, reply)
                         logger.info("[%s] Đã trả lời.", chat_name or chat_id)
-        except Exception:  # noqa: BLE001 — lỗi mạng không được làm chết vòng lặp
+        except requests.exceptions.RequestException as exc:
+            # Mất mạng / Lark chớp tắt: 1 dòng gọn, không đổ traceback mỗi 3 giây.
+            logger.warning("Lỗi mạng: %s — bỏ qua vòng này.", exc.__class__.__name__)
+        except Exception:  # noqa: BLE001 — không lỗi nào được làm chết vòng lặp
             logger.exception("Lỗi khi poll")
         time.sleep(args.interval)
 

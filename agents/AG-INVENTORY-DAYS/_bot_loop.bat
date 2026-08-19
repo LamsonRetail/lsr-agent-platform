@@ -18,7 +18,7 @@ cd /d "%ROOT%src"
 python -u bot_poll.py --chat-id %CHAT_ID% >> "%ROOT%bot_log.txt" 2>&1
 if exist "%ROOT%bot.stop" goto end
 echo [%DATE% %TIME%] bot thoat bat thuong — khoi dong lai sau 10s >> "%ROOT%bot_log.txt"
-timeout /t 10 /nobreak >nul
+ping -n 11 127.0.0.1 >nul
 goto loop
 
 :end
