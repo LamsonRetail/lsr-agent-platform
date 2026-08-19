@@ -167,8 +167,22 @@ def test_no_direct_lark_messaging_outside_kb_reader():
     nếu không, chính câu ghi chú "không được gọi im/v1/messages" sẽ làm test đỏ.
     """
     for path, src in _agent_sources():
+        if path.name == "lark_kb.py":
+            continue                       # ngoại lệ C9, kiểm riêng bên dưới
         assert "open-apis/im/" not in src, f"{path.name} tự gọi Lark IM API"
+
+
+def test_c9_exception_stays_narrow():
+    """Ngoại lệ C9 (gửi trực tiếp khi broker fail) phải HẸP và có điều kiện xoá.
+
+    Chấp nhận đúng MỘT hàm im trong lark_kb.py, kèm ghi chú xoá khi core làm C9. Nếu ai
+    thêm hàm im thứ hai hoặc bỏ ghi chú, test đỏ — để ngoại lệ không lặng lẽ phình ra
+    thành "agent tự tích hợp Lark" như trước Phase 2A.
+    """
     kb = (AGENT_DIR / "legalkb" / "lark_kb.py").read_text(encoding="utf-8")
+    assert kb.count("open-apis/im/") == 1, "chỉ được đúng 1 lời gọi IM API"
+    assert "def im_send_markdown" in kb
+    assert "ĐIỀU KIỆN XOÁ" in kb and "C9" in kb
     assert "def send_text" not in kb and "def recall" not in kb
 
 
@@ -337,3 +351,23 @@ def test_lark_send_ignores_wiki_app_id(monkeypatch):
     monkeypatch.setattr(pf, "call", lambda m, p, payload=None, **k: seen.update(payload or {}))
     pf.lark_send("oc_x", markdown="hi")
     assert "app_id" not in seen
+
+
+def test_fallback_used_when_broker_cannot_send(monkeypatch):
+    """Broker trả sent:false (app chưa trong LARK_EXTRA_APPS — C9) → phải gửi dự phòng,
+    không được im lặng: im lặng là mất thông báo VÀ mất đường phê duyệt."""
+    from legalkb.platform import Platform
+    monkeypatch.setenv("LSR_AGENT_TOKEN", "t")
+    sent = []
+    pf = Platform(fallback=lambda chat, md: sent.append((chat, md)))
+    monkeypatch.setattr(pf, "call", lambda *a, **k: {"sent": False})
+    assert pf.lark_send("oc_x", markdown="cần duyệt #1") is True
+    assert sent == [("oc_x", "cần duyệt #1")]
+
+
+def test_no_fallback_configured_reports_failure(monkeypatch):
+    from legalkb.platform import Platform
+    monkeypatch.setenv("LSR_AGENT_TOKEN", "t")
+    pf = Platform(fallback=None)
+    monkeypatch.setattr(pf, "call", lambda *a, **k: {"sent": False})
+    assert pf.lark_send("oc_x", markdown="x") is False

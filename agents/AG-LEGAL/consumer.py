@@ -69,7 +69,10 @@ def make_lark_kb():
 
 
 def build():
-    pf = Platform()
+    kb = make_lark_kb()
+    # Ngoại lệ C9: broker chưa gửi được bằng app của AG-LEGAL → gửi trực tiếp, thà có
+    # ngoại lệ có tài liệu hơn để agent im lặng trên kênh người dùng đang dùng.
+    pf = Platform(fallback=(kb.im_send_markdown if kb else None))
     if not pf.token:
         sys.exit("thiếu LSR_AGENT_TOKEN — đăng ký agent trước (xem SETUP.md / PLAN §2.2)")
     store = SourceStore(os.environ.get("LEGALKB_DB"))
@@ -77,7 +80,7 @@ def build():
                               auth_path=os.environ.get("NLM_AUTH_PATH"), store=store)
     g = Gates(store, pf, GROUP_CHAT_ID,
               sla_hours=float(os.environ.get("GATE_SLA_HOURS", "4")))
-    b = Bundle(pf=pf, store=store, engine=engine, gates=g, lark=make_lark_kb())
+    b = Bundle(pf=pf, store=store, engine=engine, gates=g, lark=kb)
     return b
 
 

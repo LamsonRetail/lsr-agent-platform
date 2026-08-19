@@ -31,7 +31,7 @@ class PlatformError(RuntimeError):
 
 
 class Platform:
-    def __init__(self, url=None, token=None, app_id=None):
+    def __init__(self, url=None, token=None, app_id=None, fallback=None):
         self.url = (url or os.environ.get("LSR_PLATFORM_URL", DEFAULT_URL)).rstrip("/")
         # Runtime chính thức (POST /v1/self/deploy) truyền token bằng tên
         # LSR_TELEMETRY_API_KEY; chạy tay thì LSR_AGENT_TOKEN. Nhận cả hai.
@@ -49,6 +49,9 @@ class Platform:
         # core thêm LEGAL vào LARK_EXTRA_APPS rồi set LARK_BOT_APP_ID.
         self.app_id = (app_id if app_id is not None
                        else os.environ.get("LARK_BOT_APP_ID", ""))
+        # Ngoại lệ C9: callable(chat_id, markdown) chạy khi broker không gửi được.
+        # Gán ở consumer.build(); None = không có đường dự phòng.
+        self.fallback = fallback
 
     # ---------- HTTP ----------
 
@@ -153,7 +156,19 @@ class Platform:
         else:
             body["text"] = text or ""
         r = self._quiet("POST", "/v1/lark/send", body, what="lark/send")
-        return bool(r and r.get("sent", True))
+        if r and r.get("sent", True):
+            return True
+        # Broker không gửi được — thường vì app chưa có trong LARK_EXTRA_APPS (C9).
+        # Im lặng ở đây = mất thông báo & mất luôn đường phê duyệt, nên thử dự phòng.
+        if self.fallback and to_type == "chat_id":
+            try:
+                self.fallback(to, markdown or text or "")
+                print(f"[lark] broker không gửi được → gửi trực tiếp (ngoại lệ C9) tới {to}",
+                      file=sys.stderr, flush=True)
+                return True
+            except Exception as exc:
+                print(f"[lark] fallback cũng lỗi: {exc}", file=sys.stderr, flush=True)
+        return False
 
     def lark_resolve(self, email):
         r = self._quiet("POST", "/v1/lark/resolve", {"email": email}, what="lark/resolve")

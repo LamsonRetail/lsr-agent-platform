@@ -6,8 +6,9 @@ endpoint đọc Wiki/Drive. Vì vậy riêng phần nạp KB còn dùng tenant t
 Đã mở yêu cầu core **C1** (`/v1/lark/wiki/*`, `/v1/lark/drive/*`); khi có thì thay
 `LarkKB` bằng lời gọi broker và bỏ hẳn app_secret khỏi agent.
 
-Mọi việc GỬI/NHẬN tin Lark đã chuyển sang `legalkb/platform.py` — module này KHÔNG
-được thêm lại hàm `im` nào.
+Mọi việc GỬI/NHẬN tin Lark đi qua `legalkb/platform.py`. Ngoại lệ DUY NHẤT ở cuối file:
+`im_send_markdown()` — chỉ chạy khi broker trả `sent:false` (app của AG-LEGAL chưa có
+trong `LARK_EXTRA_APPS` của core → yêu cầu **C9**). Không thêm hàm `im` nào khác.
 
 Cần các scope (admin duyệt trên Lark Developer Console):
   wiki:wiki:readonly · drive:drive:readonly · docx:document:readonly
@@ -147,6 +148,30 @@ class LarkKB:
 
     def drive_file_url(self, file_token, file_type="file"):
         return f"https://{self.tenant_domain}/{file_type}/{file_token}"
+
+    # ---------- NGOẠI LỆ C9: gửi tin khi broker không gửi được ----------
+
+    def im_send_markdown(self, chat_id, markdown):
+        """Gửi card markdown trực tiếp — CHỈ làm fallback khi broker thất bại.
+
+        ⚠️ Ngoại lệ có chủ ý so với chuẩn "mọi tương tác Lark qua platform": broker chỉ
+        nạp được app có tên trong danh sách CỨNG `LARK_EXTRA_APPS`
+        (infra/docker-compose.yml), AG-LEGAL không có trong đó → `/v1/lark/send` trả
+        `sent:false`. Bỏ fallback này thì agent IM LẶNG trên đúng kênh người dùng đang
+        dùng — tệ hơn là giữ một ngoại lệ có tài liệu.
+
+        ĐIỀU KIỆN XOÁ: khi core thêm `LEGAL_LARK_APP_ID/SECRET` vào `LARK_EXTRA_APPS`
+        (C9) → đặt `LARK_BOT_APP_ID` trong .env, rồi xoá hàm này và đường fallback trong
+        `legalkb/platform.py`.
+        """
+        data = self._request(
+            "POST", "/open-apis/im/v1/messages?receive_id_type=chat_id",
+            {"receive_id": chat_id, "msg_type": "interactive",
+             "content": json.dumps({"config": {"wide_screen_mode": True},
+                                    "elements": [{"tag": "markdown",
+                                                  "content": markdown}]},
+                                   ensure_ascii=False)})
+        return data.get("message_id")
 
     def drive_upload(self, folder_token, file_name, data):
         """Upload file vào Drive folder → trả file_token.
