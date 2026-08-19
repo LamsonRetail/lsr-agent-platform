@@ -1,0 +1,52 @@
+BÁO CÁO KHHH HAPAS VIETNAM — 19/08/2026
+
+TỔNG QUAN
+- Tồn kho hiện tại (giá vốn, theo pivot "Chi tiết BST"): 56,56 tỷ
+- Doanh thu 30 ngày gần nhất (toàn bộ): 48,79 tỷ
+- BST tồn cao nhất: Sản phẩm thường 31,37 tỷ (55,5% tổng tồn) → BST Key mới 5,41 tỷ → BST Tote 2026 4,61 tỷ → BST Trang sức 3,25 tỷ → BST Tote Hapas 3,09 tỷ
+- BST Travel Bag: tồn giá vốn chỉ còn 86,4 triệu => coi như đã bán sạch sau dự án
+- BST 20/10/2026: 0 tồn/0 doanh thu, nhưng Gtri tồn tại NCC đã 53,47 tỷ => hàng đang nằm ở NCC chờ về
+
+VỀ CÁC DỰ ÁN
+- Travel Bag: sự cố BLG giảm 6% do giá vốn bị điều chỉnh mà team dự án không được báo trước → đã tăng giá bán lên 1.283k từ 12h 30/7, BLG sau thuế tăng lên ~61%
+- Trang sức (PTSP): online tháng 8 dự kiến chỉ đạt 3 tỷ, hụt 3,5 tỷ so target 6,5 tỷ → điều chỉnh target còn 4,5 tỷ, KHHH cam kết kéo hàng combo best-seller 300tr (15/8) + 500tr (20/8) → họp 19/08 Retail trình kế hoạch mở rộng bán Trang sức toàn hệ thống đến cuối 2026
+- Nước hoa (PTSP): target KD tháng 8+9 ~4,5 tỷ, hàng sắp về chỉ 2,8 tỷ → hụt 1,7 tỷ, cần đặt thêm ~2,8 tỷ do MOQ NVL 3.000 → họp 20/08 R&D reconfirm target
+- BST Da Loang (launching 15/9): chỉ 2 mã, đang đặt 300sp/mã → lo ngại thiếu hàng, đã đề xuất lùi launching / check lại lead time
+
+CHỈ SỐ TỔNG HỢP — pivot "Chi tiết BST" (Phân loại 2): xem ảnh bảng đính kèm (table_chi_so_tong_hop.png)
+
+Chỉ số bổ sung (329 SKU): Doanh thu MTD 51,80 tỷ, giá trị hàng nhập trong tháng 135,77 tỷ, tổng SL tồn kho 242.828 sp, SL đang trên đường 8.173 sp, giá bán TB/SKU 1.050.095đ, giá vốn TB/SKU 356.724đ
+
+CHI TIẾT THEO TỪNG BỘ SƯU TẬP
+- BST Denim 2026: họp tổng kết dự án dời sang tuần sau, do ~80% nhân sự Denim bị điều sang chạy gấp BST Balo + Tote (truyền thông mới trong 2 ngày)
+- BST Tote/Balo 2026: đang được ưu tiên nguồn lực gấp cho truyền thông mới
+- Nhập hàng Thái Lan: 2 lô nhập kho 8/7 và 16/7, khớp 100% SKU, không chênh lệch
+- Đặt hàng theo lead time: min 35 ngày + 7-10 ngày thu thập data bán → cần mở bán ≥45 ngày trước launching. Thu Đông hạ đơn SKU cuối 25/8; Tweed (lead time ~60 ngày) hạ đơn cuối 1/9
+- Target DA tháng 10: chốt 350 tỷ tại họp Review + Đồng thuận doanh thu/SP Quý 3+4 (6/8)
+- Trang sức HAPAS: mục tiêu lên TOP 1 sàn TMĐT vào tháng 6/2027
+- Đóng gói: cập nhật ảnh đóng gói tự động cho Hộp Dịu Dàng, Hộp Chân Thành, Kery/Ariel/Siena/Kera/Roam Tote Bag — không phát sinh vấn đề
+
+DEMAND AND SUPPLY
+Bán lẻ:
+- Target Tote bán lẻ tháng 8 giảm từ 400 xuống 300 sp/mã → cần check khả thi
+- Tháng 9: bán lẻ đề xuất doanh thu 1,2 tỷ cho Tote → cần rà soát hàng hoá đủ đáp ứng
+- Điều chuyển hàng hoá tuần 1/8: mã dự phóng 1-5sp chuyển 100%, mã >5sp chuyển 50%
+- Retail báo nhiều SP tồn lâu, đang lên kế hoạch Clear; đồng thời bất đồng số liệu plan tháng 8 với KHHH, cần chốt phương án chung
+
+Supply:
+- Nước hoa cần bổ sung ~2,8 tỷ bù hụt target T8+9
+- Denim: nguồn lực đặt hàng bị pha loãng do ưu tiên Balo/Tote
+- Da Loang: 300sp/mã x 2 mã trước launching 15/9 — số lượng có vẻ mỏng, cần đối chiếu forecast
+
+SỰ CỐ TRONG TUẦN, BÀI HỌC
+- Travel Bag — BLG giảm 6%: giá vốn bị điều chỉnh mà team dự án không được báo trước → bài học: mọi thay đổi giá vốn phải thông báo TRƯỚC khi áp dụng lên hệ thống
+- Trang sức — hụt target 3,5 tỷ: target không được review sát theo tuần → bài học: review target theo tuần, đặc biệt BST đang launching/rủi ro cao
+- BST Da Loang — đặt hàng mỏng trước launching: chỉ 300sp/mã cho 2 mã, launching đã cận kề → bài học: chốt lead time thực tế trước khi set ngày launching
+
+CÂU HỎI CẦN CHỐT TUẦN NÀY
+- Trang sức: kế hoạch mở rộng bán toàn hệ thống của Retail có ăn khớp target 4,5 tỷ đã hạ không?
+- Da Loang: có lùi launching 15/9 hay giữ nguyên và chấp nhận rủi ro thiếu hàng?
+- Bán lẻ vs KHHH: bất đồng số liệu plan tháng 8 — ai chốt bản cuối, khi nào?
+
+---
+Nguồn: Base "QL KẾ HOẠCH HÀNG HÓA HAPAS" (bảng BÁO CÁO KẾ HOẠCH HÀNG HOÁ) + các nhóm chat dự án HAPAS hoạt động 19/07–19/08/2026

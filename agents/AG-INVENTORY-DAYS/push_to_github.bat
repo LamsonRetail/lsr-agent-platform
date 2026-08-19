@@ -73,7 +73,7 @@ REM khong thi day len ma CI/CD khong bao gio chay.
 git reset -q agents/AG-INVENTORY-DAYS/push_log.txt 2>nul
 git rm -r -q --cached --ignore-unmatch agents/AG-INVENTORY-DAYS/src/__pycache__ 2>nul
 git status --short agents/AG-INVENTORY-DAYS
-git commit -m "docs(AG-INVENTORY-DAYS): them USECASE.md + TESTCASES.md, go workflow khoi core" -m "- USECASE.md + TESTCASES.md: bo sung theo yeu cau cua agent-gate (use case -> test case -> code)." -m "- Go .github/workflows/deploy-ag-inventory-days.yml khoi PR: scope-guard chi cho maintainer cham CORE. Ban goc giu o agents/AG-INVENTORY-DAYS/deploy/ de maintainer chep ra." -m "Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+git commit -m "docs(AG-INVENTORY-DAYS): bao cao KHHH tuan 19/08/2026" -m "- Them thu muc reports/2026-08-19/: bao cao tuan (.md), bang chi so tong hop + bieu do ton kho theo BST (.png), ban text day du de gui qua bot." -m "Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 if errorlevel 1 (echo LOI: commit that bai - doc dong loi phia tren. & exit /b 1)
 
 echo.
