@@ -316,10 +316,24 @@ def test_warns_when_claude_cli_missing(tmp_path, monkeypatch, capsys):
 def test_lark_send_carries_app_id(monkeypatch):
     """Phải gửi bằng ĐÚNG app đang là member của group; app khác thì không ai nhận được."""
     from legalkb.platform import Platform
-    monkeypatch.setenv("LARK_APP_ID", "cli_test123")
+    monkeypatch.setenv("LARK_BOT_APP_ID", "cli_test123")
     monkeypatch.setenv("LSR_AGENT_TOKEN", "t")
     pf = Platform()
     seen = {}
     monkeypatch.setattr(pf, "call", lambda m, p, payload=None, **k: seen.update(payload or {}))
     pf.lark_send("oc_x", markdown="hi")
     assert seen["app_id"] == "cli_test123" and seen["to"] == "oc_x"
+
+
+def test_lark_send_ignores_wiki_app_id(monkeypatch):
+    """LARK_APP_ID là app đọc Wiki/Drive; broker KHÔNG nạp được nó → truyền vào là 503
+    và mất toàn bộ thông báo. Mặc định phải rỗng = app Admin dùng chung."""
+    from legalkb.platform import Platform
+    monkeypatch.setenv("LARK_APP_ID", "cli_wiki_only")
+    monkeypatch.delenv("LARK_BOT_APP_ID", raising=False)
+    monkeypatch.setenv("LSR_AGENT_TOKEN", "t")
+    pf = Platform()
+    seen = {}
+    monkeypatch.setattr(pf, "call", lambda m, p, payload=None, **k: seen.update(payload or {}))
+    pf.lark_send("oc_x", markdown="hi")
+    assert "app_id" not in seen

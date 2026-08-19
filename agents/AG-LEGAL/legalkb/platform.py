@@ -37,10 +37,18 @@ class Platform:
         # LSR_TELEMETRY_API_KEY; chạy tay thì LSR_AGENT_TOKEN. Nhận cả hai.
         self.token = (token or os.environ.get("LSR_AGENT_TOKEN")
                       or os.environ.get("LSR_TELEMETRY_API_KEY") or "")
-        # Broker hỗ trợ đa app Lark. Phải gửi bằng ĐÚNG app đang là member của group,
-        # không thì tin đi bằng bot khác và không ai trong group nhận được. Rỗng = app
-        # mặc định của platform.
-        self.app_id = app_id if app_id is not None else os.environ.get("LARK_APP_ID", "")
+        # Broker hỗ trợ đa app Lark: phải gửi bằng ĐÚNG app đang là member của group.
+        #
+        # ⚠️ KHÔNG dùng LARK_APP_ID ở đây. Biến đó là app riêng của AG-LEGAL, chỉ để đọc
+        # Wiki/Drive (lark_kb.py). Broker chỉ nạp được app có tên trong danh sách CỨNG
+        # `LARK_EXTRA_APPS` của infra/docker-compose.yml (SAWADEE|SOURCING|DATA|HARRY|LYLY
+        # + app Admin) — AG-LEGAL không có trong đó, nên truyền app_id đó vào sẽ nhận
+        # 503 "chưa có secret trên VM" và MẤT toàn bộ thông báo/phê duyệt.
+        # Mặc định để RỖNG = dùng app Admin dùng chung của platform (đúng với
+        # `lark.bot.app: platform-shared` trong lsr-agent.yaml). Muốn bot riêng thì nhờ
+        # core thêm LEGAL vào LARK_EXTRA_APPS rồi set LARK_BOT_APP_ID.
+        self.app_id = (app_id if app_id is not None
+                       else os.environ.get("LARK_BOT_APP_ID", ""))
 
     # ---------- HTTP ----------
 
