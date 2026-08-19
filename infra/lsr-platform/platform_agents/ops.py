@@ -114,6 +114,21 @@ def diagnose(snap: dict) -> list[tuple]:
             f"Nên: khai rõ app_id/chat_id cho binding này, hoặc gỡ ở Console → Ingress."},
             "low", f"catchall routing #{r['id']}"))
 
+    # Agent active nhưng gateway Lark của app riêng không kết nối được: console xanh
+    # hết nhưng agent câm — phải báo kèm ĐÚNG lệnh nạp secret để admin làm ngay.
+    for g in (snap.get("lark_gateway_gaps") or []):
+        prefix = g.get("env_prefix") or "<TIENTO>"
+        svc = g.get("service") or f"event_gateway_{prefix.lower()}"
+        out.append(("alert", {"message":
+            f"🔴 **{g.get('agent_id')}** đang `active` với app Lark riêng "
+            f"`{g.get('app_id')}` — **{g.get('reason')}**. Gateway KHÔNG mở long-connection: "
+            f"agent không nhận được tin nào và cũng không trả lời được, trong khi console "
+            f"vẫn hiển thị xanh. Chủ agent: {g.get('owner') or '?'}.\n"
+            f"Xin App Secret của app rồi chạy:\n"
+            f"`ssh -t lsr-gcp \"cd /opt/lsr-platform && bash scripts/add-lark-app.sh "
+            f"{prefix} {g.get('app_id')} {svc}\"`"},
+            "low", f"gateway Lark hỏng: {g.get('agent_id')} ({g.get('reason')})"))
+
     errs = snap.get("connector_errors_24h") or []
     for e in errs:
         if int(e.get("n", 0)) >= ERR_TH:

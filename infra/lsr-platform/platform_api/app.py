@@ -2671,6 +2671,59 @@ def _lark_token(app_id: str = "") -> str:
     return d["tenant_access_token"]
 
 
+def _lark_env_prefix(app_id: str) -> str:
+    """Tiền tố env đã khai app_id này (vd 'LYLY' cho LYLY_LARK_APP_ID) — dùng để in
+    đúng lệnh `add-lark-app.sh <PREFIX> <app_id> <service>` trong cảnh báo AG-OPS.
+
+    Đọc LARK_APP_PREFIXES (compose ghép sẵn, KHÔNG chứa secret) trước, vì container
+    platform_api cố tình không nhận các biến <PREFIX>_LARK_APP_* của app phụ.
+    """
+    try:
+        pref = json.loads(os.environ.get("LARK_APP_PREFIXES") or "{}").get(app_id)
+        if pref:
+            return str(pref)
+    except Exception:
+        pass
+    for k, v in os.environ.items():
+        if k.endswith("_LARK_APP_ID") and (v or "").strip() == app_id:
+            return k[: -len("_LARK_APP_ID")]
+    return ""
+
+
+def _lark_gateway_gaps(conn) -> list:
+    """Agent 'active' có app Lark riêng nhưng platform KHÔNG dùng được app_secret của app đó.
+
+    Triệu chứng đã gặp 3 lần (Sawadee, AG-HARRY, AG-KD-MATE-MADE): container gateway
+    vẫn 'running', binding + grant + status đều xanh trên console, nhưng gateway bỏ qua
+    long-connection vì thiếu secret → agent không nhận được một tin nào, và platform
+    cũng không gửi trả lời bằng đúng bot được. Không ai thấy vì cảnh báo chỉ nằm
+    trong log container. Kiểm 2 mức: (1) có secret không, (2) secret còn dùng được không
+    (token bị cache nên gần như không tốn call).
+    """
+    rows = conn.execute(
+        "SELECT DISTINCT coalesce(a.lark_app_id, r.app_id) AS app_id, a.agent_id, a.owner "
+        "FROM agents a LEFT JOIN routing_binding r "
+        "  ON r.agent_id = a.agent_id AND r.active AND r.channel = 'lark' "
+        "WHERE a.status = 'active' AND coalesce(a.lark_app_id, r.app_id) IS NOT NULL "
+        "ORDER BY 2").fetchall()
+    out = []
+    for r in rows:
+        app_id = (r["app_id"] or "").strip()
+        if not app_id:
+            continue
+        if app_id not in _LARK_APPS:
+            reason = "platform chưa có app_secret của app này"
+        elif not _lark_token(app_id):
+            reason = "app_secret platform đang giữ bị Lark từ chối (sai hoặc đã thu hồi)"
+        else:
+            continue
+        prefix = _lark_env_prefix(app_id)
+        out.append({"agent_id": r["agent_id"], "owner": r["owner"], "app_id": app_id,
+                    "reason": reason, "env_prefix": prefix,
+                    "service": f"event_gateway_{prefix.lower()}" if prefix else ""})
+    return out
+
+
 def _identity_cache_get(email: str) -> str | None:
     try:
         with _db() as conn:
@@ -4978,6 +5031,7 @@ def ops_snapshot(authorization: str = Header(default="")) -> dict:
         catchall = [dict(r) for r in conn.execute(
             "SELECT id, channel, agent_id, created_by, created_at FROM routing_binding "
             "WHERE active AND app_id IS NULL AND chat_id IS NULL ORDER BY id").fetchall()]
+        lark_gaps = _lark_gateway_gaps(conn)
         expiring = conn.execute(
             "SELECT id, kind, owner_email, "
             "floor(extract(epoch from (expires_at - now()))/86400)::int AS days_left "
@@ -4993,6 +5047,7 @@ def ops_snapshot(authorization: str = Header(default="")) -> dict:
         "pending_actions": pending,
         "disk": _disk_usage(),
         "catchall_routes": catchall,
+        "lark_gateway_gaps": lark_gaps,
     }
 
 
