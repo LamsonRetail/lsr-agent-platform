@@ -587,3 +587,36 @@ tồn tại chính vì lý do đó, đừng coi auto-prune là bảo hiểm.
 | 21.8 | `add-lark-app.sh LEGAL <app_id mới>` | đi tiếp bình thường tới bước nhập secret | ✅ |
 | 21.9 | `add-lark-app.sh LYLY <app_id của chính LYLY>` | KHÔNG coi là trùng (cập nhật lại secret cũ) | ✅ |
 | 21.10 | `LEGAL_LARK_APP_ID` rỗng | `LARK_EXTRA_APPS`/`LARK_APP_PREFIXES` vẫn parse được, không mất app phụ nào | ✅ |
+
+## §22 — C8 User Identity Broker cho Lark (36/36)
+
+Chạy in-process trong container `platform_api` bằng agent NHÁP `AG-C8TEST` + identity
+giả (`c8test@hapas.vn`) — không chạm agent thật, không gọi Lark thật. Dọn sạch cuối bài.
+
+| Nhóm | Case | KQ |
+|---|---|---|
+| A. Mã hoá | ciphertext khác nhau mỗi lần (nonce), giải mã đúng, plaintext không nằm trong ciphertext | 3/3 ✅ |
+| B. authorize/start | subject không phải email→422; domain ngoài org→403; domain nghiệp vụ lạ→422; app không có secret→503; trả url+state; scope có `offline_access`; url không chứa secret; không phải admin→401 | 8/8 ✅ |
+| C. Phân quyền | chưa grant→403; tạo grant; `path_prefix` không phải `/open-apis/`→422; grant cho identity chưa có→404; path ngoài allowlist→403; method ngoài allowlist→403; path có `..`→422; path không phải `/open-apis/`→422 | 8/8 ✅ |
+| D. status | connected=True khi có grant; response KHÔNG chứa token; subject lạ→connected=False kèm lý do | 3/3 ✅ |
+| E. Tự refresh | trả token MỚI; DB lưu token mới (vẫn mã hoá); expiry gia hạn; audit có `lark_user_refresh` | 4/4 ✅ |
+| F. Refresh hết hạn | →401 nói rõ phải authorize lại | 1/1 ✅ |
+| G. Kill switch | deactivate agent→tắt grant; gọi sau đó→403; revoke→xoá identity; gọi sau revoke→403 | 4/4 ✅ |
+| H. Audit | mọi sự kiện C8 của subject cùng `target_id`; agent_id là actor; audit KHÔNG chứa token dạng rõ; dọn sạch identity + agent nháp | 5/5 ✅ |
+
+### §22.1 — Định tuyến qua Caddy (từ máy dev, không phải localhost:8090)
+
+| Path | Không gateway token | Kỳ vọng | KQ |
+|---|---|---|---|
+| `POST /v1/lark/user/authorize/start` | 403 | chặn ở edge | ✅ |
+| `POST /v1/lark/user/grants` | 403 | chặn ở edge | ✅ |
+| `GET /v1/lark/user/identities` | 403 | chặn ở edge | ✅ |
+| `POST /v1/lark/user/identities/{s}/revoke` | 403 | chặn ở edge | ✅ |
+| `POST /v1/lark/user/call` | 401 `agent token required` | **tới được app** (agent gọi được) | ✅ |
+| `GET /v1/lark/user/status` | 401 `agent token required` | tới được app | ✅ |
+| `GET /v1/lark/user/identities` + gateway + admin token | 200 `[]` | admin dùng được | ✅ |
+| `POST /v1/lark/user/authorize/start` + gateway, thiếu admin | 401 `admin token required` | 2 lớp độc lập | ✅ |
+
+**Chưa nghiệm thu được (cần người bấm đồng ý trên Lark):** lời gọi Approval thật bằng
+user token của một account thật. Toàn bộ đường đi đã test bằng token giả + refresh giả;
+ca cuối chỉ chạy được sau khi chốt chính sách §5 và có identity đầu tiên.

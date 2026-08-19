@@ -40,6 +40,13 @@ platform.34-126-154-135.sslip.io {
 	# data). Dùng path_regexp vì path matcher không khớp wildcard giữa đường dẫn.
 	# Auth vẫn do app kiểm: _require_role trên đúng agent_id.
 	@selfagent path_regexp ^/v1/agents/[^/]+/(golive-checklist|spec|profile)$
+	# C8: /v1/lark/* mở cho agent (resolve/send/resource...), nhưng authorize/grants/
+	# revoke của broker user token là việc của ADMIN — kéo về sau lớp guard để không
+	# ai ngoài mạng gọi tới được, kể cả khi lỡ lộ admin token.
+	@larkuseradmin path /v1/lark/user/authorize/* /v1/lark/user/grants /v1/lark/user/identities /v1/lark/user/identities/*
+	handle @larkuseradmin {
+		import guard platform_api:8090 zlarkuser
+	}
 	handle @selfagent {
 		rate_limit {
 			zone zselfagent {

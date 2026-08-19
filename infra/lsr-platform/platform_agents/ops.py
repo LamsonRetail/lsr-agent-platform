@@ -144,6 +144,21 @@ def diagnose(snap: dict) -> list[tuple]:
             f"{prefix} {g.get('app_id')} {svc}\"`"},
             "low", f"gateway Lark hỏng: {g.get('agent_id')} ({g.get('reason')})"))
 
+    # C8: identity user token sắp mất refresh -> agent hành động dưới danh nghĩa người
+    # sẽ đứng máy. Phải báo TRƯỚC, vì hết hạn rồi thì bắt buộc có người authorize lại.
+    for u in (snap.get("lark_user_identities_expiring") or []):
+        d = int(u.get("days_left") or 0)
+        who = ", ".join(u.get("agents") or []) or "(chưa agent nào dùng)"
+        icon = "🔴" if d <= 0 else "🟠" if d <= 3 else "🟡"
+        tail = ("ĐÃ HẾT HẠN — mọi lời gọi user token của account này đang 401."
+                if d <= 0 else f"còn **{d} ngày**.")
+        out.append(("alert", {"message":
+            f"{icon} Refresh token Lark của `{u.get('subject_email')}` {tail}\n"
+            f"Agent đang dùng: {who}.\n"
+            f"Phải có NGƯỜI authorize lại: admin gọi POST /v1/lark/user/authorize/start "
+            f"với subject={u.get('subject_email')}, mở link, đăng nhập ĐÚNG account đó."},
+            "low", f"lark user token {u.get('subject_email')} còn {d} ngày"))
+
     errs = snap.get("connector_errors_24h") or []
     for e in errs:
         if int(e.get("n", 0)) >= ERR_TH:
