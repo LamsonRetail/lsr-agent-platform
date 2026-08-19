@@ -32,8 +32,13 @@ ROSTER = [
     ("thint@hapas.vn", "Nguyễn Trần Thi (BOD)",
      ["approver", "legal_reviewer", "digest_owner"], "*",
      "ou_c4a4e1e07b0dce1c484a1e7d3046b66c"),
-    # ⚠️ CHỜ open_id/email của chị Nguyễn Thị Anh (Pháp chế) — admin thứ hai.
-    # Chưa có nên tạm chỉ có 1 người duyệt; bổ sung xong thì chạy lại script.
+    # Chị Nguyễn Thị Anh — Pháp chế, admin thứ hai (cung cấp 19/08/2026).
+    # user_id Lark là `51fga65b`; KHÔNG dùng được để kiểm quyền vì payload tin nhắn mang
+    # `sender_open_id` (tiền tố ou_), khác hệ id. Nên open_id để trống và script tự
+    # resolve từ email qua broker /v1/lark/resolve.
+    ("anhnt1@hapas.vn", "Nguyễn Thị Anh (Pháp chế)",
+     ["approver", "legal_reviewer", "digest_owner"], "*",
+     "ou_41b21c59e5bb6c435ed86c6bef149091"),   # resolve từ email 19/08, ghim lại
 ]
 
 # ❌ KHÔNG BAO GIỜ đưa open_id của CHÍNH AGENT vào legal_roles.

@@ -21,6 +21,41 @@ import time
 
 SLA_MINUTES = 30
 
+# ===== Workflow THẬT trên Lark Approval (đọc live 19/08/2026) =====
+# Tên: "Review và phê duyệt hợp đồng"
+APPROVAL_CODE = "0338BCF9-2E4C-45E1-9A77-3CAEE6FAE369"
+
+# ⚠️ Quy trình thật chỉ có 4 node: Submit → Approval → Approval → End, tức **2 bước
+# duyệt**, KHÔNG phải 6 bước như review §A.3 mô tả. Hai node đều tên chung "Approval"
+# nên KHÔNG phân biệt được đâu là Pháp chế, đâu là Tài chính/Nhân sự từ định nghĩa.
+#
+# Hệ quả cho thiết kế: "Bước 3" và "Bước 5" của agent không map vào node có tên riêng.
+# Cách khớp được với thực tế:
+#   - Bước 3 = khi instance vừa PENDING (sau Submit, trước người duyệt đầu tiên)
+#   - Bước 5 = khi cả hai node Approval đã xong, trước End
+# Agent chỉ GHI COMMENT vào instance, không phải node duyệt — đúng nguyên tắc "hỗ trợ,
+# không chặn". Muốn agent thành một bước chính thức thì phải sửa định nghĩa trên Lark.
+APPROVAL_FORM = {
+    "contract_name": "widget16500094298477484625790733479",   # input, bắt buộc
+    "description":   "widget16500094292359699894458073106",   # textarea, bắt buộc
+    "attachments":   "widget1650009429100617657031789895",    # attachmentV2, tuỳ chọn
+    "due_date":      "widget17871105849310001",               # date, bắt buộc
+}
+
+
+def parse_form(form_json):
+    """Đọc form instance → dict tiện dùng. Trả cả `raw` để không mất field lạ."""
+    import json as _json
+    try:
+        items = _json.loads(form_json) if isinstance(form_json, str) else (form_json or [])
+    except _json.JSONDecodeError:
+        return {}
+    by_id = {i.get("id"): i for i in items if isinstance(i, dict)}
+    out = {"raw": items}
+    for key, wid in APPROVAL_FORM.items():
+        out[key] = (by_id.get(wid) or {}).get("value")
+    return out
+
 STEP3_LABEL = "Bước 3 — rà soát sơ bộ"
 STEP5_LABEL = "Bước 5 — cross-check sau rà soát của người"
 MAX_BOUNCE = 2          # tối đa 2 lần quay lại Bước 4 do phát hiện của Agent

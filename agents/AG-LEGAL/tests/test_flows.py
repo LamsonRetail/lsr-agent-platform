@@ -462,3 +462,30 @@ def test_s5_says_it_is_shadow_mode(tmp_path):
     store, pf, eng, g, b = make(tmp_path)
     out = flows.s5_dossier(b, {"id": 6, "payload": {}}, "trình ký", "s", "ou", "oc")
     assert "chạy thử song song" in out and "Lark Approval" in out
+
+
+# ==================== S5: form thật của Lark Approval ====================
+
+def test_parse_approval_form_maps_real_widget_ids():
+    """Widget id đọc live từ workflow "Review và phê duyệt hợp đồng" (19/08/2026)."""
+    form = json.dumps([
+        {"id": "widget16500094298477484625790733479", "type": "input",
+         "name": "Tên hợp đồng", "value": "HĐ dịch vụ ABC"},
+        {"id": "widget16500094292359699894458073106", "type": "textarea",
+         "name": "Mô tả nội dung cần review và phê duyệt", "value": "Nhờ rà soát điều 5"},
+        {"id": "widget17871105849310001", "type": "date",
+         "name": "Ngày cần hoàn thành", "value": "2026-09-01"},
+    ])
+    out = signing.parse_form(form)
+    assert out["contract_name"] == "HĐ dịch vụ ABC"
+    assert out["description"] == "Nhờ rà soát điều 5"
+    assert out["due_date"] == "2026-09-01"
+    assert out["attachments"] is None          # không đính kèm → None, không nổ
+    assert len(out["raw"]) == 3                # giữ nguyên field lạ để không mất dữ liệu
+
+
+def test_parse_approval_form_survives_garbage():
+    assert signing.parse_form("không phải json") == {}
+    assert signing.parse_form(None) == {"raw": [], "contract_name": None,
+                                        "description": None, "attachments": None,
+                                        "due_date": None}
