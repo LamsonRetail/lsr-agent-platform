@@ -565,6 +565,9 @@ _LOGISTICS_Q = ("logistic", "kho vận", "kho van", "vận chuyển", "van chuye
                 "hải quan", "hai quan", "3pl", "giao hàng", "giao hang", "lô hàng", "lo hang",
                 "tồn kho", "ton kho", "giá vốn", "gia von", "nvl", "nguyên vật liệu", "hộp",
                 "ruy băng", "packaging", "đóng gói", "dong goi", "scg", "anchanto", "ntk")
+_HOWWORK_Q = ("cơ chế", "co che", "kiến trúc", "kien truc", "em hoạt động", "hoạt động thế nào",
+              "tự học", "tu hoc", "học thế nào", "hoc the nao", "system prompt", "cấu hình của em",
+              "em được setup", "làm sao em biết", "sao em biết")
 _DIGEST_Q = ("hôm nay có gì", "hom nay co gi", "bản tin", "ban tin", "digest", "tin mới",
              "tin moi", "cập nhật hôm nay", "có gì mới")
 _COMPANY_Q = ("lịch sử", "lich su", "tầm nhìn", "tam nhin", "sứ mệnh", "su menh", "bod là ai",
@@ -589,6 +592,8 @@ def route(q_low: str) -> str | None:
         parts.append(th_milestone_check())
     if any(k in q_low for k in _SEASON_Q):
         parts.append(th_season_calendar(filter_q=q_low))
+    if any(k in q_low for k in _HOWWORK_Q):
+        return ploy_how_i_work()
     if any(k in q_low for k in _LOGISTICS_Q):
         parts.append(th_logistics(q_low))
     if any(k in q_low for k in _DIGEST_Q):
@@ -740,6 +745,29 @@ def th_logistics(topic: str = "") -> str:
             lines.append(f"- {r.get('noi_dung', '')}")
     lines.append("\nHỏi cụ thể hơn được: chi phí · tồn kho · Flash/kho · lô hàng.")
     return "\n".join(lines)
+
+
+@tool("lsr-chung")
+def ploy_how_i_work() -> str:
+    """Cơ chế của Ploy ở mức khái niệm + cách cập nhật em (học pattern Jenny)."""
+    return (
+        "Em **không tự học trong lúc chạy** — kiến thức của em đến từ cấu hình do team setup, "
+        "không phải từ việc đọc chat rồi tự nhớ.\n\n"
+        "Ở mức khái niệm, luồng của em:\n"
+        "- Nhận tin qua Lark (chỉ trả lời khi được tag trong nhóm), mọi kênh vào cùng một hàng "
+        "đợi của platform.\n"
+        "- Lấy ngữ cảnh: hồ sơ người hỏi (vai trò, quyền xem số) + tóm tắt hội thoại + tri thức "
+        "đã duyệt.\n"
+        "- Tra dữ liệu THẬT trước: mốc BST · lịch mùa vụ · base target · số KQKD · logistics · "
+        "kho tri thức — mỗi mảng một config riêng, có nguồn.\n"
+        "- Không khớp mảng nào thì mới suy luận bằng model, và vẫn không được bịa số.\n"
+        "- Trả lời qua platform để nó gửi đúng chỗ; mọi lượt đều ghi log.\n\n"
+        "**Muốn em trả lời khác đi**: sửa config hoặc skill của em — hiệu lực ở phiên mới, không "
+        "cần deploy. Cụ thể: đổi số/lịch/mốc → sửa config; đổi cách làm việc → sửa skill; cần "
+        "việc mới hẳn → thêm tool. Anh/chị nói với **Vinh (CM)** là được cập nhật.\n"
+        "Riêng cấu hình chi tiết (system prompt, nội dung từng skill) là setup nội bộ, em không "
+        "chia sẻ ra ngoài."
+    )
 
 
 def suggest_menu() -> str:
