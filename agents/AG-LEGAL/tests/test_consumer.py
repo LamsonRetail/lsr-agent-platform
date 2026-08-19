@@ -262,7 +262,7 @@ def test_high_risk_mentions_reviewers(tmp_path):
     store, pf, eng, g, b = make(tmp_path,
                              engine_answer=EngineAnswer(ok=True, text="chưa quy định"))
     store.write("INSERT INTO legal_roles (email, role, contract_type, open_id, active) "
-                "VALUES ('thint@hapas.vn','legal_reviewer',NULL,'ou_thint',1)")
+                "VALUES ('thint@hapas.vn','legal_reviewer','*','ou_thint',1)")
     consumer.handle({"id": 22, "channel": "lark", "session_id": "s-hr",
                      "payload": {"text": "crypto?", "chat_id": "oc_u"}}, b)
     card = next(m for to, m in pf.sent if to == consumer.GROUP_CHAT_ID)
@@ -274,7 +274,7 @@ def test_low_risk_does_not_mention_anyone(tmp_path):
     store, pf, eng, g, b = make(tmp_path, engine_answer=EngineAnswer(
         ok=True, text="ok", citations=[Citation("Quy chế", "https://x/wiki/a", "")]))
     store.write("INSERT INTO legal_roles (email, role, contract_type, open_id, active) "
-                "VALUES ('thint@hapas.vn','legal_reviewer',NULL,'ou_thint',1)")
+                "VALUES ('thint@hapas.vn','legal_reviewer','*','ou_thint',1)")
     consumer.handle({"id": 23, "channel": "lark", "session_id": "s-lr",
                      "payload": {"text": "giờ làm việc?", "chat_id": "oc_u"}}, b)
     card = next(m for to, m in pf.sent if to == consumer.GROUP_CHAT_ID)

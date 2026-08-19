@@ -20,7 +20,7 @@ def make(tmp_path, sla_hours=1):
     pf = FakePlatform()
     g = Gates(store, pf, GROUP, sla_hours=sla_hours)
     store.write("INSERT INTO legal_roles (email, role, contract_type, open_id, name, active)"
-                " VALUES ('thint@hapas.vn','approver',NULL,'ou_thint','Thi',1)")
+                " VALUES ('thint@hapas.vn','approver','*','ou_thint','Thi',1)")
     b = Bundle(pf=pf, store=store, engine=FakeEngine(None), gates=g)
     return store, pf, g, b
 
@@ -190,3 +190,41 @@ def test_sync_roles_resolves_open_id(tmp_path):
                 "VALUES ('anh@hapas.vn','approver','HĐ dịch vụ',1)")
     assert g.sync_roles() == 1
     assert g.reviewer_by_open_id("ou_anh")["email"] == "anh@hapas.vn"
+
+
+# ---------------- lệnh duyệt ngoài group (web console) ----------------
+
+def test_command_works_outside_group(tmp_path):
+    """Tin nhắn trong group Lark chưa tới được agent (thiếu cặp gateway+broker cho app
+    của AG-LEGAL — core C9), nên lệnh duyệt phải nhận được từ web chat console."""
+    store, pf, g, b = make(tmp_path)
+    gid = g.open("s2_draft", GATE, payload={"chat_id": "oc_u"})
+    job = {"id": 20, "channel": "web", "session_id": "console-1",
+           "payload": {"text": f"#{gid} duyệt", "chat_id": "web-console",
+                       "sender_open_id": "ou_thint"}}
+    out = consumer.handle(job, b)
+    assert "DUYỆT" in out
+    assert g.get(gid)["status"] == "approved"
+
+
+def test_unauthorized_command_outside_group_is_refused(tmp_path):
+    """Mở thêm kênh KHÔNG được nới quyền — vẫn kiểm sender_open_id."""
+    store, pf, g, b = make(tmp_path)
+    gid = g.open("s2_draft", GATE, payload={"chat_id": "oc_u"})
+    out = consumer.handle({"id": 21, "channel": "web", "session_id": "c2",
+                           "payload": {"text": f"#{gid} duyệt", "chat_id": "web-console",
+                                       "sender_open_id": "ou_ke_la"}}, b)
+    assert "chưa có quyền" in out
+    assert g.get(gid)["status"] == "open"
+
+
+def test_normal_question_outside_group_still_goes_to_s1(tmp_path):
+    """Câu hỏi thường ngoài group không được hiểu thành lệnh."""
+    from legalkb.engine import EngineAnswer
+    store, pf, g, b = make(tmp_path)
+    b.engine = FakeEngine(EngineAnswer(ok=True, text="Theo tài liệu..."))
+    out = consumer.handle({"id": 22, "channel": "web", "session_id": "c3",
+                           "payload": {"text": "quy định pháp chế là gì?",
+                                       "chat_id": "web-console",
+                                       "sender_open_id": "ou_nhanvien"}}, b)
+    assert "Theo tài liệu" in out and "chưa có quyền" not in out

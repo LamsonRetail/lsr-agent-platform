@@ -54,7 +54,9 @@ CREATE INDEX IF NOT EXISTS idx_gates_session ON legal_gates(session_id);
 CREATE TABLE IF NOT EXISTS legal_roles (
   email          TEXT NOT NULL,
   role           TEXT NOT NULL,   -- legal_reviewer | approver | digest_owner
-  contract_type  TEXT,            -- NULL = mọi loại
+  contract_type  TEXT NOT NULL DEFAULT '*',   -- '*' = mọi loại. KHÔNG dùng NULL:
+                                 -- trong SQLite NULL != NULL nên PK/ON CONFLICT không
+                                 -- dedupe được → chạy seed nhiều lần là nhân bản dòng.
   open_id        TEXT,            -- resolve qua /v1/lark/resolve, cache lại
   name           TEXT,
   active         INTEGER NOT NULL DEFAULT 1,

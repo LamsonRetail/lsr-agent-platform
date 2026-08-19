@@ -60,7 +60,7 @@ def add_template(store, name="Hợp đồng dịch vụ", fields=None):
 
 def add_approver(store):
     store.write("INSERT INTO legal_roles (email, role, contract_type, open_id, name, active)"
-                " VALUES ('thint@hapas.vn','approver',NULL,'ou_thint','Thi',1)")
+                " VALUES ('thint@hapas.vn','approver','*','ou_thint','Thi',1)")
 
 
 # ==================== S2: điền docx ====================

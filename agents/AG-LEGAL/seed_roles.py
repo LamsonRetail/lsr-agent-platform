@@ -30,14 +30,48 @@ NEEDS_CONFIRM = "TODO_CONFIRM"
 ROSTER = [
     # (email, tên, vai trò, loại hợp đồng: None = mọi loại, open_id)
     ("thint@hapas.vn", "Nguyễn Trần Thi (BOD)",
-     ["approver", "legal_reviewer", "digest_owner"], None,
+     ["approver", "legal_reviewer", "digest_owner"], "*",
      "ou_c4a4e1e07b0dce1c484a1e7d3046b66c"),
-    # ⚠️ Email chưa xác nhận, nhưng ĐÃ CÓ open_id → vẫn duyệt được bằng lệnh trong group.
-    # Tên trên Lark là "Ann Nguyen" — cần bạn xác nhận đúng là chị Nguyễn Thị Anh (Pháp chế).
-    (f"{NEEDS_CONFIRM}-ann@hapas.vn", "Nguyễn Thị Anh (Legal)",
-     ["approver", "legal_reviewer", "digest_owner"], None,
-     "ou_d386c1e6ddbea6160569647db6491f37"),
+    # ⚠️ CHỜ open_id/email của chị Nguyễn Thị Anh (Pháp chế) — admin thứ hai.
+    # Chưa có nên tạm chỉ có 1 người duyệt; bổ sung xong thì chạy lại script.
 ]
+
+# ❌ KHÔNG BAO GIỜ đưa open_id của CHÍNH AGENT vào legal_roles.
+# "Ann Nguyen" (ou_d386c1e6ddbea6160569647db6491f37) là **user account của agent** trên
+# Lark, không phải người duyệt. Nếu để nó trong legal_roles thì agent tự duyệt gate của
+# chính mình — phá đúng cái tách vai mà toàn bộ khung "Pháp chế in the loop" dựa vào.
+# Danh sách này để consumer NHẬN RA và từ chối, chứ không phải để cấp quyền.
+AGENT_OWN_OPEN_IDS = {
+    "ou_d386c1e6ddbea6160569647db6491f37": "Ann Nguyen (user account của AG-LEGAL)",
+}
+
+
+def _housekeep(store):
+    """Dọn dữ liệu cũ trước khi nạp. Ba việc, đều đã xảy ra thật ngày 19/08:
+
+    1. `contract_type` NULL → '*': NULL trong SQLite không tự bằng nhau nên PK không
+       dedupe, chạy seed 2 lần là có 2 dòng y hệt.
+    2. Gỡ dòng trùng còn lại (giữ dòng cũ nhất).
+    3. Gỡ open_id của CHÍNH AGENT nếu đã bị nạp nhầm làm người duyệt.
+    """
+    # THỨ TỰ QUAN TRỌNG: dedupe TRƯỚC rồi mới đổi NULL → '*'. Làm ngược lại thì UPDATE
+    # vỡ UNIQUE constraint, vì GROUP BY coi các NULL là bằng nhau nhưng UNIQUE thì không.
+    before = len(store.query("SELECT 1 FROM legal_roles"))
+    store.write("DELETE FROM legal_roles WHERE rowid NOT IN "
+                "(SELECT min(rowid) FROM legal_roles GROUP BY email, role, contract_type)")
+    after = len(store.query("SELECT 1 FROM legal_roles"))
+    if before != after:
+        print(f"• dọn {before - after} dòng trùng (còn {after})")
+    n = len(store.query("SELECT 1 FROM legal_roles WHERE contract_type IS NULL"))
+    if n:
+        store.write("UPDATE legal_roles SET contract_type='*' WHERE contract_type IS NULL")
+        print(f"• chuẩn hoá {n} dòng contract_type NULL → '*'")
+    for oid, who in AGENT_OWN_OPEN_IDS.items():
+        rows = store.query("SELECT 1 FROM legal_roles WHERE open_id=?", (oid,))
+        if rows:
+            store.write("DELETE FROM legal_roles WHERE open_id=?", (oid,))
+            print(f"⚠️  GỠ {len(rows)} dòng mang open_id của chính agent ({who}) — "
+                  f"agent không được tự duyệt việc của mình")
 
 
 def main():
@@ -46,6 +80,7 @@ def main():
     args = ap.parse_args()
 
     store = SourceStore(os.environ.get("LEGALKB_DB"))
+    _housekeep(store)
     if args.list:
         rows = store.query("SELECT * FROM legal_roles ORDER BY email, role")
         if not rows:
@@ -65,12 +100,19 @@ def main():
         return 1
 
     for email, name, roles, ctype, open_id in ROSTER:
+        if open_id in AGENT_OWN_OPEN_IDS:
+            print(f"✗ TỪ CHỐI nạp {name}: open_id này là user account của chính agent "
+                  f"({AGENT_OWN_OPEN_IDS[open_id]}) — agent không được tự duyệt.",
+                  file=sys.stderr)
+            return 1
         for role in roles:
+            # DELETE rồi INSERT: idempotent bất kể ngữ nghĩa PK, không phụ thuộc
+            # ON CONFLICT (đã bị NULL làm vô hiệu một lần).
+            store.write("DELETE FROM legal_roles WHERE email=? AND role=? AND contract_type=?",
+                        (email, role, ctype or "*"))
             store.write(
                 "INSERT INTO legal_roles (email, role, contract_type, name, open_id, active) "
-                "VALUES (?,?,?,?,?,1) ON CONFLICT(email, role, contract_type) DO UPDATE SET "
-                "name=excluded.name, open_id=coalesce(excluded.open_id, legal_roles.open_id), "
-                "active=1", (email, role, ctype, name, open_id))
+                "VALUES (?,?,?,?,?,1)", (email, role, ctype or "*", name, open_id))
         flag = "" if NEEDS_CONFIRM not in email else "  ⚠️ email chưa xác nhận (dùng open_id)"
         print(f"✓ {name} — {', '.join(roles)}{flag}")
 

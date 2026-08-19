@@ -272,7 +272,17 @@ def handle(job, b):
     uref = payload.get("sender_open_id") or payload.get("user_ref") or ""
     chat_id = payload.get("chat_id") or (job.get("reply_to") or {}).get("chat_id")
 
-    if chat_id and chat_id == GROUP_CHAT_ID:
+    # Lệnh duyệt nhận từ MỌI kênh, không chỉ group.
+    #
+    # Vì sao không khoá theo group: trên VM mỗi app Lark cần một CẶP — service
+    # `event_gateway_<app>` để NHẬN tin và tên app trong `LARK_EXTRA_APPS` để GỬI tin.
+    # App của AG-LEGAL (đang là bot trong group) chưa có cả hai; app Admin có gửi nhưng
+    # không có gateway ⇒ tin nhắn trong group CHƯA tới được agent (chờ core C9).
+    # Web chat console thì đã chạy → cho phép duyệt ở đó để không bị chặn hoàn toàn.
+    # Quyền vẫn kiểm bằng `sender_open_id` trong `legal_roles`, nên mở kênh không nới quyền.
+    in_group = bool(chat_id) and chat_id == GROUP_CHAT_ID
+    if in_group or gates_mod.parse_command(q):
+        # Trong group mà không phải lệnh → handle_group trả None = im lặng (chủ ý).
         return handle_group(job, b)
 
     # Đang có người Pháp chế tham gia → Agent im, nhưng vẫn ghi lượt để không mất lịch sử.
