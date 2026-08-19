@@ -10,7 +10,7 @@
 {"q": "tháng 12 làm gì", "expect": ["14–19/12", "giữ shop mở"]}
 {"q": "còn mấy ngày tới hạn KOC Tote", "expect": ["17/08", "0/26"]}
 {"q": "ngày launching travel bag là ngày nào", "expect": ["23/08", "05/09", "nguồn chuẩn"]}
-{"q": "báo cáo đang dùng base target nào", "expect": ["9,3", "8,0", "rebase 22/07"]}
+{"q": "báo cáo đang dùng base target nào", "expect": ["13", "2,4", "2026-08", "rebase 22/07"]}
 {"q": "kho tri thức thị trường Thái có những file nào", "expect": ["JTBD"]}
 {"q": "valentine có làm campaign không", "expect": ["không mở dòng riêng"]}
 {"q": "họp xong rồi, nội dung: Thống nhất đẩy BST T11 thay da lộn. Giao cho Hạnh chốt danh sách 26 KOC trước ngày 17/08. Tùng phụ trách brief content du lịch, hạn 20/08.", "expect": ["BIÊN BẢN", "Hạnh", "chờ xác nhận"]}

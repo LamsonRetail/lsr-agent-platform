@@ -1,11 +1,33 @@
 {
-  "owner_config": "Hương (BM HAPAS)",
-  "monthly": 9.3,
-  "daily": 8.0,
-  "unit": "M THB",
-  "note": "rebase 22/07 — báo cáo THÁNG dùng base 9,3M THB (gốc), báo cáo NGÀY dùng base 8,0M THB",
+  "owner_config": "Hương (Trưởng KD HAPAS TH)",
+  "source": "BC KQKD Daily + BC KQKD Weekly — đọc thật 19/08/2026",
+  "source_url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/RtGZwGfsciypgekQJ9FlHEGpgPf",
+  "current": {
+    "period": "2026-08",
+    "dt": 13,
+    "lndg": 2.4,
+    "unit": "triệu THB",
+    "scope": "tổng kênh TMĐT (Shopee + TikTok) — KHÔNG tách HAPAS / MATE MADE",
+    "applied_from": "2026-08-05",
+    "note": "Daily 4/8 còn dùng 11 triệu THB; từ 5/8 đổi 13 triệu THB (LNĐG 5/8 ghi 2,6 → từ 6/8 ghi 2,4). Weekly 11/8 và 18/8 dùng cùng số này."
+  },
+  "history": [
+    {"period": "2026-07", "dt": 9.3, "lndg": 2.2, "unit": "triệu THB", "label": "base GỐC T7", "used_by": "Daily tới 22/7 · Weekly 21/7 và 27/7"},
+    {"period": "2026-07", "dt": 8.0, "lndg": 1.5, "unit": "triệu THB", "label": "base SAU REBASE 22/07", "used_by": "Daily 23/7→31/7 · Weekly 3/8", "note": "Daily 22/7 'Tuyên bố sự cố': hạ từ 7,5 tỷ DT / 1,65 tỷ LNĐG xuống 6,5 tỷ DT / 1,2 tỷ VND; LNĐG đi qua mốc 1,7 rồi về 1,5 triệu THB"}
+  ],
+  "fx_note": "Tỷ giá tài liệu dùng: 1 triệu THB ≈ 0,8 tỷ VND (Daily 22/7: 'DT 7M THB ~ 5.6 tỷ VND')",
   "rules": [
-    "Luôn in rõ đang dùng base nào khi nêu số.",
-    "%MTD = so với target lũy kế pro-rata theo ngày, KHÔNG phải actual ÷ target cả tháng."
+    "Luôn in rõ đang dùng base của KỲ NÀO và bản nào (gốc / sau rebase) — đây là chỗ dễ sai nhất.",
+    "%MTD = luỹ kế thực hiện / kế hoạch luỹ kế đến ngày báo cáo (pro-rata theo ngày, có trọng số tuần: T8 = 20,42% · 23,55% · 22,73% · 33,20%). KHÔNG phải actual ÷ target cả tháng.",
+    "Tài liệu KHÔNG công bố công thức %MTD, và %MTD trong Daily không tái lập được từ số công bố → khi trích %MTD phải ghi 'theo báo cáo ngày …', KHÔNG tự tính lại.",
+    "KHÔNG có 'base target ngày' dưới dạng con số — báo cáo chỉ nói '% target ngày'.",
+    "Số thực hiện là TỔNG kênh TMĐT, không tách brand → không được gán cho riêng HAPAS hay MATE MADE."
+  ],
+  "known_conflicts": [
+    "T7 có 2 base chạy song song thật: Weekly 27/7 dùng 9,3 / 2,2 trong khi Daily 28/7 đã dùng 8,0 / 1,5 (Daily rebase từ 22/7, Weekly không rebase theo).",
+    "Target T8 HAPAS có 4 con số khác nhau: doc TARGET & BUDGET (Q3 Ver 2, 17/06, ghi CHỐT) 10,3 tỷ VND · sheet 'Monthly 2026 - 2nd Half' 11,0 tỷ GMV · sheet 'VINH - TL PLAN' 12,0 tỷ GMV · BC Daily/Weekly 13 triệu THB (≈10,4 tỷ VND).",
+    "Target T9 có 3 mức: doc Q3 Ver 2 12 tỷ · sheet Monthly 13 tỷ (HAPAS) · Weekly 18/8 tuyên bố 'tăng target thách thức lên 14 tỷ'.",
+    "%MTD trong Daily có dấu hiệu lỗi copy-paste: 13/8 DT 5,6M MTD 139% nhưng 14/8 DT 5,4M MTD 88%; 13/8 LNĐG ghi cả 'MTD 113%' và 'thực đạt 43%'; các ngày 10/8, 12/8, 14/8 trùng số y hệt.",
+    "DT ngày 18/8 lệch giữa 2 báo cáo: Weekly ghi 8,2M THB (MTD 116%) · Daily 19/8 ghi 8,4M THB (MTD 127%)."
   ]
 }

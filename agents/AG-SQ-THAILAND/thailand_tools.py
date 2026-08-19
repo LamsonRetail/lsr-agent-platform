@@ -121,21 +121,39 @@ def th_review_report(doc_token: str = "") -> str:
 # ----------------------------- nhóm 2 · báo cáo tuần/tháng -----------------------------
 
 
+def _vn(x) -> str:
+    """Số kiểu Việt: 2.4 → '2,4'."""
+    return str(x).replace(".", ",")
+
+
 @tool("báo-cáo")
 def th_base_targets() -> str:
-    """Base target đang dùng — 2 base chạy song song, luôn nói rõ đang dùng base nào."""
+    """Base target đang dùng + lịch sử rebase + các chỗ số liệu lệch giữa nguồn."""
     t = load_config("th_base_targets")
     if not t:
         return NO_CONFIG.format(key="th_base_targets")
-    monthly = str(t["monthly"]).replace(".", ",")
-    daily = str(t["daily"]).replace(".", ",")
-    lines = [
-        "**Hai base target đang chạy song song:**",
-        f"- Báo cáo **tháng**: base {monthly}M THB (gốc)",
-        f"- Báo cáo **ngày**: base {daily}M THB",
-        f"Ghi chú: {t.get('note', '')}",
-    ]
-    lines += [f"- {r}" for r in t.get("rules", [])]
+    cur = t.get("current") or {}
+    lines = [f"**Base target đang dùng — kỳ {cur.get('period', '?')}** "
+             f"(áp từ {cur.get('applied_from', '?')}):",
+             f"- DT **{_vn(cur.get('dt'))} {cur.get('unit', '')}** · "
+             f"LNĐG **{_vn(cur.get('lndg'))} {cur.get('unit', '')}**",
+             f"- Phạm vi: {cur.get('scope', '')}"]
+    if cur.get("note"):
+        lines.append(f"- {cur['note']}")
+
+    hist = t.get("history") or []
+    if hist:
+        lines.append("\n**Lịch sử base (để không trích số cũ):**")
+        for h in hist:
+            lines.append(f"- {h.get('period')} · {h.get('label')}: DT {_vn(h.get('dt'))} · "
+                         f"LNĐG {_vn(h.get('lndg'))} {h.get('unit', '')} — dùng bởi {h.get('used_by', '?')}")
+
+    lines += ["\n**Luật khi trích số:**"] + [f"- {r}" for r in t.get("rules", [])]
+    kc = t.get("known_conflicts") or []
+    if kc:
+        lines.append("\n⚠️ **Các chỗ số liệu đang lệch giữa nguồn** (em không tự chọn hộ):")
+        lines += [f"- {c}" for c in kc]
+    lines.append(f"\n(nguồn: {t.get('source', '?')})")
     return "\n".join(lines)
 
 
@@ -360,12 +378,23 @@ def th_context(brand: str = "") -> str:
         return ("**MATE MADE Thailand** — giai đoạn: " + mm.get("stage", "?") +
                 f"\n- Vùng giá: {lo:,}–{hi:,}฿".replace(",", ".") +
                 f"\n- {mm.get('ebitda_rule', '')}\n- {mm.get('reporting_rule', '')}")
-    tgt = ctx.get("monthly_target", {})
-    return ("**Thị trường Thái Lan** — CM: " + ctx.get("cm", "?") +
-            "\n- Brand: " + " · ".join(ctx.get("brands", [])) +
-            "\n- Squad: " + " · ".join(ctx.get("squads", [])) +
-            f"\n- Target tháng: {tgt.get('value') or tgt.get('note', '[CẦN BỔ SUNG SỐ LIỆU]')}" +
-            f"\n- Mục tiêu: {ctx.get('market_goal', '')}")
+    t = ctx.get("targets_2026") or {}
+    lines = ["**Thị trường Thái Lan** — CM: " + ctx.get("cm", "?"),
+             "- Brand: " + " · ".join(ctx.get("brands", [])),
+             "- Squad: " + " · ".join(ctx.get("squads", [])),
+             "- Mục tiêu: " + ctx.get("market_goal", "")]
+    if t:
+        unit = t.get("unit", "")
+        for brand_key, label in (("HAPAS", "HAPAS"), ("MATE_MADE", "MATE MADE")):
+            b = t.get(brand_key) or {}
+            months = " · ".join(f"{m[-2:]}/{m[:4]}: {_vn(v)}" for m, v in b.items() if m != "ca_nam")
+            lines.append(f"- Target {label} ({unit}): {months} · cả năm {_vn(b.get('ca_nam'))}")
+        if t.get("note"):
+            lines.append(f"  ⚠️ {t['note']}")
+    for w in ctx.get("canh_bao_du_lieu", []):
+        lines.append(f"- ⚠️ {w}")
+    lines.append(f"(nguồn: {ctx.get('source', '?')})")
+    return "\n".join(lines)
 
 
 # ----------------------------- route: consumer gọi 1 hàm này -----------------------------

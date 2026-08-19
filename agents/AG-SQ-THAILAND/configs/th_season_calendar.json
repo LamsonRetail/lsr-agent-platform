@@ -1,6 +1,17 @@
 {
   "owner_config": "Tùng (MKT Manager)",
+  "source_note": "⚠️ Kiểm chứng 19/08/2026: các dịp lễ dưới đây đến từ NGHIÊN CỨU thị trường (POP / Kalodata / số Thái), KHÔNG có trong doc 'MKT - Thailand 2026' — doc đó chỉ có lịch BST theo tháng, không có mùa vụ Thái. Dịp mùa vụ Thái duy nhất có bằng chứng nội bộ là 'mùa lễ tốt nghiệp' bên dưới.",
   "occasions": [
+    {
+      "id": "graduation-th",
+      "name": "Mùa lễ tốt nghiệp Thái Lan (T9–T11)",
+      "keywords": ["tốt nghiệp", "tot nghiep", "graduation", "lễ tốt nghiệp"],
+      "verdict": "ĐANG BRAINSTORM — chưa chốt làm hay không",
+      "notes": [
+        "Nguồn nội bộ THẬT: Squad HPTL - Weekly Catch-up kỳ 17/08/2026 — hành động 'Brainstorm ý tưởng cho mùa lễ tốt nghiệp Thái Lan (T9–T11)', kết quả cần đạt '3 ý tưởng', deadline 21/08, PIC: KD + MKT",
+        "⚠️ Deadline 21/08 — theo dõi xem đã có 3 ý tưởng chưa"
+      ]
+    },
     {
       "id": "noel-newyear",
       "name": "Noel / Năm mới (T12)",

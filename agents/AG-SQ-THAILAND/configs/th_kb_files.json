@@ -1,43 +1,32 @@
 {
-  "owner_config": "People Ops [CẦN XÁC NHẬN PIC] — ai cũng thêm được mục mới",
-  "location": "Lark (wiki/docx/base/sheets) — Phase 0 tra qua index này rồi mở link trực tiếp; đọc nội dung tự động qua connector platform khi được nối (PLOY.md §6)",
-  "master_files": [
-    {
-      "path": "03-San-pham-Kinh-doanh/HAPAS-ThaiLan-SanPham-JTBD-Tong-hop.md",
-      "size": "89KB",
-      "content": "17 mục: P&L, IDI n=10, 5 JTBD, 7 SKU, BST H2, anti-list, lịch mùa vụ 12 tháng, chiến lược giá"
-    },
-    {
-      "path": "04-Con-nguoi/ThaiLan-ConNguoi-ToChuc-DaoTao-Tong-hop.md",
-      "size": "78KB",
-      "content": "Squad model, JD, cơ chế lương, eval, đào tạo"
-    },
-    {
-      "path": "07-LSR-Group-BOD/LSR-NghiDai-ChienLuoc-MoHinhKD-TapDoan.md",
-      "size": "49KB",
-      "content": "Bối cảnh & mô hình kinh doanh tập đoàn ('Nghĩ dài')"
-    }
-  ],
+  "owner_config": "People Ops [⚠️ Kim Ngọc/PINMUK — cần xác nhận còn giữ vai] — ai cũng thêm được mục mới",
+  "location": "Lark (wiki/docx/base/sheets) — Phase 0 tra qua index này rồi mở link; đọc nội dung tự động qua connector platform khi được nối (PLOY.md §6)",
+  "verified": "Tên và nội dung dưới đây đã ĐỌC THẬT ngày 19/08/2026, không phải suy đoán.",
   "lark_sources": [
-    {"title": "Squad Model - Thái Lan (mô hình squad lead)", "kind": "docx", "url": "https://o4pvcegwn6b.sg.larksuite.com/docx/T2SvdwBS7oot2FxOrUGlNOjigSh"},
-    {"title": "20260615_Sale_Forecast_2026 (mục tiêu doanh số 2026)", "kind": "sheets", "url": "https://o4pvcegwn6b.sg.larksuite.com/sheets/GfifsgQeYh17rjtsxbslFRGegsf"},
-    {"title": "TIẾN ĐỘ TRIỂN KHAI HAPAS THÁI LAN (kế hoạch sản phẩm)", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/GC9uw2uyQieYPLkcCj9lq891goe"},
-    {"title": "2026 - TARGET & BUDGET THAILAND (phân bổ target theo SP/BST)", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/XykEwkiwYiOAQpkCUZulvXwvgNe"},
-    {"title": "CÁC DỰ ÁN LAMSON RETAIL 2026", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/KJNewxoxyivYjNkJdoLl88SIgRc?table=tblXGSGOetbLTx8o&view=vewj7Bz0PK"},
-    {"title": "MKT - Thailand 2026 (kế hoạch marketing)", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/CdSDwTuYOicu0Ak3aWWl7HkdgMb"},
-    {"title": "BC KQKD Daily (DT & LNĐG hằng ngày — trùng nguồn báo cáo #1)", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/RtGZwGfsciypgekQJ9FlHEGpgPf"},
-    {"title": "BC KQKD Weekly (kết quả tuần, BST — trùng nguồn báo cáo #2)", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/Ivx2wb92piowcKkyXEnlLMlSgmd"},
-    {"title": "Doc họp 1-1 anh Tùng (MKT/Booking/Livestream — trùng nguồn báo cáo #4)", "kind": "docx", "url": "https://o4pvcegwn6b.sg.larksuite.com/docx/Wwg9dM4L7okGB3xqhrzlT4MVgcc"},
-    {"title": "Base KQKD Hapas Thailand (Overview Dashboard — trùng nguồn báo cáo #6)", "kind": "base-app", "url": "https://o4pvcegwn6b.sg.larksuite.com/app/Ok4QbTTXiag6iIsW3wylsheqgdh?pageId=pgeybI2Olh6CbxpE"},
-    {"title": "[CẦN ĐIỀN TÊN] docx XUtU", "kind": "docx", "url": "https://o4pvcegwn6b.sg.larksuite.com/docx/XUtUd5MrMogxFYxTNIVlJDixgAu"},
-    {"title": "[CẦN ĐIỀN TÊN] wiki QKCR", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/QKCRwrYGliVic8k7fa1l0nb3gwg"},
-    {"title": "[CẦN ĐIỀN TÊN] wiki AN0A", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/AN0AwcwMcic34vkJooNlZn7Wg7f"},
-    {"title": "[CẦN ĐIỀN TÊN] wiki H6V5", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/H6V5weVGPim52Xkt4Gnl9drqgIb"},
-    {"title": "[CẦN ĐIỀN TÊN] wiki DIkN", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/DIkNwDis6iWg1xkd4f0lMUyggee"},
-    {"title": "[CẦN ĐIỀN TÊN] wiki WJYn", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/WJYnwjWQbi9jjYkXhvdlSRptgdd"},
-    {"title": "[CẦN ĐIỀN TÊN] wiki CiwR", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/CiwRwmGhziqFCNkLL65lJoClgBg"},
-    {"title": "[CẦN ĐIỀN TÊN] base NorW", "kind": "base", "url": "https://o4pvcegwn6b.sg.larksuite.com/base/NorWbVFLqa8nmosa1VJliM0Pgwv?table=tblTshuGXza4BPVz&view=vewW11e3vj"},
-    {"title": "[CẦN ĐIỀN TÊN] base PAHg", "kind": "base", "url": "https://o4pvcegwn6b.sg.larksuite.com/base/PAHgbxWe7aewMesx5qllCj2SgdY?table=tblvWUCM3FWjxxy1&view=vewMGPTfZf"}
+    {"title": "<CM WEEKLY REPORT> THÁI LAN", "kind": "docx", "url": "https://o4pvcegwn6b.sg.larksuite.com/docx/XUtUd5MrMogxFYxTNIVlJDixgAu", "content": "Biên bản họp Country Manager tuần (kỳ 07.08 · 16.8 · 21.8.2026) theo cấu trúc Mục tiêu – Nội dung – Hành động tiếp theo; có DT/LNĐG MTD, review Mother's Day, Shopee–TikTok, JTBD Thái, mục Nhân sự & Tài chính", "updated": "2026-08-19"},
+    {"title": "WEEKLY REPORT - ANH SƠN", "kind": "wiki→docx", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/QKCRwrYGliVic8k7fa1l0nb3gwg", "content": "Báo cáo tuần của anh Sơn cho thị trường Thái (10/06→19/08/2026): kết quả KD, nhân sự, kế hoạch DT theo BST, BST tháng 10, và 'Sản phẩm — Kế hoạch H2/2026'", "updated": "2026-08-19"},
+    {"title": "TIẾN ĐỘ DỰ ÁN (Launching MATE MADE Thái Lan)", "kind": "wiki→docx", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/AN0AwcwMcic34vkJooNlZn7Wg7f", "content": "Log tiến độ launching brand MATE MADE TH từ Quick Meeting 29/4 + Kick-off 4-5/5; phân việc theo phòng: CĐS (OMS/WMS, J&T), CSKH, MKT (localize big idea, timeline TikTok/FB/IG), Booking, Affiliate (mục tiêu ~120 KOC trước booming)", "updated": "2026-07-13"},
+    {"title": "HỌP 1-1: HAPAS THAILAND", "kind": "wiki→docx", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/H6V5weVGPim52Xkt4Gnl9drqgIb", "content": "Tài liệu lớn nhất kho (~394k ký tự, 189 heading): biên bản 1-1 vận hành theo từng ngày 04/09/2025→09/06/2026, chia theo kênh TIKTOK/FACEBOOK/SHOPEE/TEAM SALE/MARKETING/KHHH; có so sánh phí sàn TikTok VN vs Thái", "updated": "2026-07-13"},
+    {"title": "Đức Hạnh meeting 1-1", "kind": "wiki→docx", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/DIkNwDis6iWg1xkd4f0lMUyggee", "content": "Biên bản 1-1 với Đức Hạnh theo tháng 6/7/8-2026: tiến độ dự án dữ liệu (file dữ liệu tổng, bot nhắc số hằng ngày, dashboard), recap ngân sách bộ Tote (Celeb/ads/quyền lợi)", "updated": "2026-08-18"},
+    {"title": "Squad HPTL - Weekly Catch-up", "kind": "wiki→docx", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/WJYnwjWQbi9jjYkXhvdlSRptgdd", "content": "Catch-up tuần squad HAPAS TH (27.7 · 3.8 · 10.8 · 17.08.2026) theo mục KD/MKT Branding/MKT Booking/SP/KHHH với bảng TUẦN·HÀNH ĐỘNG·KẾT QUẢ·PIC·DEADLINE; có định vị đối thủ (Gentlewoman, Merge, Lyn, Fundao, Rally Movement, Bostanten) + Kalodata túi nữ TikTok TH (24/06–23/07/2026, MATE MADE hạng #35)", "updated": "2026-08-18"},
+    {"title": "DATA COMPLETION (DATA TABLE campaign)", "kind": "wiki→docx", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/CiwRwmGhziqFCNkLL65lJoClgBg", "content": "Chỉ mục ~40 bảng dữ liệu campaign theo brand/năm: HAPAS 2026 (Mother's Day 23/7, Camel Mini 5/7, April Collection, Songkran 25/3, New Collection March, Valentine) · HAPAS 2025 (December, Christmas) · MATE MADE 2026 (Debut 11/6). Mỗi campaign bóc tách Viral/Viral-Mini/UGC/Mega KOC/Conversion/NEWS/IG", "updated": "2026-08-18"},
+    {"title": "Booking KOL/KOC Management", "kind": "base", "url": "https://o4pvcegwn6b.sg.larksuite.com/base/NorWbVFLqa8nmosa1VJliM0Pgwv?table=tblTshuGXza4BPVz&view=vewW11e3vj", "content": "Base booking KOL/KOC — 6 bảng (1_BOOKING, 2_PRODUCT, 3_TEAM MEMBER, 4_CAMPAIGN, 5_DAY'S RESULT, Test). 1_BOOKING: 104 cột, >1.000 dòng, vòng đời tìm KOC → hợp đồng/BBNT → air video → view/like/share/GPM → thanh toán & thuế. ⚠️ NGUỒN THẬT để đếm KOC đã confirm", "updated": "2026-08-19"},
+    {"title": "[FINAL] BOOKING_KOC_AFFILIATE_TH", "kind": "base", "url": "https://o4pvcegwn6b.sg.larksuite.com/base/PAHgbxWe7aewMesx5qllCj2SgdY?table=tblvWUCM3FWjxxy1&view=vewMGPTfZf", "content": "Base pipeline KOC affiliate TH — 6 bảng (1_KOC, 2_BOOKING, 3_VIDEO, 4_EMPLOYEE, 5_PRODUCT, 6_CAMPAIGN). 1_KOC: ~2.500–3.000 dòng KOC TikTok Thái, trạng thái Contacted/Collaborate, cờ trùng lặp, PIC", "updated": "2026-08-19"},
+    {"title": "MKT - Thailand 2026", "kind": "wiki→docx", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/CdSDwTuYOicu0Ak3aWWl7HkdgMb", "content": "Chiến lược MKT TH H2/2026: kế hoạch sản phẩm + ngân sách MKT Q3-4, content 70% sản phẩm / 30% mood, kênh 70% TikTok / 20% IG / 10% Lemon8, SOW của MKT Executive (Ngân), quy trình 3 bước chốt BST sang Thái, bảng R/A/C. ⚠️ KHÔNG chứa lịch lễ/mùa vụ Thái Lan", "updated": "2026-07-31"},
+    {"title": "Squad Model - Thái Lan", "kind": "docx", "url": "https://o4pvcegwn6b.sg.larksuite.com/docx/T2SvdwBS7oot2FxOrUGlNOjigSh", "content": "Mô hình squad thị trường Thái: 2 squad, chapter lead, đội dùng chung, luật quyết VETO 24h, KPI theo P&L squad, mục tiêu hoà vốn T9", "updated": null},
+    {"title": "20260615_Sale_Forecast_2026", "kind": "sheets", "url": "https://o4pvcegwn6b.sg.larksuite.com/sheets/GfifsgQeYh17rjtsxbslFRGegsf", "content": "Forecast doanh số 2026 tách HAPAS / MATE MADE theo tháng (GMV, DT thuần, LNĐG) + budget MKT Performance/Branding. ⚠️ sheet '(Copy)' và 'VINH - TL PLAN' có số LỆCH với sheet chính", "updated": null},
+    {"title": "TIẾN ĐỘ TRIỂN KHAI HAPAS THÁI LAN", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/GC9uw2uyQieYPLkcCj9lq891goe", "content": "Tiến độ triển khai sản phẩm / mốc BST HAPAS Thái Lan", "updated": null},
+    {"title": "2026 - TARGET & BUDGET THAILAND", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/XykEwkiwYiOAQpkCUZulvXwvgNe", "content": "Target & budget theo BST cho HAPAS TH (không có MATE MADE): Q3 Ver 2 (17/06, ghi CHỐT) và Q4 Ver 5 (10/08, mới nhất)", "updated": "2026-08-10"},
+    {"title": "CÁC DỰ ÁN LAMSON RETAIL 2026", "kind": "wiki→base", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/KJNewxoxyivYjNkJdoLl88SIgRc?table=tblXGSGOetbLTx8o&view=vewj7Bz0PK", "content": "Bảng 61 dự án toàn tập đoàn, 13 record Market=Thailand: BST theo tháng + PIC (Project Owner) + trạng thái + ngày launching", "updated": null},
+    {"title": "BC KQKD Daily", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/RtGZwGfsciypgekQJ9FlHEGpgPf", "content": "DT & LNĐG hằng ngày, %MTD, base target theo kỳ. ⚠️ tổng kênh TMĐT, KHÔNG tách brand; có lỗi copy-paste %MTD một số ngày", "updated": "2026-08-19"},
+    {"title": "BC KQKD Weekly", "kind": "wiki", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/Ivx2wb92piowcKkyXEnlLMlSgmd", "content": "Kết quả tuần + các BST. ⚠️ T7 KHÔNG rebase theo Daily → lệch base với Daily cùng kỳ", "updated": "2026-08-18"},
+    {"title": "Doc họp 1-1 anh Tùng (MKT/Booking/Livestream)", "kind": "docx", "url": "https://o4pvcegwn6b.sg.larksuite.com/docx/Wwg9dM4L7okGB3xqhrzlT4MVgcc", "content": "Nguồn số 4 của bộ báo cáo tuần — marketing/booking/livestream", "updated": null},
+    {"title": "LSR Control Tower (Base KQKD)", "kind": "base-app", "url": "https://o4pvcegwn6b.sg.larksuite.com/app/Ok4QbTTXiag6iIsW3wylsheqgdh?pageId=pgeybI2Olh6CbxpE", "content": "Base advanced v2, sửa lần cuối 15/08/2026. ⚠️ API không liệt kê được bảng với quyền hiện tại — muốn đọc tự động cần cấp scope bitable cho app Sawadee HAPAS", "updated": "2026-08-15"}
+  ],
+  "master_files": [
+    {"path": "03-San-pham-Kinh-doanh/HAPAS-ThaiLan-SanPham-JTBD-Tong-hop.md", "size": "89KB", "content": "17 mục: P&L, IDI n=10, 5 JTBD, 7 SKU, BST H2, anti-list, lịch mùa vụ 12 tháng, chiến lược giá"},
+    {"path": "04-Con-nguoi/ThaiLan-ConNguoi-ToChuc-DaoTao-Tong-hop.md", "size": "78KB", "content": "Squad model, JD, cơ chế lương, eval, đào tạo"},
+    {"path": "07-LSR-Group-BOD/LSR-NghiDai-ChienLuoc-MoHinhKD-TapDoan.md", "size": "49KB", "content": "Bối cảnh & mô hình kinh doanh tập đoàn ('Nghĩ dài')"}
   ],
   "research_folder": {
     "path": "02-Nghien-cuu-TuiNu-TH/",
@@ -47,6 +36,7 @@
   "corrections_priority": "4 đính chính ở mục 0 của master file SP+JTBD phải ưu tiên nói ra — vd tỷ trọng kênh LIVE 58–69% / video 16–24%, không dùng bản cũ",
   "rules": [
     "KHÔNG dán link kèm disposable_login_token / token đăng nhập vào config — chỉ giữ URL gốc.",
-    "Mục [CẦN ĐIỀN TÊN]: ai biết tài liệu đó là gì thì điền title + 1 dòng nội dung."
+    "Đếm KOC đã confirm: nguồn thật là base 'Booking KOL/KOC Management' (1_BOOKING) và '[FINAL] BOOKING_KOC_AFFILIATE_TH' (1_KOC), không phải con số ghi tay trong báo cáo.",
+    "Mùa vụ/dịp lễ Thái KHÔNG nằm trong 'MKT - Thailand 2026' — xem DATA COMPLETION (campaign theo dịp) và Squad HPTL Weekly Catch-up (mùa lễ tốt nghiệp T9–T11)."
   ]
 }
