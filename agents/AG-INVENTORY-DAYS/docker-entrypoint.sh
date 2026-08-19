@@ -9,6 +9,10 @@ for cid in $(echo "${CHAT_IDS:-}" | tr ',' ' '); do
   [ -n "$cid" ] && ARGS="$ARGS --chat-id $cid"
 done
 
+# USE_BASE=true -> doc ton kho thang tu Lark Base (khuyen dung tren cloud,
+# vi cloud khong co file Excel cua may ca nhan).
+[ "${USE_BASE:-false}" = "true" ] && ARGS="$ARGS --base"
+[ -n "${REFRESH_MINUTES:-}" ] && ARGS="$ARGS --refresh-minutes $REFRESH_MINUTES"
 [ -n "${EXCEL_PATH:-}" ] && ARGS="$ARGS --excel $EXCEL_PATH"
 [ "${ANSWER_ALL:-false}" = "true" ] && ARGS="$ARGS --answer-all"
 [ -n "${POLL_INTERVAL:-}" ] && ARGS="$ARGS --interval $POLL_INTERVAL"

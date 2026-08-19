@@ -1,6 +1,6 @@
 # CODE OF CONDUCT — TEAM KẾ HOẠCH HÀNG HOÁ (KHHH)
 
-**Sổ tay cho người mới · Bản v2 · 17/08/2026**
+**Sổ tay cho người mới · Bản v3 · 19/08/2026**
 Phòng Kế hoạch Hàng hoá — Khối Cung ứng — Lam Son Retail (HAPAS · MATE MADE)
 
 > **v2 bổ sung so với v1:** Phần 0 (giới thiệu công ty, giá trị cốt lõi, nội quy chung — nguồn: *LAMSON RETAIL INFORMATION_2026*) và **Phần 4 — Sổ tay vận hành**, trích từ toàn bộ lịch sử nhóm *KHHH nội bộ* (497 tin, 23/03 → 17/08/2026). Phần 4 là các quy tắc team đang chạy thật hàng ngày, không phải lý thuyết.
@@ -9,7 +9,7 @@ Phòng Kế hoạch Hàng hoá — Khối Cung ứng — Lam Son Retail (HAPAS �
 
 ## MỤC LỤC
 
-- **Phần 0** — Về Lam Son Retail: lịch sử, giá trị cốt lõi, nội quy chung
+- **Phần 0** — Về Lam Son Retail (gồm **Tuyên ngôn văn hoá LSR**): lịch sử, giá trị cốt lõi, nội quy chung
 - **Phần 1** — 8 nguyên tắc làm việc của team KHHH
 - **Phần 2** — KHHH làm gì: 9 đầu việc, mô hình 5 tầng, nhịp làm việc
 - **Phần 3** — Bộ chỉ số & ngưỡng ra quyết định
@@ -17,6 +17,7 @@ Phòng Kế hoạch Hàng hoá — Khối Cung ứng — Lam Son Retail (HAPAS �
 - **Phần 5** — 30 ngày đầu của bạn
 - **Phần 6** — Ranh giới đỏ
 - **Phần 7** — Từ điển viết tắt
+- **Phần 8** — Tài liệu tham khảo (nguồn chính thống)
 
 ---
 
@@ -81,7 +82,81 @@ Lam Son Retail là tập đoàn thương mại, phát triển và vận hành c�
 | HỌC HỎI | *Đừng xấu hổ khi không biết, hãy xấu hổ khi không học.* Cái tôi = 1/Kiến thức. |
 | **INTEGRITY** | *Nói được, làm được.* Đưa ra cam kết và bằng mọi cách thực hiện. Không làm được thì trao đổi thẳng thắn và đưa ra cam kết mới. |
 
-## 0.3. Nội quy chung — những thứ cần biết ngay tuần đầu
+## 0.3. Tuyên ngôn văn hoá LSR — *Trao quyền & Trách nhiệm*
+
+Bộ 6 giá trị cốt lõi ở trên là **thứ công ty tin**. Tuyên ngôn văn hoá là **cách công ty cư xử** — nó nói rõ ai được thưởng, ai được thăng tiến, ai được giữ lại. Đọc bản đầy đủ ở Phần 8; dưới đây là phần bạn cần thuộc.
+
+> *"Văn hoá thật của một công ty nằm ở việc ai được tuyển, ai được thưởng, ai được thăng tiến, ai được giữ lại — và ai được mời rời đi một cách sòng phẳng."*
+
+### Tám khía cạnh
+
+1. Giá trị là thứ chúng ta thật sự coi trọng — không phải thứ viết đẹp trên tường
+2. **Hiệu suất cao** — đồng đội xuất sắc là phúc lợi lớn nhất
+3. **Trao quyền & trách nhiệm** — công ty lớn lên thì *tăng* tự chủ, không siết lại
+4. **Bối cảnh, không phải kiểm soát** — lãnh đạo giỏi tạo điều kiện cho quyết định đúng
+5. Thăng tiến & phát triển — mở rộng năng lực tạo tác động, không phải leo chức
+6. Đãi ngộ xứng đáng — trả cho giá trị vượt trội, không trả cho sự có mặt
+7. **Đồng nhất cao, kết nối lỏng lẻo** — rõ hướng đi chung, tự chủ cao trong cách làm
+8. **Cách chúng ta vận hành mỗi ngày** — văn hoá chỉ có thật khi đi vào hành vi hằng ngày
+
+### 9 hành vi được coi trọng
+
+| | Nghĩa là gì |
+|---|---|
+| **Phán đoán** | Ra quyết định khôn ngoan cả khi thông tin còn mơ hồ. Tìm nguyên nhân gốc, không chữa triệu chứng. Nói rõ được điều ta đang cố làm **và điều ta chủ động không làm** |
+| **Chủ động & làm chủ** | Không chờ giao việc mới suy nghĩ. Thấy "rác dưới sàn" thì nhặt lên. Là người chủ của **kết quả**, không phải người làm thuê của **đầu việc** |
+| **Tác động** | Nhiều việc quan trọng, đúng hạn, có chất lượng. Tập trung vào kết quả hơn là chứng minh mình đã rất bận |
+| **Tò mò & học nhanh** | Không đóng khung trong chuyên môn hẹp. Hiểu thị trường, khách hàng, NCC và cách công ty kiếm tiền |
+| **Ám ảnh với khách hàng & sản phẩm** | Truy chữ "không" đến tận gốc trước khi chấp nhận giới hạn. Không hài lòng với sản phẩm "đủ dùng" |
+| **Đổi mới & đơn giản hoá** | Thách thức giả định cũ khi nó không còn đúng. Giảm phức tạp, tìm thời gian để đơn giản hoá |
+| **Can đảm & thẳng thắn** | Chỉ nói về đồng đội những điều dám nói thẳng trước mặt họ. Tranh luận về **vấn đề**, không đánh vào **con người** |
+| **Đam mê & tiêu chuẩn cao** | Ăn mừng chiến thắng, nhưng không ngủ quên trên chiến thắng |
+| **Vì LSR hơn cái tôi cục bộ** | Chia sẻ thông tin chủ động, **không giữ thông tin để tạo quyền lực** |
+
+### Ba điều dễ hiểu nhầm
+
+**"LSR là gia đình"** — không. Chúng ta là **một đội thể thao chuyên nghiệp**. Gia đình ưu tiên ở lại với nhau; đội chuyên nghiệp ưu tiên đội hình mạnh nhất để thắng. Hiệu suất vừa đủ được trao đổi thẳng thắn và hỗ trợ tử tế, nhưng không nên chiếm một vị trí cần ngôi sao.
+
+**Keeper Test** — quản lý tự hỏi: *"Nếu người này nói sẽ nghỉ để sang một công việc tương tự ở công ty khác, tôi có chiến đấu mạnh mẽ để giữ họ lại không?"* Để tránh bất ngờ, **mỗi quý bạn nên hỏi ngược quản lý của mình câu đó**.
+
+**Làm chăm có đủ không** — không trực tiếp. Công ty tôn trọng nỗ lực nhưng đo bằng hiệu quả: bao nhiêu việc quan trọng được làm, nhanh đến đâu, tốt đến đâu, **đặc biệt là dưới deadline**.
+
+### Trao quyền ≠ phó mặc
+
+> **Trao quyền** = bối cảnh rõ + người đủ năng lực + mức tự chủ phù hợp + nhịp check-in rõ
+> **Phó mặc** = giao việc rồi hy vọng mọi thứ tự ổn
+
+Trước khi trao quyền, quản lý phải hỏi: *"Bạn mô tả giúp mình các bước để triển khai việc này?"* — nghe xem người đó hiểu mục tiêu, rủi ro, nguồn lực, stakeholder và tiêu chuẩn kết quả đến đâu. **Câu trả lời quyết định mức trao quyền và tần suất follow-up.**
+
+Câu nói **"tôi cứ nghĩ bạn làm được"** hoặc **"việc đơn giản vậy mà cũng không làm được"** là dấu hiệu của phó mặc, không phải trao quyền.
+
+### Quy trình tốt vs quy trình xấu
+
+| Quy trình **tốt** | Quy trình **xấu** |
+|---|---|
+| Lịch launch, fitting, duyệt mẫu, QC, tồn kho — rõ người chịu trách nhiệm | 3–5 tầng duyệt cho một banner, một hook video |
+| Dashboard doanh thu, CAC, ROAS, tỷ lệ hoàn/huỷ giúp team **tự quyết nhanh** | Mọi thay đổi giá/flash sale nhỏ đều chờ lãnh đạo cao nhất |
+| Chuẩn kho/logistics/finance tránh lỗi **không thể đảo ngược** | Họp liên phòng để "xin đồng thuận" nhưng không ai chịu trách nhiệm cuối |
+| Post-mortem ngắn sau campaign, mở store, launch SKU | Quy trình tồn tại chỉ vì từng có một lỗi nhỏ |
+
+Chỉ hai nhóm việc **bắt buộc** phải có quy tắc cứng: (1) ngăn thảm hoạ khó đảo ngược — tài chính sai, thất thoát lớn, rủi ro pháp lý; (2) vấn đề đạo đức và nhân phẩm — gian dối, quấy rối, tham nhũng, xung đột lợi ích.
+
+Chính sách chi tiêu, công tác, quà tặng gói trong một câu: **"Hành động vì lợi ích tốt nhất của LSR"** — đi công tác như đang dùng tiền của chính mình, minh bạch với quà tặng hoặc lợi ích không nhỏ từ nhà cung cấp.
+
+### Đồng nhất cao, kết nối lỏng lẻo
+
+- **Dấu hiệu tốt:** ít họp hơn, ít xin phép hơn, nhưng mục tiêu và ưu tiên **rõ hơn**
+- **Dấu hiệu xấu:** mọi người "rất bận phối hợp", nhưng không ai chắc điều gì là quan trọng nhất
+
+### Khi không chắc nên làm gì, hỏi 5 câu
+
+1. Kết quả cần đạt của công việc này là gì?
+2. Điều gì tốt nhất cho khách hàng?
+3. Điều gì tốt nhất cho LSR **dài hạn**?
+4. Mình có đủ bối cảnh chưa?
+5. Ai là người có thể cho mình lời khuyên tốt nhất?
+
+## 0.4. Nội quy chung — những thứ cần biết ngay tuần đầu
 
 ### Giờ làm việc (khối văn phòng)
 
@@ -221,7 +296,7 @@ Và một bước xa hơn: **đo giá trị của từng bước trong quy trìn
 | 4 | Quản lý tồn kho & luân chuyển | Theo dõi tồn thực tế từng kho/cửa hàng; điều phối nhập xuất để cân bằng tồn |
 | 5 | Theo dõi tiến độ nhập hàng | Đối chiếu lịch giao với kế hoạch; xử lý giao thiếu/thừa/trễ cùng kho |
 | 6 | Báo cáo & đánh giá hiệu quả | Báo cáo định kỳ + đề xuất cải tiến |
-| 7 | Kiểm soát BLG & thúc đẩy bán hàng | Kiểm soát BLG theo SP/BST/nhóm; phối hợp kênh xây chương trình |
+| 7 | Thúc đẩy bán hàng | Phối hợp với các kênh xây chương trình bán |
 | 8 | Phối hợp phát triển chiến lược | Với KD, MKT, Kế toán |
 | 9 | Theo dõi & quản lý NVL | Tồn NVL tại các kho; kế hoạch đặt bổ sung |
 
@@ -242,15 +317,14 @@ Ba tầng impact lớn nhất, theo thứ tự: **Plan → Allocate → Replenis
 ## 2.3. Nhịp làm việc
 
 ### Hàng ngày
-Theo dõi bộ chỉ số ngày: BLG dự kiến vs thực tế, tỉ lệ huỷ 7 ngày, TĐB dự kiến vs thực tế, GAP, số ngày tồn kho, min/max tồn an toàn, cảnh báo rủi ro (loss sale / dư hàng).
+Theo dõi bộ chỉ số ngày: tỉ lệ huỷ 7 ngày, TĐB dự kiến vs thực tế, GAP, số ngày tồn kho, min/max tồn an toàn, cảnh báo rủi ro (loss sale / dư hàng).
 
-5 bảng phải liếc mỗi ngày:
+4 bảng phải liếc mỗi ngày:
 
 1. Sản phẩm rủi ro lost sale theo kho
 2. Sản phẩm rủi ro tồn kho cao theo kho
 3. Sản phẩm báo động — quá 3 ngày chưa đổi trạng thái
-4. Sản phẩm rủi ro BLG
-5. Sản phẩm có tỉ lệ huỷ cao
+4. Sản phẩm có tỉ lệ huỷ cao
 
 ### Hàng tuần
 
@@ -316,7 +390,7 @@ Appendix: Dashboard | Link | Tần suất cập nhật | Owner
 | **MAPE** | Sai số dự báo | **Target 30%.** Trên 80% là báo động |
 | **Lost sale ratio** | Tỉ lệ mất doanh thu do hết hàng | Trong bộ KPI Planning |
 | **Inventory Turnover** | Vòng quay tồn kho | Trong bộ KPI Planning |
-| **BLG** | Biên lợi gộp | Kiểm soát theo SP/BST/nhóm |
+| **BLG** | Biên lợi gộp | **KHHH không phụ trách chỉ số này.** Cần đọc hiểu vì nó ảnh hưởng quyết định đặt hàng, nhưng chủ sở hữu là Kinh doanh / Thu mua |
 | **STR** | Số bán 7 ngày đầu ÷ tổng nhận về | 25–40% là tốt. Dưới 15% phải tìm nguyên nhân |
 | **GAP** | Thực tế − dự kiến | Âm = đỏ, dương = xanh |
 | **Reorder Point** | = Lead Time Demand + Safety Stock<br>Lead Time Demand = Lead time × nhu cầu TB/ngày | VD: 100sp/ngày, lead 5 ngày, safety 200 → ROP = 700 |
@@ -535,6 +609,36 @@ Những trường hợp **chưa xong mà hay bị bấm done nhầm**:
 - **Báo cáo phải hướng người đọc.** Trình bày sao cho người đọc hiểu ngay, không phải hỏi lại.
 - Trong báo cáo S&OP với KD phải có phần **tồn kho**: tổng tồn, tốc độ hiện tại thì bao giờ clear xong, trạng thái các tháng tới, so với NTK target đang dư bao nhiêu
 
+### 5 cấp check-in — bạn đang ở cấp mấy?
+
+| Cấp | Hành vi |
+|---|---|
+| 1 | Chờ cho tới khi được chỉ đạo |
+| 2 | Hỏi xem phải làm gì |
+| 3 | **Gợi ý giải pháp, sau đó mới hành động** ← tối thiểu |
+| 4 | Vừa hành động vừa xin ý kiến để điều chỉnh |
+| 5 | Tự hành động, sau đó báo cáo định kỳ |
+
+Người được trao quyền phải tiến dần lên cấp cao. **Cấp 3 là sàn** — nêu vấn đề mà không kèm phương án thì chưa đạt (xem lại định nghĩa "hoàn thành tác vụ" ở trên). Người mới, việc mới hoặc việc rủi ro cao thì check-in dày hơn.
+
+### Truy chữ "không" đến gốc
+
+**"Không kịp" không phải là nguyên nhân.** Đó là kết luận cuối của một chuỗi vấn đề chưa được gọi đúng tên.
+
+*Truy hời hợt:* nghe *"không kịp mẫu trước campaign"* rồi báo lại là không kịp. Cả đội mặc định "quy trình vốn cần từng ấy ngày", "NCC vốn chậm", "đành lùi campaign".
+
+*Truy đến gốc:* hỏi cho tới khi **tách được giới hạn thật ra khỏi thời gian thất thoát do cách mình tổ chức công việc**:
+
+1. Kết quả bắt buộc phải có là gì, và phải có vào thời điểm nào?
+2. Để có kết quả đó, những việc nào **thực sự bắt buộc** phải diễn ra?
+3. Mỗi việc, trong điều kiện tốt nhất, tối thiểu cần bao lâu?
+4. Phần nào là **giới hạn thật** — vật liệu, khuôn cần gia công, công suất xưởng đã kín, tiêu chuẩn QC?
+5. Phần nào chỉ là **ma sát do mình tạo ra** — chờ phản hồi, chờ họp, chưa rõ ai quyết, duyệt tuần tự?
+
+> Đến gốc = **không chấp nhận "thời gian thông thường" như một sự thật**. Phải biết mỗi ngày trong timeline đang được dùng để làm gì.
+
+Nếu mục tiêu vẫn đúng thì tìm đường khác: bỏ chi tiết ít quan trọng, chọn vật liệu sẵn có, tách launch thành đợt, hoặc kéo đúng người vào xử lý ngay. **Tốc độ ánh sáng:** đưa vấn đề tới người tháo được nút nhanh nhất, đừng để nó chết trong tầng trung gian.
+
 ### Weekly note
 
 Mỗi tuần team tổng hợp các issue hay gặp thành một note ngắn dùng chung cho cả phòng. Mục tiêu: **tránh việc một bạn gặp rồi mà các bạn còn lại không biết — thông tin đứt gãy, base knowledge không đồng đều.**
@@ -553,7 +657,99 @@ Mỗi tuần team tổng hợp các issue hay gặp thành một note ngắn dù
 | Đơn xuất 16/6 mỗi cont thiếu 3K sp | Không check trước cont có đủ hàng không | Chủ động dồn/giãn cho đủ cont, tránh bị động |
 | Aeon Hà Đông đứt 7 mã cũ + 6 mã BST mới → mất 60–70tr doanh thu tháng 6 | Đặt hàng từ CH và điều hàng không khớp | Với CH trọng điểm phải review phủ hàng chủ động, không chờ CH báo |
 
-## 4.9. Team đang dùng AI
+## 4.9. Luân chuyển hàng giữa các kho / ra cửa hàng / kho hoả tốc
+
+### Khi nào chuyển — ngưỡng
+
+| Thông số | Giá trị |
+|---|---|
+| Tốc độ bán dùng để tính | 7 ngày gần nhất — chỉ đơn bán lẻ cho CH, chỉ đơn hoả tốc cho kho hoả tốc |
+| NTK an toàn — kho tổng (HTC, Tây Ninh) | 15 ngày |
+| NTK an toàn — kho hoả tốc & cửa hàng | 30 ngày |
+| Trần tồn kho hoả tốc | **tối đa 20% tồn của 2 kho chính** |
+| SL tối thiểu 1 lần chuyển | **2 kiện ≈ 48 sản phẩm** |
+| Điều kiện chuyển cho cửa hàng | Tồn 2 kho DC còn **trên 15 ngày** bán |
+
+Thứ tự ưu tiên: **giữa các CH nội miền → giữa kho và CH nội miền → trái miền.**
+Chống dội: Store-SKU vừa *nhận* thì lần này không chuyển đi, vừa *chuyển đi* thì lần này không nhận.
+Cửa hàng mới khai trương: 15 ngày sau khai trương đã phải luân chuyển, có rule riêng.
+
+⚠️ **Chỉ gửi ra hoả tốc các mã trong danh sách đã đồng thuận.** Kho hoả tốc chật, nhân lực có hạn — mã bán chậm đã bị cắt khỏi danh sách. Mã BST mới được thêm khi có hàng.
+
+### 6 bước — nhịp tuần
+
+| Bước | Ai làm | Hệ thống | Hạn |
+|---|---|---|---|
+| 1. Đồng thuận kế hoạch bán theo khu vực/cửa hàng | KHHH + ASM/CHT | file *Mẫu SL dự kiến gửi ra cửa hàng* | **15h thứ 5** (KD gửi kế hoạch từ ngày 25 tháng trước) |
+| 2. **Lên phiếu nháp chuyển hàng** | KHHH | **nhanh.vn** (import bằng `Nhanh.vn_Import_Imex_v0.1.8.xlsm`) | **18h thứ 5** |
+| 3. Duyệt phiếu + chuyển hàng đi | Outbound Kho | nhanh.vn | **thứ 7** |
+| 4. Nhận, kiểm, **xác nhận SL thực tế trên phiếu** | Kho / cửa hàng nhận | nhanh.vn | **thứ 3 tuần sau** |
+| 5. Thông báo lên nhóm *Chuyển hàng ra cửa hàng & hỏa tốc* | KHHH | Lark | ngay sau bước 2 |
+| 6. Review: thời gian xử lý phiếu, thời gian vận chuyển, tỉ lệ gửi đúng SL | KHHH | file *Theo dõi và rà soát kết quả chuyển hàng* | **14h thứ 5** |
+
+Bài thông báo phải nêu rõ **ngày cần hàng có mặt tại điểm nhận**.
+
+> ⚠️ **Trường bắt buộc trên phiếu (chốt 12/08/2026):** phải ghi đủ **túi giấy đi kèm combo và túi giấy lẻ — đúng mã, đúng số lượng**. Thiếu thông tin túi giấy thì **kho không đủ điều kiện xử lý đơn xuất**, phiếu bị treo.
+
+### Hàng lỗi từ cửa hàng chuyển về kho
+
+KHHH cấp mã đơn, cửa hàng chuẩn bị đủ **9 mục**: mã đơn · tên cửa hàng · biên bản bàn giao · danh sách mã hàng · số lượng · tình trạng hàng hoá · nguyên nhân trả hàng · hình ảnh minh chứng · docs xử lý đính kèm.
+Tuyến: **CH miền Bắc + miền Trung → HTC Bắc Ninh · CH miền Nam → kho Tây Ninh.**
+Hàng thanh lý và hàng tiêu huỷ **đóng 2 kiện riêng**, note list SP và đánh số từng kiện.
+
+### Lỗi hay gặp
+
+| Lỗi | Cách tránh |
+|---|---|
+| Phiếu thiếu túi giấy → kho không pick và trừ tồn được, đơn treo | Add đủ mã + SL túi giấy trước khi gửi |
+| Phiếu lên rồi bị treo, không ai báo | Post nhóm sau khi lên phiếu và theo dõi trạng thái; kho phải báo lại nếu có sự cố |
+| Phiếu phát sinh sát ngày → kho không book kịp nhân sự | Tuân thủ mốc thứ 5; lên kế hoạch luân chuyển theo tháng |
+| Chuyển nhầm SKU (carton dán SKU A, bên trong là SKU B) | Ghi rõ quy cách trên phiếu; kho scan barcode hộp con, không chỉ scan carton |
+| Đơn cửa hàng không chuyển được sang B2C vì chưa có mã đối tác cửa hàng trên Vietful | Kiểm master data đối tác/cửa hàng trên Vietful trước khi lên phiếu |
+| Kỳ kiểm kho làm đứng toàn bộ hàng | Nắm lịch kiểm kho khi lập kế hoạch chuyển BST mới |
+
+## 4.10. Ghép và tách combo
+
+### Khi nào ghép, khi nào tách
+
+**Ghép** — lên tồn mã combo để bán theo kế hoạch KD (đặc biệt trước nhịp sale), hoặc để **giải phóng tồn NVL** (hộp, thiệp) bằng cách tận dụng nhịp sale.
+**Tách** — combo không còn bán; thay lõi combo theo tốc độ bán để giải phóng diện tích kho; tách ra bán lẻ; hoặc ghép nhầm phải gỡ.
+
+*Đã thử tạo mã ảo trên Anchanto để khỏi ghép tay, nhưng **đơn không drop được về Vietful** → vẫn phải ghép vật lý tại kho.*
+
+**Nguyên tắc tồn:** sản phẩm gốc **giảm tồn** — sản phẩm hoàn thiện **tăng tồn**.
+
+### 8 bước
+
+1. **KHHH điền SL tách-ghép của tháng N+1** vào file `11. RESOURCE PLANNING`, sheet *SẢN LƯỢNG TÁCH - GHÉP COMBO DỰ KIẾN*, và file *Kế hoạch ghép combo theo tháng*. **Hạn: ngày 20 hàng tháng.**
+   ⚠️ Ngày điền là **ngày cần lên tồn**, không phải ngày ghép.
+2. Kho nhận thông tin, lên kế hoạch ghép. Nhịp chuẩn **2 lần/tháng** — lên tồn 1 ngày trước sale đôi và 1 ngày trước sale giữa tháng.
+3. **KHHH đăng bài trong nhóm tách ghép + tạo tác vụ, add kho và kế toán** — **5 ngày trước ngày cần lên tồn**. Bài phải có: brand · danh sách mã CB + SL · **ngày cần lên tồn** · quy cách đóng gói.
+4. Kho ghép vật lý. Đổi quy cách (đổi hộp, bỏ thiệp, thêm giấy nến…) phải được KHHH xác nhận **bằng văn bản trong nhóm**.
+5. **Kho lên tồn bằng chức năng "gom combo" trên Vietful/WMS** — hệ thống trừ tồn SP con, tăng tồn mã CB.
+6. Không gom được bằng hệ thống (thiếu SP con, master data sai) → **kho tạo IR để nhập tăng tồn**, KHHH gửi mã + SL.
+7. Kho báo lại tại tác vụ, điền **SL thực ghép** nếu không đủ.
+8. **Kế toán ghép song song trên MISA** — WMS và MISA chưa map được vào nhau.
+
+### Ràng buộc
+
+- Phải đủ tồn **tất cả** sản phẩm con + NVL thì hệ thống mới gom được. Thiếu 1 cấu phần nhỏ (thiệp, sticker, hộp) là **cả lô đứng**; kho sẽ **khoá tồn** mã CB tới khi hàng về.
+- Trong combo có gì thì phải khai đủ, thiếu là không gom được.
+- Tối thiểu **N+1** — kho cần book nhân sự trước. Báo ghép trong ngày sẽ không được xử lý.
+- Ngày kho có cont về thì **không ghép combo được**.
+- Có thể lên tồn **50% trước** vào ngày cần, phần còn lại hoàn thiện sau.
+
+### Lỗi hay gặp
+
+| Lỗi | Cách tránh |
+|---|---|
+| Master data mã CB sai → không gom được hệ thống | Báo Phòng SP + CĐS tạo/sửa mã trên Vietful **trước** ngày ghép, xác nhận xong mới thông báo ghép |
+| ⚠️ **Tăng/giảm tồn thủ công để chữa cháy** | **Không làm.** Kho lệch tồn và phải giải trình với BOD + Kế toán. Chỉ đi đường IR có chứng từ |
+| Bài thông báo thiếu ngày cần lên tồn | Ngày cần lên tồn là trường bắt buộc |
+| Ghép sai / ghép thừa phải tách lại | Lấy dữ liệu tồn **tại thời điểm gửi**, không dùng dữ liệu tối hôm trước |
+| Kế toán lệch số do WMS chưa ra được báo cáo tách ghép | Làm song song MISA cho tới khi báo cáo tách ghép trên WMS golive |
+
+## 4.11. Team đang dùng AI
 
 Công ty đã cấp tài khoản **Claude Team** cho phòng ban và triển khai **Lark MCP V3** để kết nối Claude với Lark. Đã có 2 buổi training AI Agent, tài liệu và recording lưu trên Lark Minutes.
 
@@ -672,6 +868,72 @@ Học phần này trong ngày đầu tiên.
 | MM | Mate Made |
 | HP | HAPAS |
 | LSR | Lam Son Retail |
+
+---
+
+# PHẦN 8 — TÀI LIỆU THAM KHẢO
+
+Đây là **nguồn chính thống**. Khi tài liệu này và thực tế lệch nhau, lấy các nguồn dưới đây làm chuẩn rồi sửa lại tài liệu này.
+
+## 8.1. Lark Wiki — quy trình & chính sách
+
+| Tài liệu | Link |
+|---|---|
+| **CODE OF CONDUCT — TEAM KHHH** *(chính tài liệu này)* | https://o4pvcegwn6b.sg.larksuite.com/wiki/IjcywXMaqi3C9bk0lHCl8zEegxe |
+| **LAMSON RETAIL INFORMATION_2026** — lịch sử, giá trị cốt lõi, nội quy, phúc lợi *(nguồn của Phần 0)* | https://o4pvcegwn6b.sg.larksuite.com/wiki/HJCywftE8ikT6DkwQ14lpIWfgbb |
+| **QUY TRÌNH KHHH** — quy trình luân chuyển hàng kho/cửa hàng *(nguồn của mục 4.9)* | https://o4pvcegwn6b.sg.larksuite.com/wiki/Pw9BwNzeHiLE8GkPCoclS2JVgFd |
+| **Quy tắc điều chuyển hàng hoá cho kho Hoả Tốc và Cửa Hàng** — ngưỡng NTK, trần 20%, tối thiểu 2 kiện | https://o4pvcegwn6b.sg.larksuite.com/wiki/Miy1wGnJUitBpxkLvjKl0j0mgud |
+| **LOGIC LUÂN CHUYỂN HÀNG HOÁ** — công thức Stock target, thứ tự ưu tiên | https://o4pvcegwn6b.sg.larksuite.com/wiki/Z5vswUsodiAXBlkfqUglCAEngrg |
+| **QUY TRÌNH TÁCH-GHÉP COMBO** *(nguồn của mục 4.10)* | https://o4pvcegwn6b.sg.larksuite.com/wiki/TU3Cwhld3iHHsKkA4V4lgi2bgXf |
+| **QUY TRÌNH QUẢN LÝ HÀNG LỖI – THANH LÝ – TIÊU HUỶ** | https://o4pvcegwn6b.sg.larksuite.com/wiki/IXufwJNYxiHEHukHGmzl9QMig3e |
+| **Danh sách mã gửi kho hoả tốc** *(bản final đã đồng thuận)* | https://o4pvcegwn6b.sg.larksuite.com/wiki/HRcgwsUfai9nZEk47aulWfAUg7e |
+
+## 8.2. Dữ liệu
+
+| Nguồn | Link |
+|---|---|
+| **Base QL KẾ HOẠCH HÀNG HÓA HAPAS** — 42 bảng: BÁO CÁO KHHH, THEO DÕI TỒN KHO, NTK HAPAS, S&OP, CÂN TỒN 2 KHO… | https://o4pvcegwn6b.sg.larksuite.com/wiki/KNMAwWxJ3iZQcikivxxlkbW5gYb |
+| BigQuery | `ganesha-381907.hapas_vietful_dwh` · `...matemade_vietful_dwh` |
+| Elton DataUtils — BI self-service | https://hapas.eltondata.com |
+
+## 8.3. Hệ thống vận hành
+
+| Hệ thống | Địa chỉ | Dùng để |
+|---|---|---|
+| nhanh.vn | nhanh.vn | Sản phẩm, tồn, báo cáo, **phiếu xuất chuyển** |
+| WMS | https://hap.ops.vnfai.com | Quản lý kho, IR |
+| Vietful | https://hap.partner.vnfai.com | **Gom / tách combo**, tồn kho đối tác |
+| SAPO | — | Bán lẻ |
+| Anchanto | — | Trung gian đồng bộ tồn ↔ sàn |
+| OMS Flash | — | Mate Made Thái Lan |
+| MISA | — | Kế toán *(ghép combo phải làm song song)* |
+| Looker Studio | — | Dashboard |
+
+## 8.4. Văn hoá & đào tạo
+
+| Tài liệu | Link |
+|---|---|
+| **LAMSON CULTURE V1** — *Trao quyền & Trách nhiệm* | https://docs.google.com/presentation/d/18vzJdjIhcIQOuhwQ6dQ1JQ3muYtPv_IeVIVSFZOZbN8/edit |
+| Lark MCP V3 — connector nối Claude với Lark | https://hapasvn.tail65cea0.ts.net/mcp |
+
+## 8.5. Mã nguồn agent
+
+| | Link |
+|---|---|
+| **lsr-agent-platform** — repo agent của công ty. Agent KHHH nằm ở `agents/AG-INVENTORY-DAYS/`, branch `PLANNING` | https://github.com/LamsonRetail/lsr-agent-platform |
+
+---
+
+## GHI CHÚ BẢN v3 — có gì mới so với v2
+
+| Mục | Nội dung thêm | Nguồn |
+|---|---|---|
+| **0.3** | Tuyên ngôn văn hoá LSR: 8 khía cạnh, 9 hành vi được coi trọng, Keeper Test, trao quyền ≠ phó mặc, quy trình tốt vs xấu, đồng nhất cao/kết nối lỏng lẻo | Bộ slide *LAMSON CULTURE V1* (101 slide) |
+| **4.9** | Luân chuyển hàng giữa các kho / ra cửa hàng / kho hoả tốc — ngưỡng, 6 bước trên nhanh.vn, hồ sơ 9 mục cho hàng lỗi, lỗi hay gặp | QUY TRÌNH KHHH · Quy tắc điều chuyển · LOGIC LUÂN CHUYỂN + tin nhắn nhóm Kho |
+| **4.10** | Ghép và tách combo — 8 bước, chức năng gom combo trên Vietful, ràng buộc tồn, lỗi hay gặp | QUY TRÌNH TÁCH-GHÉP COMBO + 2 nhóm ghép/tách BNI & TNI |
+| **4.7** | 5 cấp check-in · Truy chữ "không" đến gốc | *LAMSON CULTURE V1* slide 96–99 |
+| **8** | Tài liệu tham khảo — toàn bộ nguồn chính thống | — |
+| **2.1 · 2.3 · 3** | **Bỏ BLG khỏi phạm vi KHHH** — đầu việc 7 còn "Thúc đẩy bán hàng"; bỏ BLG khỏi bộ chỉ số ngày và bảng theo dõi hằng ngày (còn 4 bảng); từ điển ghi rõ chủ sở hữu BLG là Kinh doanh / Thu mua | Chị Thảo xác nhận 19/08 |
 
 ---
 

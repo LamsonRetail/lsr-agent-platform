@@ -16,10 +16,16 @@ services:
       # false = trả lời thật vào nhóm. Lần deploy đầu nên để true và xem log.
       DRY_RUN: ${DRY_RUN:-true}
 
-      # Nhóm bot phục vụ, cách nhau bởi dấu phẩy. Để trống = MỌI nhóm bot được add.
-      CHAT_IDS: ${CHAT_IDS:-oc_2659fb0822ebf7de6291f11c1f5ce37c}
+      # Nhóm bot phục vụ, cách nhau bởi dấu phẩy.
+      # MẶC ĐỊNH ĐỂ TRỐNG = phục vụ MỌI nhóm bot được add vào, tự bắt nhóm mới.
+      CHAT_IDS: ${CHAT_IDS:-}
 
-      # Bỏ trống = chỉ trả lời câu hỏi quy trình (Code of Conduct).
+      # true = đọc tồn kho thẳng từ Lark Base "QL KẾ HOẠCH HÀNG HÓA HAPAS".
+      # Trên cloud phải dùng cách này — không có file Excel của máy cá nhân.
+      USE_BASE: ${USE_BASE:-true}
+      REFRESH_MINUTES: ${REFRESH_MINUTES:-15}
+
+      # Chỉ dùng khi KHÔNG bật USE_BASE. Phải mount volume vào container.
       EXCEL_PATH: ${EXCEL_PATH:-}
 
       ANSWER_ALL: ${ANSWER_ALL:-false}

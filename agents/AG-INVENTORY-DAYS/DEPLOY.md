@@ -23,7 +23,8 @@ cd lsr-agent-platform/agents/AG-INVENTORY-DAYS
 cat > .env <<'EOF'
 LARK_APP_ID_INVENTORY=cli_aaf6d3a61078ded4
 LARK_APP_SECRET_INVENTORY=<dán secret>
-CHAT_IDS=oc_618134792f49a95d2f455314261c0215
+# CHAT_IDS để trống = phục vụ mọi nhóm bot được add vào.
+CHAT_IDS=
 DRY_RUN=true
 EOF
 chmod 600 .env
@@ -35,9 +36,9 @@ docker compose logs -f
 Log phải có 3 dòng:
 
 ```
-Đã nạp Code of Conduct KHHH: 50 mục.
+Đã nạp Code of Conduct KHHH: 75 mục.
 Trả lời khi được @PLANNING' ASSISTANT, hoặc khi có câu hỏi mà tra ra được đáp án chắc chắn.
-Bắt đầu poll mỗi 3.0s (DRY_RUN=True) — 1 nhóm: oc_618...
+Bắt đầu poll mỗi 3.0s (DRY_RUN=True) — N nhóm: <tên các nhóm>
 ```
 
 `DRY_RUN=true` nghĩa là bot **chỉ in ra log** câu sẽ trả lời, không gửi vào nhóm.

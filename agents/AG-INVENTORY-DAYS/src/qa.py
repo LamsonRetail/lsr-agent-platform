@@ -32,7 +32,13 @@ except ImportError:  # thiếu file kiến thức nền -> bot vẫn chạy ph�
 
 
 def _strip_accents(text: str) -> str:
-    """Bỏ dấu tiếng Việt để khớp từ khoá kể cả khi người dùng gõ không dấu."""
+    """Bỏ dấu tiếng Việt để khớp từ khoá kể cả khi người dùng gõ không dấu.
+
+    Lưu ý: NFD KHÔNG tách được chữ "đ" (nó là một ký tự riêng, không phải
+    d + dấu), nên phải đổi tay. Thiếu bước này thì "được" ra "đuoc" và mọi
+    từ khoá có chữ đ đều không khớp — "đặt hàng", "điều chuyển", "đóng gói"...
+    """
+    text = text.replace("đ", "d").replace("Đ", "D")
     nfkd = unicodedata.normalize("NFD", text)
     return "".join(c for c in nfkd if unicodedata.category(c) != "Mn").lower()
 
@@ -79,11 +85,54 @@ def answer(question: str, skus: list[SkuResult], coc_sections=None,
     return reply
 
 
+# Nhung cach nguoi ta hoi "bot lam duoc gi".
+_CAPABILITY_PATTERNS = (
+    "lam duoc gi", "lam dc gi", "biet lam gi", "biet gi", "giup duoc gi",
+    "giup gi", "ho tro gi", "chuc nang gi", "co the lam gi", "gioi thieu",
+    "ban la ai", "em la ai", "la ai the", "de lam gi", "dung de lam gi",
+    "help", "huong dan su dung",
+)
+
+
+def _asks_capability(q_no_accent: str) -> bool:
+    return any(k in q_no_accent for k in _CAPABILITY_PATTERNS)
+
+
+def _capability_reply(skus: list[SkuResult]) -> str:
+    """Tu gioi thieu. Noi dung phai bam sat nhung gi that su chay duoc."""
+    if skus:
+        ton = f"Đang nạp {len(skus):,} mã sản phẩm."
+    else:
+        ton = ("Phần tồn kho chưa được nạp dữ liệu nên tạm thời mình sẽ báo "
+               "\"chưa có dữ liệu\" thay vì đoán số.")
+    return (
+        "Chào anh/chị. Mình là trợ lý của phòng Kế hoạch Hàng hoá. "
+        "Hiện mình làm được 3 việc:\n"
+        "\n"
+        "1. Trả lời câu hỏi quy trình KHHH — nạp Code of Conduct của phòng làm "
+        "kiến thức nền. Ví dụ: \"chốt PR ngày nào\", \"ngưỡng tồn kho cửa hàng "
+        "bao nhiêu\", \"ghép combo báo trước mấy ngày\", \"phiếu chuyển kho cần "
+        "điền gì\".\n"
+        "2. Tra tồn kho theo mã — ví dụ: \"top 5 mã tồn cao\", \"mã nào sắp hết "
+        f"hàng\", \"mã nào không bán được\". {ton}\n"
+        "3. Dựng báo cáo KHHH định kỳ từ Base Kế hoạch Hàng hoá: tồn theo BST, "
+        "doanh thu 30 ngày, sự cố các dự án, kèm biểu đồ.\n"
+        "\n"
+        "Nguyên tắc: tra ra thì trả lời kèm số và nguồn, không tra ra thì nói "
+        "thẳng là chưa biết — không đoán bừa. Cứ @ mình rồi hỏi thẳng."
+    )
+
+
 def _answer_text(question: str, skus: list[SkuResult], coc_sections=None,
                  *, strict: bool = False) -> str:
     q = _strip_accents(question)
     rated = [s for s in skus if s.current_days is not None]
     n = _extract_count(question)
+
+    # 0) "em lam duoc gi", "biet lam gi", "gioi thieu" -> tu gioi thieu.
+    #    Phai dat truoc moi nhanh khac, neu khong se roi vao cau "chua tra duoc".
+    if _asks_capability(q):
+        return _capability_reply(skus)
 
     # 1) Hỏi về 1 mã SKU cụ thể (ưu tiên cao nhất — người dùng gõ hẳn mã ra).
     m = re.search(r"\b([a-z]{2,4}\d{5,}[-a-z0-9]*)\b", q)

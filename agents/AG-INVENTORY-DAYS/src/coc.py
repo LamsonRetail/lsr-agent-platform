@@ -78,7 +78,17 @@ class Section:
 
 
 def _numbered_ref(title: str) -> str | None:
-    m = re.match(r"\s*(\d+(?:\.\d+)*)\.?\s", title)
+    """Lấy số mục từ heading, vd '4.10. Ghép và tách combo' -> 'mục 4.10'.
+
+    CHỈ nhận số mục THẬT — tức có dấu chấm ('4.10.' hoặc '3.2'). Heading mở đầu
+    bằng một con số trần như '8 bước', '5 cấp check-in', '9 hành vi được coi
+    trọng' KHÔNG phải số mục; nhận nhầm thì bot trích nguồn thành 'mục 8',
+    người đọc tưởng Phần 8 và không tra lại được.
+    """
+    m = re.match(r"\s*(\d+\.\d+(?:\.\d+)*)\.?\s", title)   # 4.10 / 3.2.1
+    if m:
+        return f"mục {m.group(1)}"
+    m = re.match(r"\s*(\d+)\.\s", title)                     # '4. Tiêu đề'
     return f"mục {m.group(1)}" if m else None
 
 
@@ -140,6 +150,54 @@ def _defines(term: str, hay: str) -> bool:
     return re.search(pat, hay, re.MULTILINE) is not None
 
 
+# Câu hỏi đòi một con số: "mấy ngày", "bao nhiêu", "bao lâu", "trước mấy hôm"...
+# Với dạng này, mục KHÔNG có số gần như chắc chắn là mục sai — dù từ khoá khớp.
+_ASKS_NUMBER = (
+    "may ngay", "bao nhieu", "bao lau", "may hom", "may gio", "may tieng",
+    "may tuan", "may thang", "may lan", "truoc may", "khi nao", "han chot",
+    "deadline", "toi thieu", "toi da", "nguong", "muc tieu la",
+)
+
+# Con số đi kèm đơn vị thời gian / số lượng — dấu hiệu mục có đáp án thật.
+_NUMBER_UNIT_RE = re.compile(
+    r"\d[\d.,]*\s*(ngay|hom|gio|tieng|tuan|thang|lan|sp|san pham|kien|%|"
+    r"n\+\d|ty|trieu|nghin)", re.IGNORECASE)
+
+
+def _asks_number(question: str) -> bool:
+    q = _strip_accents(question)
+    return any(k in q for k in _ASKS_NUMBER)
+
+
+def _line_has_number(line: str) -> bool:
+    """Dòng này có chứa một con số đóng vai đáp án không?
+
+    Không chỉ là "số + đơn vị". Bảng biểu trong tài liệu để số trần —
+    "| HAPAS Thái Lan | 30 | 60 |" — đó vẫn là đáp án cho câu hỏi NTK.
+    """
+    if _NUMBER_UNIT_RE.search(line):
+        return True
+    return "|" in line and bool(re.search(r"\d", line))
+
+
+def _has_number_answer(haystack: str) -> bool:
+    return any(_line_has_number(ln) for ln in haystack.splitlines())
+
+
+def _answer_lines(haystack: str, terms: list[str]) -> int:
+    """Đếm số DÒNG vừa có con số vừa có từ khoá của câu hỏi.
+
+    Mục chỉ "có số ở đâu đó" khác hẳn mục có đúng dòng trả lời. Ví dụ hỏi
+    "ghép combo báo trước mấy ngày": mục nào có dòng chứa cả "báo" lẫn
+    "5 ngày" mới là mục cần đưa lên đầu.
+    """
+    n = 0
+    for line in haystack.splitlines():
+        if _line_has_number(line) and any(_count(t, line) for t in terms):
+            n += 1
+    return n
+
+
 def search(question: str, sections: list[Section] | None = None,
            *, min_score: float = MIN_SCORE,
            min_coverage: float = MIN_COVERAGE,
@@ -169,6 +227,7 @@ def search(question: str, sections: list[Section] | None = None,
     accented = [w for w in re.findall(r"[^\W\d_]+", question.lower())
                 if _strip_accents(w) in idf and w != _strip_accents(w)]
 
+    wants_number = _asks_number(question)
     scored: list[tuple[float, float, Section]] = []    # (score, coverage, section)
     for s, hay in zip(sections, hays):
         title_hay = s.title_haystack
@@ -191,6 +250,17 @@ def search(question: str, sections: list[Section] | None = None,
             for w_acc in accented:
                 if _count(w_acc, acc_hay):
                     score += idf[_strip_accents(w_acc)] * 1.2
+
+        # Câu hỏi đòi con số -> mục có số mới là mục trả lời được.
+        # Không có bước này thì "ghép combo báo trước mấy ngày" ra mục
+        # "Khi nào ghép, khi nào tách" — đúng chủ đề nhưng không có đáp án.
+        if wants_number:
+            if _has_number_answer(hay):
+                score *= 1.6
+                # Có hẳn dòng "từ khoá + con số" -> gần như chắc là đáp án.
+                score *= 1.0 + min(_answer_lines(hay, terms), 3) * 0.35
+            else:
+                score *= 0.55
 
         # Chuẩn hoá theo độ dài: mục dài đương nhiên chứa nhiều từ hơn, không có
         # nghĩa là đúng chủ đề hơn.
@@ -247,7 +317,7 @@ def _plain(line: str) -> str:
 
 
 def _relevant_lines(section: Section, terms: list[str], idf: dict[str, float],
-                    k: int = 4) -> list[str]:
+                    k: int = 4, *, wants_number: bool = False) -> list[str]:
     """Vài dòng liên quan nhất trong mục, giữ nguyên thứ tự gốc.
 
     Trả cả mục thì đúng nhưng không ai đọc. Người hỏi "1 năm mấy ngày phép"
@@ -260,6 +330,13 @@ def _relevant_lines(section: Section, terms: list[str], idf: dict[str, float],
             continue
         hay = _strip_accents(line)
         score = sum(idf.get(t, 1.0) for t in terms if _count(t, hay))
+        # Hỏi "mấy ngày" mà dòng không có con số thì dòng đó không trả lời được.
+        if wants_number and score > 0:
+            score *= 2.2 if _line_has_number(line) else 0.5
+        # Dòng dài đương nhiên chứa nhiều từ khoá hơn — không có nghĩa là nó
+        # trả lời tốt hơn. Không chuẩn hoá thì một đoạn văn dài luôn thắng một
+        # dòng ngắn gọn kiểu "Quá nhiều: ≥ 63 ngày".
+        score /= 1.0 + math.log(1.0 + len(line) / 90.0)
         scored.append((score, i, line))
 
     if not scored:
@@ -302,7 +379,12 @@ def answer_from_coc(question: str, sections: list[Section] | None = None,
            for t in terms}
 
     _, _, s = hits[0]
-    lines = _relevant_lines(s, terms, idf)
+    wants_number = _asks_number(question)
+    # Câu hỏi đòi con số thì trả lời phải gọn — dài dòng là người đọc
+    # không thấy được con số nằm ở đâu.
+    lines = _relevant_lines(s, terms, idf,
+                            k=3 if wants_number else 4,
+                            wants_number=wants_number)
 
     out = [_plain(s.title)]
     out += [f"• {ln}" for ln in lines]

@@ -19,6 +19,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 
 import requests
 import yaml
@@ -26,6 +27,11 @@ from dotenv import find_dotenv, load_dotenv
 
 from inventory_days import load_excel_skus
 from qa import answer
+
+try:
+    from lark_base import load_base_skus
+except ImportError:  # noqa: BLE001
+    load_base_skus = None  # type: ignore[assignment]
 
 try:
     from coc import load_sections
@@ -106,6 +112,33 @@ class LarkPoller:
             raise RuntimeError(f"Gửi tin thất bại: {payload}")
 
 
+_LOCK_PATH = Path(__file__).resolve().parent.parent / "bot.lock"
+
+
+def _acquire_single_instance() -> "object | None":
+    """Chỉ cho 1 bản bot chạy. Chạy 2 bản thì mỗi câu bị trả lời 2 lần.
+
+    Dùng khoá file độc quyền: bản thứ hai mở không được thì tự thoát.
+    """
+    try:
+        f = open(_LOCK_PATH, "w")
+    except OSError:
+        return None                      # không tạo được khoá thì thôi, vẫn chạy
+    try:
+        if os.name == "nt":
+            import msvcrt
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        return "BUSY"
+    f.write(str(os.getpid()))
+    f.flush()
+    return f
+
+
 def _is_addressed(item: dict, bot_open_id: str, bot_name: str) -> bool:
     """Tin này có @mention đích danh bot không?"""
     for m in item.get("mentions") or []:
@@ -152,6 +185,11 @@ def main() -> int:
                         help="File dữ liệu tồn kho. BỎ TRỐNG được: khi đó bot chỉ trả lời "
                              "câu hỏi quy trình từ Code of Conduct, câu hỏi tồn kho sẽ "
                              "báo 'chưa có dữ liệu' thay vì bịa số.")
+    parser.add_argument("--base", action="store_true",
+                        help="Nạp tồn kho thẳng từ Lark Base thay vì file Excel. "
+                             "Số liệu luôn mới, không phụ thuộc file trên máy ai.")
+    parser.add_argument("--refresh-minutes", type=float, default=15.0,
+                        help="Bao lâu nạp lại tồn kho từ Base một lần (phút).")
     parser.add_argument("--chat-id", action="append",
                         help="Giới hạn ở nhóm cụ thể (lặp lại được). Bỏ trống = phục vụ MỌI nhóm bot được add vào.")
     parser.add_argument("--answer-all", action="store_true",
@@ -163,6 +201,13 @@ def main() -> int:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+    _lock = _acquire_single_instance()
+    if _lock == "BUSY":
+        logger.error("Đã có một bản bot đang chạy. Thoát để không trả lời 2 lần. "
+                     "Muốn chạy bản mới thì dừng bản cũ trước (bot_nen_STOP.bat).")
+        return 0
+
     load_dotenv(find_dotenv(usecwd=True))
 
     app_id = os.environ.get("LARK_APP_ID_INVENTORY") or os.environ["LARK_APP_ID"]
@@ -171,7 +216,11 @@ def main() -> int:
     dry_run = os.environ.get("DRY_RUN", "true").lower() != "false"
 
     source_cfg = None
-    if args.excel:
+    if args.base:
+        if load_base_skus is None:
+            logger.error("Thiếu src/lark_base.py — không dùng được --base.")
+            return 1
+    elif args.excel:
         with open(args.config, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
         source_cfg = dict(next(c for c in config["sources"].values()
@@ -179,11 +228,33 @@ def main() -> int:
         source_cfg["_excel_path"] = args.excel
         logger.info("Đã nạp %d SKU từ excel.", len(load_excel_skus(source_cfg)))
     else:
-        logger.warning("Không có --excel: bot chỉ trả lời câu hỏi quy trình (Code of "
-                       "Conduct). Câu hỏi tồn kho sẽ báo 'chưa có dữ liệu'.")
+        logger.warning("Không có --base hoặc --excel: bot chỉ trả lời câu hỏi quy "
+                       "trình (Code of Conduct). Câu hỏi tồn kho sẽ báo "
+                       "'chưa có dữ liệu'.")
+
+    # Cache tồn kho: gọi Base mỗi tin nhắn thì vừa chậm vừa tốn quota, mà số
+    # liệu cũng không đổi theo từng giây. Nạp lại theo chu kỳ là đủ.
+    _cache: dict[str, object] = {"skus": [], "at": 0.0}
 
     def load_skus():
-        return load_excel_skus(source_cfg) if source_cfg else []
+        if source_cfg:
+            return load_excel_skus(source_cfg)
+        if not args.base:
+            return []
+        age = time.monotonic() - float(_cache["at"])
+        if not _cache["skus"] or age > args.refresh_minutes * 60:
+            try:
+                _cache["skus"] = load_base_skus()
+                _cache["at"] = time.monotonic()
+                logger.info("Đã nạp %d mã tồn kho từ Lark Base.", len(_cache["skus"]))
+            except Exception:  # noqa: BLE001
+                # Base lỗi thì DÙNG LẠI số cũ còn hơn trả lời "chưa có dữ liệu";
+                # nhưng nếu chưa có gì trong cache thì đành chịu.
+                logger.exception("Không nạp được tồn kho từ Base")
+        return _cache["skus"]
+
+    if args.base:
+        load_skus()   # nạp ngay lúc khởi động để biết credential/scope có đúng không
 
     # Kiến thức nền: đọc 1 lần khi khởi động, không đọc lại mỗi tin nhắn.
     coc_sections = None

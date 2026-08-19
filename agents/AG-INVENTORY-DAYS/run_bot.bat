@@ -9,11 +9,18 @@ REM ============================================================
 setlocal
 
 REM --- Nhom Lark bot se phuc vu. ---
-REM   oc_2659fb0822ebf7de6291f11c1f5ce37c = KHHH noi bo (nhom that)
+REM   DE TRONG = phuc vu MOI nhom duoc add vao, tu bat nhom moi sau ~1 phut.
+REM   Dien 1 chat_id = ghim cung vao dung nhom do, nhom moi se KHONG duoc nghe.
+REM   oc_2659fb0822ebf7de6291f11c1f5ce37c = KHHH noi bo
 REM   oc_618134792f49a95d2f455314261c0215 = test AI
-set CHAT_ID=oc_618134792f49a95d2f455314261c0215
+REM   oc_e521377bc4d63c0516f825bb79eab59f = Sharing ai thich hoc cai moi
+set CHAT_ID=
 
-REM --- De trong = chi tra loi cau hoi quy trinh (Code of Conduct). ---
+REM --- Nguon ton kho ---
+REM   USE_BASE=1  -> doc thang tu Lark Base (so lieu luon moi). KHUYEN DUNG.
+REM   USE_BASE=0  -> doc file Excel, dien duong dan vao EXCEL=
+REM   Ca hai de trong -> bot chi tra loi cau hoi quy trinh.
+set USE_BASE=1
 set EXCEL=
 
 REM --- false = tra loi that vao nhom. true = chi in ra man hinh de test. ---
@@ -53,10 +60,12 @@ echo === Vi du: "chot PR ngay nao" / "nguong ton kho cua hang" ===
 echo === Bam Ctrl+C de dung. ===
 echo.
 
-if "%EXCEL%"=="" (
-  python bot_poll.py --chat-id %CHAT_ID%
-) else (
-  python bot_poll.py --chat-id %CHAT_ID% --excel "%EXCEL%"
-)
+REM CHAT_ID de trong -> khong truyen --chat-id -> bot tu quet moi nhom.
+set ARGS=
+if not "%CHAT_ID%"=="" set ARGS=--chat-id %CHAT_ID%
+if "%USE_BASE%"=="1" set ARGS=%ARGS% --base
+if not "%EXCEL%"=="" set ARGS=%ARGS% --excel "%EXCEL%"
+
+python bot_poll.py %ARGS%
 
 pause

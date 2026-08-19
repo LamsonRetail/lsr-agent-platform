@@ -27,7 +27,12 @@ IN_SCOPE = [
     ("chốt PR ngày nào", "4"),
     ("doanh thu khác GMV thế nào", "4"),
     ("cách tính tỷ trọng", "4.5"),
-    ("combo Vietful bị lỗi gì", "4.6"),
+    # v3 tách quy trình combo ra mục riêng 4.10 (v2 nằm chung trong 4.6).
+    ("combo Vietful bị lỗi gì", "4."),
+    ("ghép combo phải báo trước mấy ngày", "4.10"),
+    ("phiếu chuyển kho cần điền gì", "4.9"),
+    ("luân chuyển hàng tối thiểu bao nhiêu sản phẩm", "4.9"),
+    ("keeper test là gì", "0.3"),
     ("hoàn thành tác vụ nghĩa là gì", "4.7"),
     ("bài học Hazy Kem", "4.8"),
     ("lead time từ Bắc Ninh về kho hoả tốc Hà Nội", "4.4"),
