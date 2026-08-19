@@ -44,6 +44,27 @@ gcloud compute scp ~/.notebooklm/profiles/default/storage_state.json \
 `/opt/lsr-platform/secrets/` (chmod 600), tuyệt đối không commit.
 Khi hết hạn/đổi mật khẩu → login lại và copy đè; agent sẽ cảnh báo khi auth lỗi.
 
+### Phiên NotebookLM hết hạn (gặp 18/08/2026)
+
+Triệu chứng: sync báo `Authentication expired or invalid. Redirected to
+accounts.google.com` cho MỌI tài liệu → 0 nạp được.
+
+CLI `notebooklm` nằm trong **venv của dự án**, không phải global (`zsh: command not
+found: notebooklm` là vì gọi thiếu đường dẫn):
+
+```bash
+"/Users/ntranthi/LSR Legal Agent/.venv/bin/notebooklm" login
+```
+
+Nó ghi vào `~/.notebooklm/profiles/default/storage_state.json` — đúng chỗ `NLM_AUTH_PATH`
+trỏ tới, không cần copy tay. Trên VM thì copy file này lên
+`/opt/lsr-platform/secrets/notebooklm/` (chmod 600).
+
+⚠️ **`.env`: không để comment cuối dòng và không để khoảng trắng quanh dấu `=`.**
+Shell (`set -a; . ./.env`) tha, nhưng `docker compose env_file` thì lấy nguyên cả comment
+vào giá trị. Đã gặp thật cả hai lỗi: `LARK_APP_SECRET` bị thêm 1 space đầu (len 33/32) và
+`NLM_NOTEBOOK_KB_ID` + `NLM_AUTH_PATH` bị lẫn comment.
+
 ## 3. Group Pháp chế/Admin (thông báo + phê duyệt)
 
 Chốt 17/08/2026: dùng **một group Lark** cho cả thông báo và phê duyệt —
