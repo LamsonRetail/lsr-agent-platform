@@ -91,7 +91,22 @@ def _is_confirmed(draft_text: str) -> bool:
     return "Trạng thái: đã chốt" in draft_text
 
 
-def answer(q: str, ctx: dict, payload: dict) -> str:
+def working_note(ctx: dict) -> str:
+    """Dòng 'em đang làm gì' gửi TRƯỚC khi suy luận — để người hỏi thấy logic, không chờ mù.
+
+    Câu chữ lấy từ configs/reply_rules.json (ack_message) → sửa config là đổi, không deploy.
+    """
+    cfg = thailand_tools.load_config("reply_rules") or {}
+    ack = cfg.get("ack_message", "⏳ Em đang xử lý…")
+    hits = ctx.get("knowledge") or []
+    found = (f"thấy {len(hits)} mục liên quan: " + ", ".join(
+        (h.get("title") or "?")[:40] for h in hits[:3])) if hits else \
+        "chưa có mục nào đã duyệt khớp câu này"
+    return (f"{ack}\nEm đã kiểm: mốc BST · lịch mùa vụ · base target · kho tri thức "
+            f"({found}). Giờ em suy luận thêm rồi trả lời ngay ạ.")
+
+
+def answer(q: str, ctx: dict, payload: dict, notify=None) -> str:
     low = q.lower().strip()
 
     # --- Luồng 3: recording → transcript → biên bản nháp ---
@@ -152,8 +167,11 @@ def answer(q: str, ctx: dict, payload: dict) -> str:
         return hit
 
     # --- Phase 2: model với ngữ cảnh platform (LSR_MODEL_MODE=off/không CLI → về luật) ---
+    # Đây là nhánh DUY NHẤT chậm (vài giây) → báo trước "đang làm gì" rồi mới suy luận.
     if model.enabled():
-        out = model.complete(build_prompt(ctx, q), system=model.build_system())
+        if notify:
+            notify(working_note(ctx))
+        out = model.complete(build_prompt(ctx, q), system=model.lean_system())
         if out:
             return out
     return knowledge.NO_DATA
@@ -244,13 +262,17 @@ def handle(job: dict) -> str:
 
     ctx = api("GET", f"/v1/self/context?session_id={urllib.parse.quote(sid)}"
                      f"&user_ref={urllib.parse.quote(uref)}&q={urllib.parse.quote(q[:200])}")
-    reply_text = answer(q, ctx, payload)
 
-    if DRY_RUN and (job.get("reply_to") or {}).get("channel") in ("lark", "telegram"):
-        print(f"[DRY_RUN] không gửi ra {job['reply_to'].get('channel')}: {reply_text[:80]}")
-    else:
+    def send(text: str) -> None:
+        """Gửi 1 tin về đúng kênh của job. Gọi được NHIỀU lần (ack trước, trả lời sau)."""
+        if DRY_RUN and (job.get("reply_to") or {}).get("channel") in ("lark", "telegram"):
+            print(f"[DRY_RUN] không gửi ra {job['reply_to'].get('channel')}: {text[:80]}")
+            return
         # MỘT lời gọi cho mọi kênh — platform tự gửi đúng Lark/Telegram/web/A2A.
-        api("POST", f"/v1/self/jobs/{job['id']}/reply", {"text": reply_text})
+        api("POST", f"/v1/self/jobs/{job['id']}/reply", {"text": text})
+
+    reply_text = answer(q, ctx, payload, notify=send)
+    send(reply_text)
 
     api("POST", "/v1/self/session/turn", {"session_id": sid, "role": "user", "text": q,
                                           "user_ref": uref, "channel": job.get("channel")})

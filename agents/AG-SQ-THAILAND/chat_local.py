@@ -41,7 +41,8 @@ def _ctx() -> dict:
 
 
 def ask(q: str) -> str:
-    ans = consumer.answer(q, _ctx(), {})
+    # notify = in ngay dòng "em đang làm gì" (giống tin ack gửi ra Lark) rồi mới suy luận.
+    ans = consumer.answer(q, _ctx(), {}, notify=lambda t: print("\nploy >", t, flush=True))
     _TURNS.append({"role": "user", "text": q})
     _TURNS.append({"role": "assistant", "text": ans})
     return ans

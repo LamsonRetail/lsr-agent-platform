@@ -45,11 +45,57 @@ _HARD_RULES = """
   tháng · 8,0M THB ngày, rebase 22/07). Số ước tính ghi (ước tính).
 - Không tạo task, không lưu biên bản khi chủ trì chưa "chốt". Không hứa gửi tin cho ai.
 - Lương / giá vốn / thông tin cá nhân khách hàng: từ chối, chỉ về đúng bộ phận.
+
+## Độ dài (ảnh hưởng trực tiếp tốc độ trả lời — bắt buộc)
+
+- **Tối đa ~110 từ.** Không mở bài, không nhắc lại câu hỏi, không kết luận thừa.
+- Câu trả lời "chưa có trong kho": 1–2 câu + chỉ đúng nguồn cần mở. Không giải thích dài.
+- Liệt kê thì gạch đầu dòng ngắn, mỗi dòng ≤ 15 từ.
 """
 
 
 def enabled() -> bool:
     return MODE in ("auto", "on") and shutil.which(BIN) is not None
+
+
+_SYSTEM_CACHE: str | None = None
+_LEAN_CACHE: str | None = None
+
+
+def system() -> str:
+    """build_system() có cache — prompt không đổi giữa các lượt, đọc file 1 lần cho nhanh.
+
+    Bản ĐẦY ĐỦ (kèm skills) — dùng cho việc cần nhiều luật: dựng biên bản, báo cáo.
+    """
+    global _SYSTEM_CACHE
+    if _SYSTEM_CACHE is None:
+        _SYSTEM_CACHE = build_system()
+    return _SYSTEM_CACHE
+
+
+def lean_system() -> str:
+    """Bản RÚT GỌN cho hỏi đáp thường — đo được: nhanh hơn bản đầy đủ ~4 giây/câu.
+
+    Giữ đủ 4 luật không được nới (không bịa · có nguồn + base target · gate chốt biên bản ·
+    chặn nhạy cảm) + giới hạn độ dài. Persona lấy từ configs/persona.json.
+    """
+    global _LEAN_CACHE
+    if _LEAN_CACHE is None:
+        p = _read_json(os.path.join(_DIR, "configs", "persona.json")) or {}
+        name = p.get("name", "Ploy")
+        full = p.get("full_name", "trợ lý thị trường Thái Lan")
+        style = p.get("address_style", "xưng 'em', gọi 'anh/chị'")
+        tone = p.get("tone", "ngắn gọn, đi thẳng số liệu")
+        _LEAN_CACHE = (
+            f"Bạn là {name} — {full} của LamsonRetail. {style}; {tone}.\n"
+            "TRẢ LỜI TỐI ĐA 70 TỪ, không mở bài, không nhắc lại câu hỏi.\n"
+            "- Không bịa số, không bịa nguồn. Không có dữ liệu đã duyệt → nói 'chưa có trong kho' "
+            "rồi chỉ đúng nguồn cần mở. Số ước tính ghi (ước tính).\n"
+            "- Mọi số kèm nguồn + thời điểm + base target (9,3M THB tháng · 8,0M THB ngày, rebase 22/07).\n"
+            "- Không tạo task / không lưu biên bản khi chủ trì chưa 'chốt'. Không hứa gửi tin cho ai.\n"
+            "- Lương / giá vốn / thông tin cá nhân khách hàng: từ chối, chỉ về đúng bộ phận."
+        )
+    return _LEAN_CACHE
 
 
 def build_system() -> str:
@@ -84,7 +130,10 @@ def complete(prompt: str, system: str = "") -> str | None:
         return None
     full = (system + "\n\n=== CÂU HỎI (trả lời trực tiếp, tiếng Việt) ===\n\n" + prompt
             if system else prompt)
-    cmd = [shutil.which(BIN), "-p", full]
+    # --strict-mcp-config (không kèm --mcp-config) = KHÔNG nạp MCP server nào của máy —
+    # cắt hẳn phần khởi động chậm nhất của CLI; agent này không cần tool khi trả lời.
+    # --max-turns 1: 1 lượt là xong, không để model tự vòng lặp thêm (cắt thời gian chờ).
+    cmd = [shutil.which(BIN), "-p", full, "--strict-mcp-config", "--max-turns", "1"]
     if NAME:
         cmd += ["--model", NAME]
     # stdin phải ĐÓNG (CLI -p sẽ đợi stdin nếu là pipe) + bỏ env CLAUDE* (tránh xung đột
