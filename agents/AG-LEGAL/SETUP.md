@@ -3,7 +3,7 @@
 Mỗi mục dưới đây là một việc **con người phải làm** (agent không tự làm được vì cần
 mật khẩu/quyền admin). Làm xong tới đâu điền vào `.env` tới đó (copy từ `.env.example`).
 
-## 1. Cấp quyền bot vào Wiki pháp chế  ← đang chặn sync
+## 1. Cấp quyền bot vào Wiki pháp chế  ✅ ĐÃ XONG 18/08 (đọc được 56 node)
 
 Wiki space pháp chế: `7595876759661186785`
 (link: https://o4pvcegwn6b.sg.larksuite.com/wiki/ZK5zwtpbPi5cWFkrlEVleqkigjc)
@@ -151,13 +151,13 @@ Lưu ý vận hành:
 
 ## Checklist
 
-- [ ] Bot vào được wiki space (mục 1) — **chặn sync**
-- [ ] `storage_state.json` + notebook id (mục 2) — **chặn sync**
+- [x] Bot vào được wiki space (mục 1) — ✅ 18/08, đọc được 56 node
+- [ ] `storage_state.json` (mục 2) — ⚠️ **hết hạn 18/08, đang chặn sync** (0/50 nạp được)
 - [ ] Bot ở trong group `oc_2c44…4efb` (mục 3) — **chặn thông báo & phê duyệt**
 - [ ] **Email của Nguyễn Thị Anh** để `seed_roles.py` chạy được (mục 3)
-- [ ] LSR_AGENT_TOKEN (mục 4) — cần từ Phase 2 (chat)
+- [x] LSR_AGENT_TOKEN (mục 4) — ✅ agent `status=active` từ 14/08, 20 run
 - [ ] `instruction_block` đã publish (`GET /v1/self/context` ≠ null) — **điều kiện golive thật**
 - [ ] Sync lần đầu thành công (mục 5)
-- [ ] (Phase 3) Drive folder template hợp đồng + file mô tả field
+- [ ] (Phase 3) **Nội dung 8 mẫu hợp đồng trong Wiki** — hiện rỗng (12 ký tự/node). Mẫu lấy từ Wiki được (export Lark Doc → docx đã kiểm OK), không cần Drive folder riêng
 - [ ] (Phase 5) Danh sách nguồn luật uy tín khởi tạo
 - [ ] (Phase 6) Tên quy trình trình ký trên Lark Approval + checklist đầu mục hồ sơ
