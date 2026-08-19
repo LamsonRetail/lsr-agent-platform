@@ -227,6 +227,97 @@ def th_milestone_list() -> str:
     return "\n".join(lines)
 
 
+# Nhận diện BST và loại mốc từ câu hỏi → trả lời TRỌNG TÂM (feedback Hương 19/08: đừng
+# "học tủ" đọc cả bảng; hỏi BST nào thì chỉ nói BST đó, hỏi launching thì 1 dòng 1 mốc).
+_BST_ALIAS = {
+    "BST T10 (Color Trend)": ("t10", "tháng 10", "thang 10", "color trend", "aura", "ruby lock"),
+    "BST T9 (Special Booming - Bloomly/Stella/Chloe)": ("t9", "tháng 9", "thang 9", "booming", "bloomly", "stella", "chloe"),
+    "BST T11 (Thu Đông)": ("t11", "tháng 11", "thang 11", "thu đông", "thu dong"),
+    "BST Tote bag - VN (Roam/Kerry/Sienna)": ("tote", "roam", "kerry", "sienna"),
+    "BST Travel bag (Sora/Kaia/Lyra)": ("travel", "sora", "kaia", "lyra"),
+    "BST Tổng hợp (SP win)": ("tổng hợp", "tong hop", "sp win"),
+    "BST Giáng Sinh / Năm mới": ("giáng sinh", "giang sinh", "noel", "xmas", "christmas", "năm mới"),
+    "BST Ví (mới)": ("bst ví", "bst vi", "ví nhỏ", "wallet"),
+    "BST Tết VN (bán màu đỏ / cho Xmas)": ("tết vn", "tet vn"),
+    "BST Balo": ("balo", "backpack"),
+}
+_MS_ALIAS = {
+    "Launching Day": ("launching", "launch", "ra mắt", "ra mat", "lên sóng", "len song"),
+    "Xuống đơn hàng PO": ("xuống đơn", "xuong don", " po", "đặt hàng", "dat hang", "xuống đh"),
+    "Hàng về cho KOC": ("hàng về cho koc", "hang ve cho koc", "gửi hàng koc", "koc"),
+    "Mở bán chính thức": ("mở bán", "mo ban"),
+    "Chốt sản phẩm BST": ("chốt sản phẩm", "chot san pham", "chốt mẫu", "chot mau"),
+    "Bán test": ("bán test", "ban test", "tỷ trọng", "ty trong"),
+    "Hàng về số lượng lớn": ("số lượng lớn", "so luong lon", "sll", "hàng về kho"),
+}
+
+
+def _match_bst(q: str) -> str | None:
+    for name, keys in _BST_ALIAS.items():
+        if any(k in q for k in keys):
+            return name
+    return None
+
+
+def _match_milestone(q: str) -> str | None:
+    for name, keys in _MS_ALIAS.items():
+        if any(k in q for k in keys):
+            return name
+    return None
+
+
+def th_milestone_answer(q: str, today: str = "") -> str | None:
+    """Trả lời NGẮN đúng thứ được hỏi. None nếu câu hỏi không chỉ rõ BST nào."""
+    cfg = load_config("th_bst_milestones")
+    if not cfg:
+        return None
+    bst = _match_bst(q)
+    if not bst:
+        return None
+    ref = datetime.date.fromisoformat(today) if today else datetime.date.today()
+    rows = [m for m in cfg.get("milestones", []) if m["bst"] == bst and m.get("date")]
+    if not rows:
+        return None
+
+    want = _match_milestone(q)
+    if want:
+        hit = [m for m in rows if want in m["milestone"]]
+        if hit:
+            dates = sorted({m["date"] for m in hit})
+            if len(dates) == 1:
+                m = hit[0]
+                out = (f"**{bst} · {m['milestone']}: {_dmy(m['date'])}** "
+                       f"({_countdown(m['date'], ref)})")
+                if m.get("status") and ("🔴" in m["status"] or "QUÁ HẠN" in m["status"].upper()):
+                    out += f"\n{m['status']}"
+                return out + f"\n_nguồn: {m.get('source', '?')}_"
+            # nhiều nguồn ghi khác ngày → nói thẳng là đang lệch, không chọn hộ
+            lines = [f"⚠️ **{bst} · {want}** đang lệch giữa các nguồn — em không tự chọn:"]
+            for m in sorted(hit, key=lambda x: x["date"]):
+                lines.append(f"- {_dmy(m['date'])} — {m.get('source', '?')}")
+            lines.append("→ Cần chốt 1 nguồn chuẩn rồi cập nhật config.")
+            return "\n".join(lines)
+
+    # Có BST nhưng không rõ mốc nào → tóm tắt gọn đúng BST đó
+    launch = next((m.get("launch") for m in rows if m.get("launch")), None)
+    head = f"**{bst}**" + (f" — launching {_dmy(launch)} ({_countdown(launch, ref)})" if launch else "")
+    late = sorted([m for m in rows
+                   if datetime.date.fromisoformat(m["date"]) < ref and not m.get("done")],
+                  key=lambda x: x["date"])
+    nxt = sorted([m for m in rows
+                  if datetime.date.fromisoformat(m["date"]) >= ref and not m.get("done")],
+                 key=lambda x: x["date"])
+    lines = [head]
+    if late:
+        lines.append("🔴 Quá hạn: " + " · ".join(
+            f"{m['milestone']} {_dmy(m['date'])} ({-(datetime.date.fromisoformat(m['date']) - ref).days}n)"
+            for m in late[:3]))
+    if nxt:
+        lines.append("⏰ Mốc tới: " + " · ".join(
+            f"{m['milestone']} {_dmy(m['date'])}" for m in nxt[:3]))
+    return "\n".join(lines)
+
+
 @tool("mùa-vụ-mốc")
 def th_milestone_check(today: str = "", horizon: int = 21) -> str:
     """Mốc QUÁ HẠN + mốc tới trong `horizon` ngày; mốc lệch nguồn đẩy sang phần conflict."""
@@ -442,6 +533,10 @@ def route(q_low: str) -> str | None:
     trong consumer.answer(). Lưu ý: câu chứa 'chốt'/'duyệt' bị gate confirm bắt trước.
     """
     parts = []
+    # Hỏi rõ BST nào → trả lời TRỌNG TÂM 1-3 dòng, không đọc cả bảng.
+    focused = th_milestone_answer(q_low)
+    if focused:
+        return focused
     if any(k in q_low for k in _CONFLICT_Q):
         parts.append(th_milestone_conflict())
     elif any(k in q_low for k in _MILESTONE_Q):   # check đã kèm conflict ở cuối

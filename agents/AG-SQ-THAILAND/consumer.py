@@ -46,7 +46,13 @@ LATE_NOTE = ("_(Em vừa được bật lại nên trả lời trễ — tin c�
 RECORDING_TYPES = {"audio", "media", "file", "video"}
 TRANSCRIPT_HINTS = ("họp xong", "hop xong", "nội dung họp", "noi dung hop", "biên bản:",
                     "transcript", "ghi chú họp", "tóm tắt họp")
-GREET_WORDS = ("chào", "chao", "hello", "hi ", "xin chao")
+GREET_WORDS = ("chào", "chao", "hello", "xin chao")
+# "hi"/"hey" phải khớp theo TỪ, không phải chuỗi con — nếu không thì "khi nào" (chứa "hi ")
+# bị hiểu là lời chào và mọi câu hỏi "… khi nào" đều trả về lời giới thiệu.
+_GREET_RE = re.compile(r"(?:^|\s)(hi|hey|hí)(?:\s|$|!|\.|,)")
+# Câu có từ nghi vấn = đang HỎI, không phải ra lệnh chốt biên bản.
+_QUESTION_RE = re.compile(r"(khi nào|khi nao|ngày nào|ngay nao|bao giờ|bao gio|mấy|may gio|"
+                          r"thế nào|the nao|ra sao|bao nhiêu|\?)")
 CAPABILITY_WORDS = ("làm được gì", "lam duoc gi", "giúp gì", "giup gi", "bạn là ai")
 TASK_WORDS = ("tạo task", "tao task", "giao việc", "tạo đầu việc")
 
@@ -99,21 +105,27 @@ def is_real_confirm(low: str, ctx: dict) -> bool:
     """Gate HITL: chỉ coi là chủ trì chốt khi không có phủ định và không phải câu hỏi."""
     if not minutes.is_confirm(low):
         return False
-    if _NEG_CONFIRM.search(low) or low.rstrip().endswith("?"):
-        return False
-    return bool(minutes.find_draft(ctx)) or low.startswith(minutes.CONFIRM_WORDS)
+    if _NEG_CONFIRM.search(low) or _QUESTION_RE.search(low):
+        return False        # "chốt mẫu BST T10 khi nào?" là câu hỏi, không phải chốt biên bản
+    if minutes.find_draft(ctx):
+        return True
+    # Không có nháp: chỉ tính là confirm khi câu RẤT ngắn và bắt đầu bằng chữ chốt/duyệt
+    # (tránh nuốt "chốt mẫu BST T10 khi nào?", "hạn chốt KOC là ngày nào").
+    return low.startswith(minutes.CONFIRM_WORDS) and len(low) <= 25
 
 
 def _is_confirmed(draft_text: str) -> bool:
     return "Trạng thái: đã chốt" in draft_text
 
 
-def working_note(ctx: dict) -> str:
-    """Dòng 'em đang làm gì' gửi TRƯỚC khi suy luận — để người hỏi thấy logic, không chờ mù.
+def working_note(ctx: dict) -> str | None:
+    """Dòng 'em đang làm gì' gửi TRƯỚC khi suy luận. TẮT mặc định (Vinh: tin ack là rác).
 
-    Câu chữ lấy từ configs/reply_rules.json (ack_message) → sửa config là đổi, không deploy.
+    Bật lại bằng `ack_enabled: true` trong configs/reply_rules.json — không cần deploy.
     """
     cfg = thailand_tools.load_config("reply_rules") or {}
+    if not cfg.get("ack_enabled", False):
+        return None
     ack = cfg.get("ack_message", "⏳ Em đang xử lý…")
     hits = ctx.get("knowledge") or []
     found = (f"thấy {len(hits)} mục liên quan: " + ", ".join(
@@ -170,7 +182,7 @@ def answer(q: str, ctx: dict, payload: dict, notify=None) -> str:
     # --- Chào hỏi / năng lực ---
     if any(w in low for w in CAPABILITY_WORDS):
         return CAPABILITY
-    if any(w in low for w in GREET_WORDS):
+    if any(w in low for w in GREET_WORDS) or _GREET_RE.search(low):
         return INTRO
 
     # --- Ploy: bối cảnh thị trường Thái từ configs/ (mùa vụ, mốc BST, base target...) ---
@@ -186,8 +198,9 @@ def answer(q: str, ctx: dict, payload: dict, notify=None) -> str:
     # --- Phase 2: model với ngữ cảnh platform (LSR_MODEL_MODE=off/không CLI → về luật) ---
     # Đây là nhánh DUY NHẤT chậm (vài giây) → báo trước "đang làm gì" rồi mới suy luận.
     if model.enabled():
-        if notify:
-            notify(working_note(ctx))
+        note = working_note(ctx)
+        if notify and note:
+            notify(note)
         out = model.complete(build_prompt(ctx, q), system=model.lean_system())
         if out:
             return out
@@ -305,7 +318,28 @@ def handle(job: dict) -> str:
     return reply_text
 
 
+def single_instance_or_exit():
+    """Chỉ cho 1 tiến trình Ploy chạy cùng lúc.
+
+    19/08: từng có 6 consumer chạy song song (lệnh kill không khớp tên tiến trình thật) →
+    bản CŨ giành job của bản mới, người dùng nhận câu trả lời sai/lặp. Khoá file chặn hẳn.
+    """
+    import fcntl
+    import tempfile
+    path = os.path.join(tempfile.gettempdir(), f"ploy-{AGENT_ID}.lock")
+    f = open(path, "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print(f"⚠️  Đã có một Ploy đang chạy (khoá {path}) — thoát để tránh trả lời trùng.")
+        raise SystemExit(0)
+    f.write(str(os.getpid()))
+    f.flush()
+    return f            # giữ tham chiếu để khoá không bị thu hồi
+
+
 def main() -> None:
+    _lock = single_instance_or_exit()      # noqa: F841 — giữ khoá suốt đời tiến trình
     if not TOKEN:
         print("⚠️  thiếu LSR_AGENT_TOKEN — xin token ở Console hoặc chạy scripts/lsr_adopt.py")
     print(f"Squad Thái Lan chạy — agent={AGENT_ID} DRY_RUN={DRY_RUN} → {PLATFORM}")

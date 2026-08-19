@@ -4,6 +4,10 @@
   "group_policy": "Trong nhóm: chỉ trả lời khi được @mention hoặc gọi tên trigger.",
   "p2p_policy": "Chat riêng: trả lời người trong th_p2p_partners.",
   "thread_policy": "Tag trong thread → trả lời đúng trong thread đó.",
+  "ack_enabled": false,
   "ack_message": "⏳ Em đang xử lý…",
+  "ack_note": "Vinh tắt tin ack ngày 19/08: câu 'em đang xử lý / em đã kiểm…' là tin rác, không cần thiết. Đổi ack_enabled=true nếu sau này muốn bật lại (khi câu trả lời chậm hơn ~15s).",
+  "escalate_to": "Vinh (CM)",
+  "khong_neu_email": "TUYỆT ĐỐI không nêu email nội bộ của ai trong câu trả lời (kể cả owner kỹ thuật của agent). Cần chỉ người thì chỉ nói 'hỏi Vinh (CM)'.",
   "note": "Việc lọc mention/routing nằm ở event gateway + ingress của platform; config này là luật ứng xử để agent tự kiểm."
 }

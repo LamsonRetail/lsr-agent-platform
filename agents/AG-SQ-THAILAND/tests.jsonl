@@ -19,3 +19,6 @@
 {"q": "abc xyz gì đó không liên quan", "expect": ["chưa có", "trả lời **ngay**", "biên bản"]}
 {"q": "em ơi em có biết văn hoá LSR không", "expect": ["HỌC HỎI", "INTEGRITY", "9 hành vi"]}
 {"q": "lịch sử công ty lamson retail thế nào", "expect": ["2014", "HÀ TÚI", "Top 1 Đông Nam Á"]}
+{"q": "BST T10 khi nào launching", "expect": ["08/10/2026"]}
+{"q": "bst tote launching ngày nào", "expect": ["07/09/2026"]}
+{"q": "chốt mẫu BST T10 khi nào", "expect": ["20/07/2026", "QUÁ HẠN"]}
