@@ -759,6 +759,9 @@ def route(q_low: str) -> str | None:
     who = person_lookup(q_low)
     if who:
         return who
+    theo_ten = th_person_by_name(q_low)
+    if theo_ten:
+        return theo_ten
     # Tin NÊU ngày/mốc (không phải câu hỏi) → đối chiếu với dữ liệu của em, góp ý nếu lệch.
     # Quyền Vinh cấp 19/08: được feedback về VIỆC và SỐ, không nhận xét con người.
     if len(q_low) < 220 and not any(k in q_low for k in ("?", "khi nào", "ngày nào", "bao giờ")):
@@ -1095,52 +1098,143 @@ def _name_tokens(ten: str):
     return toks, nicks
 
 
-def person_lookup(q_low: str) -> str | None:
-    """Câu hỏi nhắc ĐÍCH DANH một người trong danh bạ TH → 1 dòng vị trí.
+def _pool_nguoi():
+    """Danh bạ Ploy giữ: squad TH → MATE MADE TH (đã đóng) → liên phòng ban (lsr_people)."""
+    d = load_config("th_people") or {}
+    ngoai = load_config("lsr_people") or {}
+    pool = (list(d.get("nguoi", []))
+            + [dict(x, nhom="MATE MADE TH (đã đóng)")
+               for x in (d.get("mate_made_th_da_dong", {}).get("nguoi") or [])])
+    # Lark ghi một số người kèm hậu tố "(B)" → cùng một người có thể nằm ở cả hai danh
+    # bạ. Ưu tiên bản của squad TH, bỏ bản trùng tên gốc ở danh bạ liên phòng ban.
+    da_co = {r["ten"].partition("(")[0].strip().lower() for r in pool}
+    pool += [dict(x, ngoai_squad=True) for x in (ngoai.get("nguoi") or [])
+             if x["ten"].partition("(")[0].strip().lower() not in da_co]
+    return pool
 
-    Tên người Việt trùng từ thường/địa danh rất nhiều ("Thái" trong "Thái Lan",
-    "Trang", "Chi", "Ngân"...). Vì vậy 3 mức, chặt trước lỏng sau:
+
+def _dong_nguoi(r) -> str:
+    cd = r.get("chuc_danh") or r.get("chuc_danh_cu", "")
+    if r.get("ngoai_squad"):
+        bp = r.get("bo_phan", "")
+        return f"**{r['ten']}** — {cd}" + (f" · {bp}" if bp else "") + " _(ngoài squad TH)_"
+    extra = (" _(MATE MADE TH đã đóng 19/08 — vai trò mới chờ Vinh xác nhận)_"
+             if "chuc_danh_cu" in r else "")
+    return f"**{r['ten']}** — {cd}{extra}"
+
+
+# Tên người Việt trùng từ thường/địa danh rất nhiều ("Thái" trong "Thái Lan", "Trang",
+# "Chi", "thành công"...). Chỉ chặn khi tên nằm lẫn trong câu; khi người hỏi gọi thẳng
+# tên ("ai tên Tùng") thì không chặn nữa.
+_AMBIG = {"thái", "lan", "trang", "chi", "anh", "linh", "thu", "ngân", "dương", "minh",
+          "ngọc", "tùng", "huy", "đức", "hạnh", "nga", "hòa", "hoà", "thảo", "giang",
+          "nguyễn", "trần", "lê", "phạm", "hoàng", "vũ", "đinh", "bùi", "thị", "văn",
+          "công", "ty", "thành", "toàn"}
+_ASK_PERSON = ("là ai", "vị trí nào", "vi tri nao", "làm gì", "lam gi", "phụ trách gì",
+               "chức danh", "chuc danh", "là nhân sự", "la nhan su", "thuộc team", "ở team",
+               "trong team", "chức vụ", "chuc vu", "ai là", "làm ở", "phụ trách mảng")
+# Câu gọi thẳng tên: "ai tên là Tín", "có ai tên Khôi không", "Tín là ai"
+_NAME_ASK = (
+    re.compile(r"(?:có )?ai (?:tên|ten) (?:là |la )?([a-zà-ỹđ]{2,15})"),
+    re.compile(r"(?:tên|ten) (?:là |la )?([a-zà-ỹđ]{2,15})\s*(?:không|khong|ko|\?|$)"),
+    re.compile(r"^([a-zà-ỹđ]{2,15}) (?:là ai|la ai|làm gì|lam gi|ở team|o team|vị trí nào)"),
+)
+_KHONG_PHAI_TEN = {"ai", "gì", "gi", "nào", "nao", "người", "nguoi", "team", "nhân", "nhan",
+                   "bao", "mấy", "may", "sao", "đó", "do", "này", "nay", "công", "ty"}
+
+
+def _khop(word: str, q_low: str):
+    return re.search(r"(?:^|\s)" + re.escape(word) + r"(?:\s|$|\?|,|\.|!|:)", q_low)
+
+
+def person_lookup(q_low: str, ten_tran: bool = False) -> str | None:
+    """Câu nhắc ĐÍCH DANH người trong danh bạ → 1 dòng vị trí. None nếu không rõ.
+
+    3 mức, chặt trước lỏng sau:
       1. cụm 2 từ liền nhau trong tên ("thu hương", "thành khôi") — luôn tính
       2. nickname Thái trong ngoặc ("hom", "prim") — luôn tính
-      3. một từ trong tên, CHỈ khi câu đang hỏi về người VÀ từ đó không dễ nhầm
+      3. một từ trong tên — chỉ khi câu đang hỏi về người và từ đó không dễ nhầm
+    ten_tran=True: đầu vào đã là tên rút riêng ra khỏi câu → bỏ cả 2 điều kiện của mức 3,
+    và nếu nhiều người trùng tên thì liệt kê hết thay vì đoán một người.
     """
-    d = load_config("th_people") or {}
-    if not d:
+    pool = _pool_nguoi()
+    if not pool:
         return None
-    AMBIG = {"thái", "lan", "trang", "chi", "anh", "linh", "thu", "ngân", "dương", "minh",
-             "ngọc", "tùng", "huy", "đức", "hạnh", "nga", "hòa", "hoà", "thảo", "giang",
-             "nguyễn", "trần", "lê", "phạm", "hoàng", "vũ", "đinh", "bùi", "thị", "văn"}
-    ASK = ("là ai", "vị trí nào", "vi tri nao", "làm gì", "lam gi", "phụ trách gì",
-           "chức danh", "chuc danh", "là nhân sự", "la nhan su", "thuộc team", "ở team",
-           "trong team", "chức vụ", "chuc vu", "ai là", "làm ở", "phụ trách mảng")
-    asking = any(k in q_low for k in ASK)
-    pool = list(d.get("nguoi", [])) + [dict(x, nhom="MATE MADE TH (đã đóng)")
-                                       for x in (d.get("mate_made_th_da_dong", {}).get("nguoi") or [])]
-
-    def line(r):
-        cd = r.get("chuc_danh") or r.get("chuc_danh_cu", "")
-        extra = (" _(MATE MADE TH đã đóng 19/08 — vai trò mới chờ Vinh xác nhận)_"
-                 if "chuc_danh_cu" in r else "")
-        return f"**{r['ten']}** — {cd}{extra}"
-
-    def has(word):
-        return re.search(r"(?:^|\s)" + re.escape(word) + r"(?:\s|$|\?|,|\.|!|:)", q_low)
-
+    asking = ten_tran or any(k in q_low for k in _ASK_PERSON)
     for r in pool:                                  # 1) cụm 2 từ
         toks, _ = _name_tokens(r["ten"])
-        if any(has(f"{toks[i]} {toks[i + 1]}") for i in range(len(toks) - 1)):
-            return line(r)
+        if any(_khop(f"{toks[i]} {toks[i + 1]}", q_low) for i in range(len(toks) - 1)):
+            return _dong_nguoi(r)
     for r in pool:                                  # 2) nickname Thái
         _, nicks = _name_tokens(r["ten"])
-        if any(len(n) >= 3 and has(n) for n in nicks):
-            return line(r)
+        if any(len(n) >= 3 and _khop(n, q_low) for n in nicks):
+            return _dong_nguoi(r)
     if not asking:
         return None
-    for r in pool:                                  # 3) một từ, chỉ khi hỏi về người
+    hits = []
+    for r in pool:                                  # 3) một từ trong tên
         toks, _ = _name_tokens(r["ten"])
-        if any(len(t) >= 3 and t not in AMBIG and has(t) for t in toks):
-            return line(r)
+        for t in toks:
+            if len(t) < 3 or not _khop(t, q_low):
+                continue
+            if t in _AMBIG and not ten_tran:
+                continue
+            hits.append(_dong_nguoi(r))
+            break
+    if not hits:
+        return None
+    if len(hits) == 1:
+        return hits[0]
+    return f"Có {len(hits)} người trùng tên:\n" + "\n".join("- " + h for h in hits[:5])
+
+
+def _ten_trong_cau(q_low: str) -> str | None:
+    """Rút tên người khỏi câu gọi thẳng tên. None nếu câu không thuộc dạng đó."""
+    for rx in _NAME_ASK:
+        m = rx.search(q_low)
+        if m:
+            ten = m.group(1).strip()
+            return None if ten in _KHONG_PHAI_TEN else ten
     return None
+
+
+def _ghi_nguoi_chua_biet(ten: str) -> None:
+    """Tên bị hỏi mà danh bạ chưa có → ghi lại. Tác vụ quét 08:07 hôm sau tra Lark dưới
+    quyền Vinh rồi bổ sung vào configs/lsr_people.json → lần sau em trả lời được."""
+    f = os.path.join(os.path.dirname(os.path.abspath(__file__)), "memory", "nguoi-chua-biet.md")
+    try:
+        cu = open(f, encoding="utf-8").read() if os.path.exists(f) else (
+            "# Tên bị hỏi mà danh bạ chưa có\n\n"
+            "Tác vụ quét hằng ngày tra danh bạ Lark rồi bổ sung vào "
+            "`configs/lsr_people.json`, sau đó xoá dòng ở đây.\n\n")
+        if f"- {ten} " in cu:
+            return
+        with open(f, "w", encoding="utf-8") as fh:
+            fh.write(cu.rstrip("\n") + f"\n- {ten} — được hỏi ngày "
+                     f"{datetime.date.today().strftime('%d/%m/%Y')}\n")
+    except Exception:
+        pass
+
+
+def th_person_by_name(q_low: str) -> str | None:
+    """Câu gọi thẳng tên người → tra danh bạ. Không có thì nói rõ em đang giữ những gì.
+
+    KHÔNG được nói "em không truy cập danh bạ nhân sự" — em CÓ danh bạ, chỉ là chưa có
+    người này. Nói sai chỗ này làm người dùng tưởng em không có quyền.
+    """
+    ten = _ten_trong_cau(q_low)
+    if not ten:
+        return None
+    co = person_lookup(ten, ten_tran=True)
+    if co:
+        return co
+    n_th = len((load_config("th_people") or {}).get("nguoi") or [])
+    n_ngoai = len((load_config("lsr_people") or {}).get("nguoi") or [])
+    _ghi_nguoi_chua_biet(ten.title())
+    return (f"Không có ai tên **{ten.title()}** trong danh bạ em đang giữ "
+            f"({n_th} người squad TH + {n_ngoai} người liên phòng ban).\n"
+            f"Em ghi lại rồi — mai quét danh bạ Lark xong em trả lời được. Cần ngay thì "
+            f"anh/chị tra Lark Contacts hoặc hỏi Vinh (CM).")
 
 
 @tool("lsr-chung")
