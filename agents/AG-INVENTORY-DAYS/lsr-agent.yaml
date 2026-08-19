@@ -1,0 +1,79 @@
+apiVersion: lsr/v1
+agent:
+  id: AG-INVENTORY-DAYS
+  name: Inventory Days Monitor
+  version: 0.3.0
+  owner: hoangmaithao252@gmail.com
+  squad: SUPPLY-CHAIN
+  is_squad_agent: false
+  connect_mode: bot
+  description: >
+    Giám sát chỉ tiêu ngày tồn kho (DOI) theo 4 nguồn (Hapas VN, MateMade VN,
+    Hapas TL, Nguyên vật liệu), cảnh báo khi dưới ngưỡng an toàn hoặc tồn dư,
+    và tự tính số lượng cần đặt thêm để đưa về target — gửi báo cáo vào nhóm
+    Lark trước cuộc họp S&OP. Đồng thời trả lời câu hỏi về quy trình vận hành
+    của phòng KHHH dựa trên Code of Conduct.
+
+lark:
+  connect_mode: bot
+  bot:
+    app: custom                 # app Lark riêng của agent này (không dùng platform-shared)
+    app_name: ANN_KHHH          # tên bot trên Lark Developer Console
+    app_id: cli_aaf6d3a61078ded4   # secret nằm trong .env, KHÔNG commit
+    scopes_active:              # đã verify bằng gọi API thật
+      - im:chat                 # lấy danh sách nhóm + thành viên
+      - im:message              # gửi tin vào nhóm
+      - im:chat.members:bot_access
+    scopes_missing:
+      - im:message.group_msg    # ĐỌC tin nhắn nhóm — cần nếu muốn agent trả lời câu hỏi
+    chat_ids:
+      - oc_2659fb0822ebf7de6291f11c1f5ce37c   # "KHHH nội bộ" — nhóm làm việc thật
+      # - oc_618134792f49a95d2f455314261c0215 # "test AI" — nhóm test
+    event_webhook: https://collector.lsr.internal/lark/events
+
+runtime:
+  sdk: claude-agent-sdk
+  auth: subscription          # đăng nhập subscription của owner (không API key)
+  model: claude-sonnet-5
+
+prompt:
+  path: system_prompt.md
+  version: 0.2.0
+  ref: main
+
+# Kiến thức nền. Bot poll (src/bot_poll.py) nạp 1 lần khi khởi động qua
+# src/coc.py; câu hỏi không thuộc nhóm tồn kho sẽ được tra ở đây.
+knowledge:
+  loader: src/coc.py
+  docs:
+  - path: knowledge/CODE_OF_CONDUCT_KHHH.md
+    name: Code of Conduct KHHH
+    version: v2
+    updated: 2026-08-17
+    description: >
+      Sổ tay vận hành phòng Kế hoạch Hàng hoá — nguyên tắc làm việc, nhịp S&OP,
+      quy tắc PR/PO, ngưỡng tồn kho theo brand, phối hợp liên phòng ban, bài học
+      sự cố, từ điển viết tắt. Nguồn sự thật cho mọi câu hỏi về quy trình.
+    source: >
+      Lark Wiki SUPPLY CHAIN DEPARTMENT (PLANNING, 01_SOP, 03_REPORTS),
+      LAMSON RETAIL INFORMATION_2026, THÔNG TIN KHHH, HAPAS_Inventory Policy,
+      LOGIC LUÂN CHUYỂN HÀNG HOÁ, lịch sử nhóm chat KHHH nội bộ.
+
+skills:
+  - {name: bigquery, type: mcp}    # nguồn dữ liệu đích (hiện tạm đọc excel)
+  - {name: lark-im,  type: mcp}    # gửi báo cáo/cảnh báo vào nhóm
+
+telemetry:
+  enabled: true
+  collector: https://collector.lsr.internal
+
+tests:
+  suite: tests/agent_tests.yaml
+  extra:
+    # cd src && python ../tests/test_coc.py
+    - tests/test_coc.py   # tra cứu Code of Conduct: hỏi gì ra mục nào, và
+                          # câu ngoài phạm vi phải trả lời "chưa có mục này"
+
+schedule:
+  # Chạy trước cuộc họp S&OP — bật khi đã chốt lịch họp thật.
+  - {cron: "0 8 * * 1", task: weekly_sop_report, enabled: false}

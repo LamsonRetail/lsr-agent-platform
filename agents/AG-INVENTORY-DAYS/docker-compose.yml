@@ -1,0 +1,37 @@
+# Chạy bot ANN_KHHH 24/7 trên VM.  docker compose up -d --build
+#
+# Secret KHÔNG nằm trong file này — đọc từ .env cùng thư mục (đã .gitignore).
+# Tối thiểu .env cần:
+#   LARK_APP_ID_INVENTORY=cli_...
+#   LARK_APP_SECRET_INVENTORY=...
+services:
+  ann-khhh:
+    build: .
+    container_name: ann-khhh
+    environment:
+      LARK_APP_ID_INVENTORY: ${LARK_APP_ID_INVENTORY:?thiếu app_id trong .env}
+      LARK_APP_SECRET_INVENTORY: ${LARK_APP_SECRET_INVENTORY:?thiếu app_secret trong .env}
+      LARK_DOMAIN: ${LARK_DOMAIN:-https://open.larksuite.com}
+
+      # false = trả lời thật vào nhóm. Lần deploy đầu nên để true và xem log.
+      DRY_RUN: ${DRY_RUN:-true}
+
+      # Nhóm bot phục vụ, cách nhau bởi dấu phẩy.
+      # MẶC ĐỊNH ĐỂ TRỐNG = phục vụ MỌI nhóm bot được add vào, tự bắt nhóm mới.
+      CHAT_IDS: ${CHAT_IDS:-}
+
+      # true = đọc tồn kho thẳng từ Lark Base "QL KẾ HOẠCH HÀNG HÓA HAPAS".
+      # Trên cloud phải dùng cách này — không có file Excel của máy cá nhân.
+      USE_BASE: ${USE_BASE:-true}
+      REFRESH_MINUTES: ${REFRESH_MINUTES:-15}
+
+      # Chỉ dùng khi KHÔNG bật USE_BASE. Phải mount volume vào container.
+      EXCEL_PATH: ${EXCEL_PATH:-}
+
+      ANSWER_ALL: ${ANSWER_ALL:-false}
+      POLL_INTERVAL: ${POLL_INTERVAL:-3}
+
+    restart: unless-stopped        # VM reboot -> bot tự lên lại
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
