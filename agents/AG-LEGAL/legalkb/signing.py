@@ -9,7 +9,14 @@ Hai nguyên tắc không được phá:
   - **Agent không bao giờ chặn hồ sơ.** Quá SLA hoặc engine lỗi → `auto_passed` kèm ghi
     chú "chưa rà soát kịp". Máy không được làm nghẽn quy trình người.
 
-⚠️ TRẠNG THÁI: chạy **shadow**. Đúng chuẩn thì hồ sơ phải đến từ **Lark Approval**
+⚠️ TRẠNG THÁI: chạy **shadow** — và đã biết vì sao không thoát shadow được bằng broker
+tenant token. Kiểm live 19/08/2026: cả `approvals search` lẫn `instances get` của Lark
+**chỉ nhận user identity**, bot/tenant token bị từ chối ngay ở tầng API. Nên muốn agent
+đọc/ghi instance thật thì platform phải giữ + refresh **user token** của account agent
+(`ann_legal@hapas.vn`) — yêu cầu C8 — rồi mới bọc được broker approval (C5).
+Nói cách khác: **C5 phụ thuộc C8**, không phải hai việc song song.
+
+Trạng thái cũ ghi ở đây: Đúng chuẩn thì hồ sơ phải đến từ **Lark Approval**
 (`channel=lark_approval`) và báo cáo phải ghi comment vào instance — nhưng broker
 platform chưa có nhóm Approval (yêu cầu core **C5**), và agent KHÔNG được tự gọi Approval
 API. Vì vậy hiện nhận hồ sơ qua chat/nhóm trình ký và trả báo cáo bằng tin nhắn.
