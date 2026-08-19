@@ -1,0 +1,29 @@
+{
+  "owner_config": "Vinh",
+  "as_of": "2026-08-19",
+  "nguyen_tac": "TRƯỚC KHI nói 'chưa có', phải thử hỏi agent giữ dữ liệu đó qua A2A. Chỉ nói chưa có khi agent kia cũng không có, hoặc chưa được cấp quyền gọi.",
+  "routing": [
+    {"chu_de": "Doanh số / doanh thu / P&L / số kinh doanh (cả tập đoàn, BigQuery)", "agent": "AG-JENNY-BOD", "ten": "Jenny - LSR BOD Assistant", "nang_luc": "tra số liệu kinh doanh trên BigQuery (đọc-chỉ) + cảnh báo bất thường, biên bản họp", "can_call": false},
+    {"chu_de": "Tồn kho / ROAS / tỷ lệ hoàn / hoa hồng affiliate của MATE MADE (Shopee, TikTok)", "agent": "AG-KD-MATE-MADE", "ten": "LYLY", "nang_luc": "số vận hành sàn MATE MADE", "can_call": false},
+    {"chu_de": "Số BigQuery / Lark Base / biên bản họp Lark Meeting", "agent": "AG-DATA-SUPPORT", "ten": "Data Support", "nang_luc": "BigQuery đọc-chỉ · Lark Base team Data · biên bản họp Lark Meeting", "can_call": true},
+    {"chu_de": "Logistics / kho vận (cấp tập đoàn)", "agent": "AG-GIAAN", "ten": "Gia An — Logistics Control", "nang_luc": "kiểm soát logistics", "can_call": false},
+    {"chu_de": "Nhà cung cấp / báo giá / tiến độ sourcing", "agent": "AG-SOURCING", "ten": "Sourcing", "nang_luc": "tri thức NCC · quy trình duyệt báo giá · tiến độ sourcing", "can_call": false},
+    {"chu_de": "Tài chính - Kế toán (quy trình, tri thức FA)", "agent": "AG-HARRY", "ten": "Harry (Magic LSR)", "nang_luc": "kho tri thức & quy trình FA, có trích nguồn", "can_call": false},
+    {"chu_de": "Tri thức chung toàn platform", "agent": "AG-LSR-BRAIN", "ten": "LSR Brain", "nang_luc": "brain chung, dedupe tri thức, trả lời kèm trích nguồn", "can_call": false},
+    {"chu_de": "Biên bản họp (gỡ băng)", "agent": "AG-MINH-ANH", "ten": "Minh Anh", "nang_luc": "biên bản họp, mẫu tích hợp Lark/Telegram", "can_call": false},
+    {"chu_de": "Quảng cáo / báo cáo tuần-tháng kinh doanh online", "agent": "AG-MAI-KDONLINE", "ten": "MAI", "nang_luc": "quy trình 10 bước quảng cáo, báo cáo tuần/tháng", "can_call": false},
+    {"chu_de": "Pháp lý / hợp đồng", "agent": "AG-LEGAL", "ten": "Legal Agent", "nang_luc": "tra cứu pháp lý nội bộ, rà soát điều khoản", "can_call": false},
+    {"chu_de": "Nhân sự (mức tổng hợp)", "agent": "AG-HR", "ten": "HR Agent", "nang_luc": "chưa khai", "can_call": false},
+    {"chu_de": "BI / dashboard", "agent": "AG-BI", "ten": "Nga BI Agent", "nang_luc": "báo cáo BI, dashboard số liệu kinh doanh", "can_call": false}
+  ],
+  "can_admin_cap_quyen_a2a": [
+    "AG-JENNY-BOD — để lấy số doanh số/P&L sống từ BigQuery (Vinh chỉ định 19/08)",
+    "AG-KD-MATE-MADE (LYLY) — để lấy tồn kho / ROAS / tỷ lệ hoàn của MATE MADE",
+    "AG-GIAAN — logistics cấp tập đoàn",
+    "AG-SOURCING — NCC & báo giá (liên quan giá vốn NVL Thái đang cao gấp đôi VN)",
+    "AG-MINH-ANH — biên bản họp gỡ băng",
+    "AG-LSR-BRAIN — tri thức chung"
+  ],
+  "⚠️_mira_chua_co_tren_platform": "Bot **Mira - KHHH** (app Lark cli_aaf6d3370938dee7, trả lời tồn kho/SKU/PO trong nhóm sharing) KHÔNG có trong danh bạ agent của platform → Ploy chưa gọi A2A được. Muốn hỏi Mira thì (a) chủ Mira register agent lên platform rồi cấp grant, hoặc (b) tạm thời tag Mira trong nhóm Lark để người hỏi.",
+  "luu_y": "Danh sách can_call lấy từ /v1/self/directory ngày 19/08. Tool th_agents() đọc live nên luôn đúng thực tế; config này là bảng chủ đề → agent."
+}

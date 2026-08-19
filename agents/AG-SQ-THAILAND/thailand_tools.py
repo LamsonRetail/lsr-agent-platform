@@ -192,6 +192,11 @@ def th_numbers_snapshot() -> str:
     return "\n".join(lines)
 
 
+def _with_agent_hint(text: str, q_low: str) -> str:
+    h = agent_hint(q_low)
+    return f"{text}\n\n{h}" if h else text
+
+
 @tool("báo-cáo", status="stub")
 def th_numbers_read(period: str = "", brand: str = "") -> str:
     """Đọc DT/LNĐG/%MTD LIVE từ 3 doc KQKD — cần connector Lark (bản chốt: th_numbers_snapshot)."""
@@ -606,11 +611,11 @@ def route(q_low: str) -> str | None:
     if any(k in q_low for k in _HOWWORK_Q):
         return ploy_how_i_work()
     if any(k in q_low for k in _LOGISTICS_Q):
-        parts.append(th_logistics(q_low))
+        parts.append(_with_agent_hint(th_logistics(q_low), q_low))
     if any(k in q_low for k in _DIGEST_Q):
         parts.append(th_daily_digest())
     if any(k in q_low for k in _NUMBERS_Q):
-        parts.append(th_numbers_snapshot())
+        parts.append(_with_agent_hint(th_numbers_snapshot(), q_low))
     if any(k in q_low for k in _TARGET_Q):
         parts.append(th_base_targets())
     if any(k in q_low for k in _KB_Q):
@@ -621,6 +626,10 @@ def route(q_low: str) -> str | None:
         parts.append(lsr_culture())
     if any(k in q_low for k in _COMPANY_Q):
         parts.append(lsr_company())
+    if not parts:
+        h = agent_hint(q_low)
+        if h:
+            return ("Mảng này em không giữ số.\n" + h.strip("_"))
     # Ghép tối đa 2 mục — hỏi 1 câu không nên nhận về cả 4 bảng.
     return "\n\n".join(parts[:2]) if parts else None
 
@@ -845,6 +854,52 @@ def th_ask_agent(who: str, question: str, wait: int = 40) -> str:
             return f"**{target}** xử lý lỗi: {res.get('last_error') or 'không rõ'}"
     return (f"Đã gửi câu hỏi cho **{target}** (mã {req_id}) nhưng chưa có trả lời trong "
             f"{wait}s. Em sẽ không đoán thay — anh/chị hỏi lại sau ít phút ạ.")
+
+
+_TOPIC_KEYS = {
+    "AG-JENNY-BOD": ("doanh số", "doanh so", "doanh thu", "p&l", "pnl", "bigquery", "số sống",
+                     "hôm nay bao nhiêu", "toàn tập đoàn", "cả tập đoàn", "việt nam", "vn "),
+    "AG-KD-MATE-MADE": ("tồn kho mate", "roas", "tỷ lệ hoàn", "ty le hoan", "hoa hồng affiliate",
+                        "affiliate mate"),
+    "AG-SOURCING": ("nhà cung cấp", "nha cung cap", "ncc", "báo giá", "bao gia", "sourcing"),
+    "AG-GIAAN": ("logistics tập đoàn", "logistics toàn"),
+    "AG-HARRY": ("kế toán", "ke toan", "tài chính kế toán"),
+    "AG-LEGAL": ("pháp lý", "phap ly", "hợp đồng", "hop dong"),
+}
+
+
+def agent_hint(q_low: str) -> str | None:
+    """1 dòng chỉ rõ agent nào GIỮ dữ liệu này (kèm trạng thái quyền gọi). None nếu không khớp."""
+    cfg = load_config("th_agent_routing")
+    if not cfg:
+        return None
+    for agent_id, keys in _TOPIC_KEYS.items():
+        if not any(k in q_low for k in keys):
+            continue
+        row = next((r for r in cfg.get("routing", []) if r["agent"] == agent_id), None)
+        if not row:
+            continue
+        if row.get("can_call"):
+            return (f"_Số sống của mảng này do **{row['ten']}** giữ — em hỏi trực tiếp được, "
+                    f"anh/chị muốn em hỏi thì nói nhé._")
+        return (f"_Số sống mảng này do **{row['ten']}** ({agent_id}) giữ — {row['nang_luc']}. "
+                f"Em CHƯA được cấp quyền gọi; nhờ admin cấp A2A grant là em hỏi trực tiếp được._")
+    return None
+
+
+@tool("liên-agent")
+def th_ask_best(topic: str, wait: int = 25) -> str:
+    """Chọn agent giữ dữ liệu theo chủ đề rồi hỏi qua A2A (nếu đã có quyền)."""
+    cfg = load_config("th_agent_routing") or {}
+    low = topic.lower()
+    for agent_id, keys in _TOPIC_KEYS.items():
+        if any(k in low for k in keys):
+            row = next((r for r in cfg.get("routing", []) if r["agent"] == agent_id), {})
+            if not row.get("can_call"):
+                return (f"Dữ liệu này do **{row.get('ten', agent_id)}** giữ. Em chưa được cấp "
+                        f"quyền gọi ({agent_id}) — nhờ admin cấp A2A grant.")
+            return th_ask_agent(agent_id, topic, wait)
+    return "Chủ đề này em chưa map với agent nào — em tự tra trong dữ liệu của mình."
 
 
 @tool("liên-agent")
