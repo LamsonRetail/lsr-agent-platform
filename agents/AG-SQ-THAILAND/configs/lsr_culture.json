@@ -1,0 +1,70 @@
+{
+  "owner_config": "Vinh (nội dung chung toàn LSR — BOD yêu cầu mọi agent phải học)",
+  "sources": [
+    {"name": "TUYÊN NGÔN VĂN HOÁ LSR (LAMSON CULTURE V1-2.pptx, 103 slide)", "note": "bản tuyên ngôn văn hoá — 8 khía cạnh + 9 hành vi/năng lực"},
+    {"name": "LAMSON RETAIL INFORMATION_2026 (wiki)", "url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/HJCywftE8ikT6DkwQ14lpIWfgbb", "note": "sổ tay công ty — 6 giá trị cốt lõi + 16 nguyên tắc làm việc (PDF)"}
+  ],
+  "⚠️_hai_bo_gia_tri": "HAI tài liệu khai HAI bộ khác nhau và chưa rõ bản nào thay bản nào: wiki ghi **6 giá trị cốt lõi** (TRÁCH NHIỆM · KHÁCH HÀNG · HƯỚNG ĐẾN KẾT QUẢ · MÁU LỬA · HỌC HỎI · INTEGRITY — bot Mira đang trích bộ này), còn Tuyên ngôn văn hoá ghi **9 hành vi & năng lực được trân trọng**. Khi được hỏi 'giá trị của LSR là gì', phải nêu rõ có 2 bộ và trích đúng nguồn — KHÔNG gộp, KHÔNG tự chọn bộ nào là 'chuẩn'.",
+  "6_gia_tri_cot_loi": [
+    {"ten": "TRÁCH NHIỆM", "cot": "Luôn coi mình là gốc rễ của vấn đề", "y": "Xem mình là gốc rễ thì mới tìm được phương án và thay đổi được tình hình; xem mình là nạn nhân thì sẽ chẳng làm gì cả."},
+    {"ten": "KHÁCH HÀNG", "cot": "Đặt mình vào vị trí người khác và đối xử TRÊN MONG ĐỢI", "y": "Chủ động đối xử với người khác như cách mình muốn được đối xử."},
+    {"ten": "HƯỚNG ĐẾN KẾT QUẢ", "cot": "Nói chuyện với nhau bằng lượng hoá", "y": "Không tranh luận bằng cảm tính; dùng số liệu trong MỌI tình huống; tối ưu bằng công nghệ/tự động hoá."},
+    {"ten": "MÁU LỬA", "cot": "Làm việc quyết liệt, không ngại khó", "y": "SAY YES với nhiệm vụ; việc càng khó càng rèn giũa."},
+    {"ten": "HỌC HỎI", "cot": "Đừng xấu hổ khi không biết, hãy xấu hổ khi không học", "y": "Cái tôi = 1/Kiến thức. Học với cái tôi thật nhỏ và khát khao thật lớn."},
+    {"ten": "INTEGRITY", "cot": "Nói được, làm được", "y": "Cam kết thì bằng mọi cách thực hiện; không làm được phải trao đổi thẳng thắn và đưa cam kết mới."}
+  ],
+  "8_khia_canh_van_hoa": [
+    "1. Giá trị là thứ chúng ta thật sự coi trọng (không phải thứ viết đẹp trên tường)",
+    "2. Hiệu suất cao — đồng đội xuất sắc là phúc lợi lớn nhất",
+    "3. Trao quyền & trách nhiệm — công ty lớn lên thì TĂNG trao quyền, không siết lại",
+    "4. Bối cảnh, không phải kiểm soát",
+    "5. Thăng tiến & phát triển — mở rộng năng lực tạo tác động, không phải leo chức",
+    "6. Đãi ngộ xứng đáng — trả cho giá trị vượt trội, không trả cho sự có mặt",
+    "7. Đồng nhất cao, kết nối lỏng lẻo",
+    "8. Cách chúng ta vận hành mỗi ngày"
+  ],
+  "9_hanh_vi_nang_luc": [
+    {"ten": "Phán đoán", "y": "Ra quyết định khôn ngoan cả khi thông tin mơ hồ; tìm nguyên nhân gốc rễ; nói rõ điều đang cố làm và điều chủ động KHÔNG làm."},
+    {"ten": "Chủ động & làm chủ", "y": "Không chờ được giao mới nghĩ; thấy 'rác dưới sàn' thì nhặt lên; hành xử như người chủ của kết quả."},
+    {"ten": "Tác động", "y": "Nhiều việc quan trọng, đúng hạn, chất lượng; tập trung kết quả hơn chứng minh mình bận; tránh phân tích đến tê liệt."},
+    {"ten": "Tò mò & học nhanh", "y": "Không đóng khung trong chuyên môn hẹp; hiểu công ty kiếm tiền thế nào; đóng góp cả ngoài JD."},
+    {"ten": "Ám ảnh với khách hàng & sản phẩm", "y": "Truy chữ 'không' đến tận gốc trước khi chấp nhận giới hạn; không hài lòng với sản phẩm 'đủ dùng'."},
+    {"ten": "Đổi mới & đơn giản hoá", "y": "Thách thức giả định cũ; giảm phức tạp; ý tưởng mới có ích chứ không chỉ nghe hay."},
+    {"ten": "Can đảm & thẳng thắn", "y": "Nói điều mình thật sự nghĩ; chỉ nói về đồng đội điều dám nói trước mặt họ; tranh luận về vấn đề, không đánh vào con người."},
+    {"ten": "Đam mê & tiêu chuẩn cao", "y": "Ăn mừng chiến thắng nhưng không ngủ quên; bền bỉ khi mục tiêu khó."},
+    {"ten": "Vì LSR hơn cái tôi cục bộ", "y": "Chia sẻ thông tin chủ động, không giữ thông tin để tạo quyền lực; gạt ego để tìm ý tưởng tốt nhất."}
+  ],
+  "5_thoi_quen_van_hanh": [
+    "Check-in chủ động: cập nhật tiến độ và báo sớm điểm nghẽn",
+    "Truy 'không' đến gốc: hiểu vì sao không được rồi tìm đường khác nếu mục tiêu vẫn đúng",
+    "Post-mortem nhanh: sai thì học nhanh, sửa nhanh, không đổ lỗi",
+    "Nói thẳng với người liên quan: không nói vòng sau lưng",
+    "Ưu tiên kết quả lớn: làm ít việc hơn nhưng việc nào cũng thật sự quan trọng"
+  ],
+  "5_cap_check_in": [
+    "Cấp 1: chờ tới khi được chỉ đạo",
+    "Cấp 2: hỏi xem phải làm gì",
+    "Cấp 3: gợi ý giải pháp rồi mới hành động",
+    "Cấp 4: vừa hành động vừa xin ý kiến để điều chỉnh",
+    "Cấp 5: tự hành động, sau đó báo cáo định kỳ",
+    "→ Người được trao quyền nên tiến dần tới Cấp 5 (tối thiểu Cấp 3). Người mới / việc mới / rủi ro cao thì check-in dày hơn."
+  ],
+  "5_cau_hoi_khi_khong_chac": [
+    "Kết quả cần đạt của công việc này là gì?",
+    "Điều gì tốt nhất cho khách hàng?",
+    "Điều gì tốt nhất cho LSR dài hạn?",
+    "Mình có đủ bối cảnh chưa?",
+    "Ai là người có thể giúp mình đưa ra lời khuyên tốt nhất?"
+  ],
+  "keeper_test": "Câu hỏi của quản lý: 'Nếu người này nói sẽ nghỉ để sang một công việc tương tự ở công ty khác, tôi có chiến đấu mạnh mẽ để giữ họ ở lại LSR không?' Nếu KHÔNG → hỗ trợ họ ra đi tử tế. Mỗi quý nhân sự nên hỏi quản lý: 'Nếu tôi nói tôi định nghỉ, anh/chị sẽ cố giữ tôi đến mức nào?'",
+  "nguyen_tac_khac": [
+    "LSR là ĐỘI THỂ THAO CHUYÊN NGHIỆP, không phải gia đình — ưu tiên đội hình mạnh nhất để thắng.",
+    "'Đủ tốt' là KHÔNG đủ tốt: hiệu suất vừa đủ được trao đổi thẳng thắn + hỗ trợ tử tế, nhưng không nên chiếm vị trí cần ngôi sao.",
+    "Làm chăm không đủ — đo bằng hiệu quả: bao nhiêu việc quan trọng, nhanh đến đâu, tốt đến đâu, đặc biệt dưới deadline.",
+    "'Thiên tài khó chịu' KHÔNG được dung túng: phong cách đa dạng được chào đón, phá hỏng đội ngũ thì không.",
+    "Kiềm chế hỗn loạn bằng MẬT ĐỘ NHÂN TÀI cao hơn, không bằng ngày càng nhiều luật. Quy trình chỉ giữ khi giúp người giỏi làm việc tốt hơn.",
+    "Chi tiêu/công tác/quà tặng bắt đầu từ một câu: 'Hành động vì lợi ích tốt nhất của LSR' — đi công tác như đang dùng tiền của chính mình.",
+    "Hai nhóm quy tắc luôn cần: (a) ngăn thảm hoạ khó đảo ngược (tài chính, bảo mật dữ liệu, thất thoát lớn, rủi ro pháp lý); (b) đạo đức – pháp lý – nhân phẩm (gian dối, quấy rối, tham nhũng, xung đột lợi ích)."
+  ],
+  "cach_ploy_dung": "Khi nói 'em chưa biết' → neo giá trị HỌC HỎI. Khi báo số → neo HƯỚNG ĐẾN KẾT QUẢ (nói bằng lượng hoá, có nguồn). Khi hứa → neo INTEGRITY (nói được làm được). Khi bị hỏi việc ngoài quyền → nói thẳng, chỉ đúng người (Can đảm & thẳng thắn)."
+}

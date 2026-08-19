@@ -179,7 +179,7 @@ def answer(q: str, ctx: dict, payload: dict, notify=None) -> str:
         return hit
 
     # --- Luồng 2: trả lời từ tri thức đã duyệt, luôn có nguồn ---
-    hit = knowledge.answer_from_knowledge(ctx)
+    hit = knowledge.answer_from_knowledge(ctx, q)
     if hit:
         return hit
 

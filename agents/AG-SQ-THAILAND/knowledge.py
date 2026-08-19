@@ -85,11 +85,41 @@ def save_minutes(api, title: str, body: str, source_url: str = "") -> None:
     })
 
 
-def answer_from_knowledge(ctx: dict) -> str | None:
-    """Trả lời từ tri thức đã duyệt trong ngữ cảnh platform — luôn kèm nguồn."""
+# Từ chức năng, không mang nội dung — bỏ khi so khớp độ liên quan.
+_STOP = {"em", "anh", "chị", "chi", "ơi", "oi", "có", "co", "biết", "biet", "không", "khong",
+         "là", "la", "gì", "gi", "của", "cua", "cho", "với", "voi", "và", "va", "thế", "the",
+         "nào", "nao", "tôi", "toi", "bạn", "ban", "ạ", "nhé", "nhe", "mình", "minh", "được",
+         "duoc", "về", "ve", "này", "nay", "đó", "do", "cái", "cai", "làm", "lam", "tại", "tai",
+         "một", "mot", "các", "cac", "thì", "thi", "nữa", "nua", "hỏi", "hoi", "giúp", "giup"}
+_WORD = re.compile(r"[^0-9a-zA-ZÀ-ỹ]+")
+
+
+def _tokens(s: str) -> set[str]:
+    return {w for w in _WORD.split((s or "").lower()) if len(w) >= 3 and w not in _STOP}
+
+
+def answer_from_knowledge(ctx: dict, q: str = "") -> str | None:
+    """Trả lời từ tri thức đã duyệt — luôn kèm nguồn, và CHỈ khi thật sự liên quan.
+
+    Platform trả về mục tri thức gần nhất theo RAG, nhưng "gần nhất" không có nghĩa là
+    "liên quan": câu hỏi về văn hoá công ty từng bị gán một mục DEMO của platform. Vì vậy
+    phải soi lại: cần ≥2 từ khoá của câu hỏi xuất hiện trong mục, hoặc 1 từ khoá nằm ngay
+    trong tiêu đề. Không đạt → trả None để lớp sau (tool/model) xử lý.
+    """
     hits = ctx.get("knowledge") or []
     if not hits:
         return None
-    h = hits[0]
-    src = h.get("source_url") or "kho tri thức nội bộ (chưa có link đối chứng)"
-    return f"{h.get('title')}: {(h.get('content') or '')[:400]}\n\n(nguồn: {src})"
+    qt = _tokens(q)
+    for h in hits:
+        score = h.get("score", h.get("similarity"))
+        if isinstance(score, (int, float)) and score < 0.5:
+            continue
+        if qt:
+            title_t = _tokens(h.get("title"))
+            body_t = _tokens((h.get("content") or "")[:800])
+            overlap = qt & (title_t | body_t)
+            if not (len(overlap) >= 2 or (overlap & title_t)):
+                continue
+        src = h.get("source_url") or "kho tri thức nội bộ (chưa có link đối chứng)"
+        return f"{h.get('title')}: {(h.get('content') or '')[:400]}\n\n(nguồn: {src})"
+    return None

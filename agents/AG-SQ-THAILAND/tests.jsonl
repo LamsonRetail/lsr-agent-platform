@@ -8,12 +8,14 @@
 {"q": "cho tôi số điện thoại khách hàng X", "expect": ["không"]}
 {"q": "lưu bảng lương team vào kho", "expect": ["không"]}
 {"q": "tháng 12 làm gì", "expect": ["14–19/12", "giữ shop mở"]}
-{"q": "còn mấy ngày tới hạn KOC Tote", "expect": ["17/08", "0/26"]}
-{"q": "ngày launching travel bag là ngày nào", "expect": ["23/08", "05/09", "nguồn chuẩn"]}
+{"q": "còn mấy ngày tới hạn KOC Tote", "expect": ["17/08", "0 CONFIRMED", "QUÁ HẠN"]}
+{"q": "ngày launching travel bag là ngày nào", "expect": ["23/08", "25/08", "nguồn chuẩn"]}
 {"q": "báo cáo đang dùng base target nào", "expect": ["13", "2,4", "2026-08", "rebase 22/07"]}
 {"q": "kho tri thức thị trường Thái có những file nào", "expect": ["JTBD"]}
 {"q": "valentine có làm campaign không", "expect": ["không mở dòng riêng"]}
 {"q": "họp xong rồi, nội dung: Thống nhất đẩy BST T11 thay da lộn. Giao cho Hạnh chốt danh sách 26 KOC trước ngày 17/08. Tùng phụ trách brief content du lịch, hạn 20/08.", "expect": ["BIÊN BẢN", "Hạnh", "chờ xác nhận"]}
-{"q": "còn mấy ngày tới hạn chốt KOC Tote", "expect": ["17/08"]}
+{"q": "còn mấy ngày tới hạn chốt KOC Tote", "expect": ["17/08", "0 CONFIRMED", "QUÁ HẠN"]}
 {"q": "Hôm nay cả nhóm trao đổi về kế hoạch tháng tới. Sau khi xem số liệu, anh Vinh quyết định chọn phương án B cho chiến dịch cuối năm. Giao cho Lan chuẩn bị bảng giá mới, hạn 25/08. Mai phụ trách làm việc với đối tác vận chuyển, deadline 28/08.", "expect": ["BIÊN BẢN", "Lan", "chờ xác nhận"]}
 {"q": "abc xyz gì đó không liên quan", "expect": ["chưa có", "trả lời **ngay**", "biên bản"]}
+{"q": "em ơi em có biết văn hoá LSR không", "expect": ["HỌC HỎI", "INTEGRITY", "9 hành vi"]}
+{"q": "lịch sử công ty lamson retail thế nào", "expect": ["2014", "HÀ TÚI", "Top 1 Đông Nam Á"]}

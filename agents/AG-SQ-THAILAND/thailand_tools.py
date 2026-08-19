@@ -228,30 +228,47 @@ def th_milestone_list() -> str:
 
 
 @tool("mùa-vụ-mốc")
-def th_milestone_check(today: str = "") -> str:
-    """Đếm ngược tới mốc tuyệt đối, cảnh báo trượt; mốc lệch nguồn thì chỉ sang conflict."""
+def th_milestone_check(today: str = "", horizon: int = 21) -> str:
+    """Mốc QUÁ HẠN + mốc tới trong `horizon` ngày; mốc lệch nguồn đẩy sang phần conflict."""
     cfg = load_config("th_bst_milestones")
     if not cfg:
         return NO_CONFIG.format(key="th_bst_milestones")
-    ref = datetime.date.fromisoformat(today) if today else None
+    ref = datetime.date.fromisoformat(today) if today else datetime.date.today()
+
     groups: dict[tuple, list] = {}
     for m in cfg.get("milestones", []):
+        if m.get("done") or not m.get("date"):
+            continue                      # mốc đã xong thì không đếm ngược
         groups.setdefault((m["bst"], m["milestone"]), []).append(m)
 
-    lines = ["**Đếm ngược mốc BST:**"]
-    conflicted = False
+    overdue, soon, later, conflicted = [], [], 0, False
     for (bst, ms), items in groups.items():
-        dates = sorted({i["date"] for i in items})
-        if len(dates) > 1:
-            conflicted = True
-            continue  # mốc lệch nguồn — không đếm ngược hộ, xem phần conflict bên dưới
+        if len({i["date"] for i in items}) > 1:
+            conflicted = True             # lệch nguồn — xem phần conflict, không tự chọn
+            continue
         m = items[0]
-        s = f"- **{bst} · {ms}** — {_dmy(m['date'])} · {_countdown(m['date'], ref)}"
+        delta = (datetime.date.fromisoformat(m["date"]) - ref).days
+        row = f"- **{bst} · {ms}** — {_dmy(m['date'])} · {_countdown(m['date'], ref)}"
         if m.get("status"):
-            s += f"\n    trạng thái: {m['status']}"
-        if m.get("note"):
-            s += f"\n    lưu ý: {m['note']}"
-        lines.append(s)
+            row += f"\n    {m['status']}"
+        if delta < 0:
+            overdue.append((delta, row))
+        elif delta <= horizon:
+            soon.append((delta, row))
+        else:
+            later += 1
+
+    lines = [f"**Mốc BST — tính tới {_dmy(ref.isoformat())}:**"]
+    if overdue:
+        lines.append(f"\n🔴 **QUÁ HẠN ({len(overdue)} mốc)** — cũ nhất trước:")
+        lines += [r for _, r in sorted(overdue)]
+    if soon:
+        lines.append(f"\n⏰ **Tới trong {horizon} ngày ({len(soon)} mốc):**")
+        lines += [r for _, r in sorted(soon)]
+    if later:
+        lines.append(f"\n📅 Còn {later} mốc xa hơn {horizon} ngày (hỏi 'toàn bộ mốc BST' để xem đủ).")
+    if cfg.get("luat_uu_tien_nguon"):
+        lines.append(f"\n_Lưu ý: {cfg['luat_uu_tien_nguon']}_")
     if conflicted:
         lines.append("")
         lines.append(th_milestone_conflict())
@@ -411,6 +428,10 @@ _TARGET_Q = ("base target", "base nào", "base nao", "target nào", "target nao"
 _KB_Q = ("kho tri thức", "kho tri thuc", "master file", "mục lục", "muc luc",
          "file nào", "file nao", "có những file", "tài liệu nào", "tai lieu nao")
 _MM_Q = ("mate made", "matemade")
+_CULTURE_Q = ("văn hoá", "van hoa", "văn hóa", "giá trị cốt lõi", "gia tri cot loi", "giá trị của lsr",
+              "keeper test", "nguyên tắc làm việc", "check-in", "chuẩn mực", "tuyên ngôn")
+_COMPANY_Q = ("lịch sử", "lich su", "tầm nhìn", "tam nhin", "sứ mệnh", "su menh", "bod là ai",
+              "công ty", "cong ty", "lamson", "lam sơn", "hà túi", "ha tui", "văn phòng", "kho ")
 
 
 def route(q_low: str) -> str | None:
@@ -433,7 +454,69 @@ def route(q_low: str) -> str | None:
         parts.append(th_kb_index())
     if any(k in q_low for k in _MM_Q):
         parts.append(th_context(brand="mm"))
+    if any(k in q_low for k in _CULTURE_Q):
+        parts.append(lsr_culture())
+    if any(k in q_low for k in _COMPANY_Q):
+        parts.append(lsr_company())
     return "\n\n".join(parts) if parts else None
+
+
+# ----------------------------- nhóm 7 · LSR chung (văn hoá & công ty) -----------------------------
+
+
+@tool("lsr-chung")
+def lsr_culture() -> str:
+    """Văn hoá LSR: 6 giá trị cốt lõi + 9 hành vi + 8 khía cạnh + Keeper Test + 5 thói quen."""
+    c = load_config("lsr_culture")
+    if not c:
+        return NO_CONFIG.format(key="lsr_culture")
+    lines = ["**Văn hoá LSR** — em nắm từ 2 tài liệu chính thức:"]
+    for s in c.get("sources", []):
+        lines.append(f"- {s.get('name')}" + (f" — {s.get('note')}" if s.get("note") else ""))
+    if c.get("⚠️_hai_bo_gia_tri"):
+        lines.append(f"\n⚠️ {c['⚠️_hai_bo_gia_tri']}")
+    lines.append("\n**6 giá trị cốt lõi** (wiki LAMSON RETAIL INFORMATION_2026):")
+    for g in c.get("6_gia_tri_cot_loi", []):
+        lines.append(f"- **{g['ten']}** — {g['cot']}")
+    lines.append("\n**9 hành vi & năng lực được trân trọng** (Tuyên ngôn văn hoá LSR):")
+    lines.append("  " + " · ".join(h["ten"] for h in c.get("9_hanh_vi_nang_luc", [])))
+    lines.append("\n**8 khía cạnh văn hoá:**")
+    lines += [f"  {k}" for k in c.get("8_khia_canh_van_hoa", [])]
+    lines.append("\n**5 thói quen vận hành mỗi ngày:**")
+    lines += [f"- {t}" for t in c.get("5_thoi_quen_van_hanh", [])]
+    if c.get("keeper_test"):
+        lines.append(f"\n**Keeper Test:** {c['keeper_test']}")
+    lines.append("\nHỏi sâu hơn được: '9 hành vi là gì', '5 cấp check-in', "
+                 "'5 câu hỏi khi không chắc nên làm gì', 'nguyên tắc trao quyền'.")
+    return "\n".join(lines)
+
+
+@tool("lsr-chung")
+def lsr_company() -> str:
+    """Thông tin công ty LSR: lịch sử, tầm nhìn/sứ mệnh, brand, BOD, cơ sở, nội quy chung."""
+    c = load_config("lsr_company")
+    if not c:
+        return NO_CONFIG.format(key="lsr_company")
+    lines = [f"**Lamson Retail (LSR)** — {c.get('gioi_thieu', '')}",
+             f"\n**Tầm nhìn 2030:** {c.get('tam_nhin_2030', '')}",
+             f"**Sứ mệnh:** \"{c.get('su_menh', '')}\"",
+             "\n**Lịch sử:**"]
+    lines += [f"- {x}" for x in c.get("lich_su", [])]
+    if c.get("⚠️_lech_moc_tai_dinh_vi"):
+        lines.append(f"⚠️ {c['⚠️_lech_moc_tai_dinh_vi']}")
+    lines.append(f"\n**Tăng trưởng:** {c.get('tang_truong', '')}")
+    lines.append("\n**Thương hiệu:**")
+    for b in c.get("brands", []):
+        lines.append(f"- **{b['ten']}** — {b.get('dinh_vi', '')} ({b.get('vi_the', '')})")
+    lines.append("\n**BOD:** " + " · ".join(c.get("bod", [])))
+    cs = c.get("co_so", {})
+    lines.append(f"\n**Cơ sở:** VP Hà Nội: {cs.get('van_phong_ha_noi', '')} · VP HCM: "
+                 f"{cs.get('van_phong_hcm', '')} · VP Thái Lan: {cs.get('van_phong_thai_lan', '')}")
+    lines.append(f"**Kho:** {cs.get('kho', '')}")
+    g = c.get("gio_lam_viec", {})
+    lines.append(f"\n**Giờ làm việc:** {g.get('khoi_van_phong', '')}. {g.get('hop_dinh_ky', '')}")
+    lines.append(f"\n(nguồn: {c.get('source', '?')})")
+    return "\n".join(lines)
 
 
 def suggest_menu() -> str:
@@ -460,7 +543,7 @@ def suggest_menu() -> str:
 
 
 def _list() -> str:
-    order = ["tri-thức", "báo-cáo", "mùa-vụ-mốc", "giao-việc", "nghiên-cứu", "họp", "bối-cảnh"]
+    order = ["tri-thức", "báo-cáo", "mùa-vụ-mốc", "giao-việc", "nghiên-cứu", "họp", "bối-cảnh", "lsr-chung"]
     ready = sum(1 for t in TOOLS.values() if t["status"] == "ready")
     lines = [f"Ploy · thailand_tools — {len(TOOLS)} tool ({ready} ready, {len(TOOLS) - ready} stub)"]
     for g in order:
