@@ -4660,7 +4660,7 @@ def a2a_result(req_id: str, authorization: str = Header(default="")) -> dict:
 # (rủi ro thấp, vẫn ghi log). Không ai tự duyệt việc mình đề xuất.
 
 _ACTION_OK = {"alert", "replay_dlq", "deactivate_agent", "activate_agent",
-              "rollback_version",
+              "rollback_version", "prune_docker",
               "cooldown_credential", "pause_routing", "publish_version"}
 
 # --- Kênh admin: Telegram (dùng được ngay) + Lark DM (khi app mở available-range) ---
@@ -4872,6 +4872,39 @@ def _execute_action(conn, action: str, params: dict, actor: str) -> dict:
                      "cooldown_until=now()+make_interval(secs=>%s), updated_at=now() WHERE id=%s",
                      (COOLDOWN_SECS, cid))
         return {"cooldown": cid}
+    if action == "prune_docker":
+        # Dọn image Docker để cứu đĩa. Hai mức, do người gọi chọn:
+        #   scope=dangling → images.prune() = `docker image prune -f` (chỉ image mồ côi)
+        #   scope=unused   → thêm dangling:false + until = `prune -a --filter until=...`
+        # Đo thật trên VM (19/08): dangling chỉ 0.4GB, còn image có tag nhưng không ai
+        # dùng tới 25GB — nên mức 'dangling' KHÔNG cứu nổi đĩa, phải dùng 'unused'.
+        # An toàn: Docker không xoá image nào còn container trỏ vào, KỂ CẢ container đã
+        # stop — nên agent đang tắt vẫn giữ được image, chỉ mất bản cũ sau khi build lại.
+        # 'until' là chốt chặn thêm: không đụng image mới build (mặc định 7 ngày).
+        scope = params.get("scope") or "dangling"
+        if scope not in ("dangling", "unused"):
+            return {"error": "scope phải là 'dangling' hoặc 'unused'"}
+        hours = int(params.get("older_than_hours") or 168)
+        filters = None if scope == "dangling" else {"dangling": False, "until": f"{hours}h"}
+        before = _disk_usage()
+        try:
+            import docker  # type: ignore
+            pr = docker.DockerClient(base_url=AGENT_DOCKER_HOST).images.prune(filters) or {}
+        except Exception as exc:
+            return {"error": f"không dọn được: {exc}", "disk": before}
+        freed_gb = round(int(pr.get("SpaceReclaimed") or 0) / 1e9, 1)
+        n = len(pr.get("ImagesDeleted") or [])
+        after = _disk_usage()
+        res = {"scope": scope, "older_than_hours": hours, "freed_gb": freed_gb,
+               "layers_deleted": n, "disk_before": before, "disk_after": after}
+        # Chỉ báo admin khi thật sự dọn được — tránh spam "đã dọn 0GB" mỗi giờ khi đĩa
+        # cao vì lý do khác (log, volume) chứ không phải image rác.
+        if freed_gb > 0:
+            _notify_admins(conn, f"🧹 *[{actor}]* Đã dọn image Docker ({scope}, quá "
+                                 f"{hours}h): giải phóng *{freed_gb}GB* ({n} lớp image). "
+                                 f"Đĩa {before.get('used_pct')}% → {after.get('used_pct')}% "
+                                 f"(còn {after.get('free_gb')}GB).")
+        return res
     if action == "pause_routing":
         n = conn.execute("UPDATE routing_binding SET active=false WHERE agent_id=%s",
                          (params.get("agent_id"),)).rowcount
@@ -4906,6 +4939,14 @@ def action_propose(body: dict, authorization: str = Header(default="")) -> dict:
                    {"action": action, "result": res})
             conn.commit()
             return {"id": row["id"], "status": "auto", "result": res}
+        # Cùng một việc đang chờ duyệt thì đừng đẻ thêm phiếu mỗi giờ — admin thấy
+        # 10 phiếu giống nhau sẽ bỏ qua cả 10.
+        dup = conn.execute(
+            "SELECT id FROM pending_actions WHERE status='pending' AND action=%s "
+            "AND params = %s::jsonb AND (expires_at IS NULL OR expires_at > now()) "
+            "ORDER BY id LIMIT 1", (action, Json(params))).fetchone()
+        if dup:
+            return {"id": dup["id"], "status": "pending", "action": action, "duplicate": True}
         row = conn.execute(
             "INSERT INTO pending_actions(proposed_by, action, params, risk, reason, expires_at) "
             "VALUES (%s,%s,%s,'high',%s, now() + make_interval(hours => %s)) RETURNING id",

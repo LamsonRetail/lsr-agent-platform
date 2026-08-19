@@ -551,3 +551,35 @@ pipe response vào `python3 - <<EOF` → heredoc chiếm stdin, script luôn cra
 - **Chỉ kiểm bằng mắt trên UI (4):** `P3.7.1`–`P3.7.5` Builder (các API bên dưới đã pass, trang render 200).
 
 Toàn bộ P1–P7 đã triển khai và verify trên VM. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.
+
+## §20 — Đĩa VM: cảnh báo xin duyệt + tự dọn (AG-OPS + prune_docker)
+
+Ngưỡng mặc định: `OPS_DISK_WARN_PCT=80` (xin duyệt), `OPS_DISK_AUTO_PCT=90` (tự dọn),
+`OPS_PRUNE_AGE_HOURS=168` (không đụng image mới hơn 7 ngày).
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 20.1 | `diagnose` với đĩa 79% | không đề xuất gì | ✅ |
+| 20.2 | đĩa 84% | 1 đề xuất `prune_docker` risk=**high** (chờ duyệt) | ✅ |
+| 20.3 | đĩa 92% | 1 đề xuất `prune_docker` risk=**low** (tự chạy) | ✅ |
+| 20.4 | đĩa 96% | thêm alert "dọn image có thể không đủ" | ✅ |
+| 20.5 | `prune_docker` scope lạ (`"tat ca"`) | trả lỗi, KHÔNG gọi Docker | ✅ |
+| 20.6 | `prune_docker` scope=dangling trên VM thật | xoá 40 lớp mồ côi, trả disk before/after | ✅ |
+| 20.7 | freed_gb = 0 | KHÔNG nhắn admin (chống spam mỗi giờ) | ✅ |
+| 20.8 | propose high 2 lần cùng params | lần 2 trả đúng id cũ + `duplicate:true`, không đẻ phiếu mới | ✅ |
+| 20.9 | `pending_actions.params` là jsonb | so sánh `params = %s::jsonb` chạy được (không lỗi `json =`) | ✅ |
+
+Ghi chú đo thật trên VM 19/08: image dangling chỉ ~0.4GB, còn scope `unused/168h`
+mới gom được ~2.8GB (9 image). Tức là dọn image chỉ cứu được ~6% đĩa — case 20.4
+tồn tại chính vì lý do đó, đừng coi auto-prune là bảo hiểm.
+
+## §21 — Gateway Lark không kết nối (agent active nhưng câm)
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 21.1 | agent active + app riêng, platform chưa có secret | vào `lark_gateway_gaps` | ✅ |
+| 21.2 | app có secret và Lark chấp nhận (Sawadee/Sourcing/Data) | KHÔNG báo | ✅ |
+| 21.3 | agent `registered` (AG-HARRY) | KHÔNG báo — chưa được phép nhận tin | ✅ |
+| 21.4 | tiền tố env lấy từ `LARK_APP_PREFIXES` | lệnh in ra đúng `LYLY` + `event_gateway_lyly` | ✅ |
+| 21.5 | thiếu `LARK_APP_PREFIXES` | fallback quét os.environ, không vỡ | ✅ |
+| 21.6 | AG-OPS chạy thật | tạo `pending_actions #419` đúng nội dung | ✅ |

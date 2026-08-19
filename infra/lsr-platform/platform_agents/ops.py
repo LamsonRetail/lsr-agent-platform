@@ -23,7 +23,9 @@ INTERVAL = int(os.environ.get("OPS_INTERVAL_SECS", "300"))
 DLQ_TH = int(os.environ.get("OPS_DLQ_THRESHOLD", "5"))
 ERR_TH = int(os.environ.get("OPS_ERR_THRESHOLD", "20"))
 POOL_MIN = int(os.environ.get("OPS_POOL_MIN", "1"))
-DISK_WARN_PCT = int(os.environ.get("OPS_DISK_WARN_PCT", "85"))
+DISK_WARN_PCT = int(os.environ.get("OPS_DISK_WARN_PCT", "80"))   # xin duyệt dọn
+DISK_AUTO_PCT = int(os.environ.get("OPS_DISK_AUTO_PCT", "90"))   # tự dọn, không chờ
+PRUNE_AGE_H = int(os.environ.get("OPS_PRUNE_AGE_HOURS", "168"))  # không đụng image mới
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ag-ops")
@@ -94,15 +96,28 @@ def diagnose(snap: dict) -> list[tuple]:
                         "low", f"credential còn {d} ngày"))
 
     # Ổ đĩa VM: đầy là deploy/build/Postgres chết đứng (sự cố 08-14) — báo sớm.
+    # Hai nấc: ngưỡng cảnh báo thì XIN DUYỆT dọn (người quyết); vượt ngưỡng nguy hiểm
+    # thì TỰ DỌN ngay, vì chờ duyệt lúc 3h sáng là kịp hỏng cả platform. Dọn ở đây
+    # chỉ là image "dangling" — không đụng image nào đang có container dùng.
     disk = snap.get("disk") or {}
     pct = int(disk.get("used_pct") or 0)
-    if pct >= DISK_WARN_PCT:
-        icon = "🔴" if pct >= 95 else "🟠" if pct >= 90 else "🟡"
-        out.append(("alert", {"message": f"{icon} Ổ đĩa VM đã dùng **{pct}%** "
-                                         f"(còn {disk.get('free_gb')}GB/{disk.get('total_gb')}GB). "
-                                         f"Dọn image Docker cũ: "
-                                         f"`ssh lsr-gcp \"sudo docker image prune -f\"`"},
-                    "low", f"đĩa {pct}% ≥ ngưỡng {DISK_WARN_PCT}%"))
+    if pct >= DISK_AUTO_PCT:
+        out.append(("prune_docker", {"scope": "unused", "older_than_hours": PRUNE_AGE_H}, "low",
+                    f"🔴 Đĩa VM {pct}% ≥ {DISK_AUTO_PCT}% (còn {disk.get('free_gb')}GB) — tự dọn "
+                    f"image Docker không dùng (quá {PRUNE_AGE_H}h), không chờ duyệt"))
+    elif pct >= DISK_WARN_PCT:
+        out.append(("prune_docker", {"scope": "unused", "older_than_hours": PRUNE_AGE_H}, "high",
+                    f"🟡 Ổ đĩa VM đã dùng {pct}% (còn {disk.get('free_gb')}GB/"
+                    f"{disk.get('total_gb')}GB). Xin duyệt dọn image Docker không container nào "
+                    f"dùng và cũ hơn {PRUNE_AGE_H}h. Image của agent đang tắt vẫn được giữ "
+                    f"(container stop vẫn tính là đang dùng). Từ {DISK_AUTO_PCT}% hệ thống tự "
+                    f"dọn không chờ duyệt."))
+    if pct >= 95:
+        out.append(("alert", {"message": f"🔴 Ổ đĩa VM **{pct}%** — dọn image có thể KHÔNG "
+                                         f"đủ. Soi thêm: `ssh lsr-gcp \"sudo docker system df; "
+                                         f"sudo du -sh /var/lib/docker/containers/* | sort -h | "
+                                         f"tail\"` và cân nhắc tăng dung lượng đĩa."},
+                    "low", f"đĩa {pct}% — vượt mức dọn image cứu được"))
 
     # Routing "bắt tất" (không khai app_id lẫn chat_id): mọi tin Lark/Telegram chưa có
     # binding cụ thể sẽ chảy nhầm vào agent này. Báo admin để gỡ hoặc khai rõ phạm vi.
