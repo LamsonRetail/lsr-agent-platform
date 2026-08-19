@@ -489,3 +489,42 @@ def test_parse_approval_form_survives_garbage():
     assert signing.parse_form(None) == {"raw": [], "contract_name": None,
                                         "description": None, "attachments": None,
                                         "due_date": None}
+
+
+# ==================== bộ nhớ index ====================
+
+def test_approved_draft_is_indexed_into_brain(tmp_path, monkeypatch):
+    """Hợp đồng đã gửi phải vào brain của platform để lượt sau tra lại được qua RAG."""
+    store, pf, g, b, gate = _draft_to_gate(tmp_path, monkeypatch)
+    items = []
+    monkeypatch.setattr(pf, "add_brain_item",
+                        lambda title, content, status="approved", source_url=None:
+                        items.append((title, content, source_url)), raising=False)
+    consumer.handle_group({"id": 30, "payload": {"text": f"#{gate['id']} duyệt",
+                                                 "chat_id": GROUP,
+                                                 "sender_open_id": "ou_thint"}}, b)
+    assert items, "duyệt xong mà không index thì lượt sau không tra lại được"
+    title, content, url = items[0]
+    assert title.startswith("[Hợp đồng đã gửi]")
+    assert "Người duyệt: thint@hapas.vn" in content
+    assert url and url.startswith("https://")      # phải có link đối chứng
+
+
+def test_template_content_indexed_not_just_name(tmp_path, monkeypatch):
+    """Index NỘI DUNG mẫu, không chỉ tên — để trả lời được 'mẫu X có điều khoản gì'."""
+    lark = FakeLarkKB(docx_with("Điều 1. Phạm vi. Điều 2. Giá trị {{gia_tri}}. " * 4))
+    store, pf, eng, g, b = make(tmp_path, lark=lark)
+    add_template(store)
+    items = []
+    monkeypatch.setattr(pf, "add_brain_item",
+                        lambda title, content, status="approved", source_url=None:
+                        items.append((title, content, source_url)), raising=False)
+    assert flows.index_templates(b, log=lambda m: None) == 1
+    title, content, url = items[0]
+    assert title.startswith("[Mẫu hợp đồng]")
+    assert "Điều 1. Phạm vi" in content          # nội dung thật
+    assert "ten_ben_a" in content                # kèm danh sách field
+    # chạy lần 2: mẫu không đổi → không index lại, khỏi rác brain
+    items.clear()
+    assert flows.index_templates(b, log=lambda m: None) == 0
+    assert items == []

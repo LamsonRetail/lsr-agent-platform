@@ -411,6 +411,10 @@ def sync_loop(b):
                 b.lark, b.store, os.environ.get(flows.TEMPLATE_FOLDER_ENV),
                 log=lambda m: print(m, flush=True))
             print(f"[template] {rep}", flush=True)
+            # Index NỘI DUNG mẫu vào brain (không chỉ tên) — chỉ mẫu nào đổi.
+            n = flows.index_templates(b, log=lambda m: print(m, flush=True))
+            if n:
+                print(f"[index] đã index nội dung {n} mẫu vào brain", flush=True)
         except Exception as exc:
             print(f"[template] thất bại: {exc}", file=sys.stderr, flush=True)
         time.sleep(interval)

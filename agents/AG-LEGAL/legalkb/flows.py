@@ -295,6 +295,63 @@ def dispatch_decision(b, gate, action, comment):
     return None
 
 
+def index_brain(b, title, content, source_url=None):
+    """Ghi một mục vào brain riêng của agent — ĐÂY là bộ nhớ index.
+
+    Vì sao dùng `/v1/self/brain/items` chứ không bảng riêng: brain của platform được
+    `/v1/self/context` tra bằng RAG mỗi lượt, nên cái ghi ở đây tự động quay lại trong
+    ngữ cảnh câu trả lời sau — đúng nguyên tắc "bộ nhớ ở platform" (CLAUDE.md #1). Bảng
+    riêng thì chỉ agent này đọc được và console không thấy.
+
+    `source_url` bắt buộc có khi index file/hợp đồng: không có link đối chứng thì mục đó
+    thành nguồn không kiểm được — đúng thứ golden set đang chặn.
+    """
+    return b.pf.add_brain_item(title[:200], content[:8000], status="approved",
+                               source_url=source_url)
+
+
+def index_templates(b, log=print):
+    """Index NỘI DUNG từng file mẫu hợp đồng, không chỉ tên.
+
+    Mẫu nằm ở Drive (.docx) hoặc Wiki (Lark Doc). Đọc text ra rồi ghi vào brain kèm link,
+    để agent trả lời được "mẫu X có điều khoản gì" mà không phải tải lại file mỗi lần.
+    """
+    n = 0
+    for t in contracts.templates(b.store):
+        if b.store.get_meta(f"idx:tpl:{t['key']}") == (t.get("edit_ts") or ""):
+            continue                      # chưa đổi từ lần index trước
+        try:
+            raw = b.lark.drive_download(t["file_token"])
+            from legalkb import extract
+            body = extract.from_bytes(raw, t["name"] + ".docx")
+        except Exception as exc:
+            log(f"[index] mẫu {t['name']}: {exc}")
+            continue
+        fields = ", ".join(f.get("key", "") for f in t.get("fields") or [])
+        index_brain(b, f"[Mẫu hợp đồng] {t['name']}",
+                    f"Các trường cần điền: {fields}\n\n{body}", t.get("lark_url"))
+        b.store.set_meta(f"idx:tpl:{t['key']}", t.get("edit_ts") or "")
+        n += 1
+        log(f"[index] mẫu {t['name']}: đã index {len(body)} ký tự")
+    return n
+
+
+def index_sent_contract(b, kind, name, url, summary, requester=None, reviewer=None):
+    """Index một hợp đồng ĐÃ GỬI (bản thảo được duyệt, hoặc HĐ đối tác đã xác nhận).
+
+    Nhờ mục này agent trả được các câu kiểu "đã làm hợp đồng nào với công ty X",
+    "lần trước Pháp chế yêu cầu sửa gì" — và người sau tra lại được bằng link.
+    """
+    when = time.strftime("%d/%m/%Y")
+    meta = [f"Ngày: {when}", f"Loại: {kind}"]
+    if requester:
+        meta.append(f"Người yêu cầu: {requester}")
+    if reviewer:
+        meta.append(f"Người duyệt: {reviewer}")
+    return index_brain(b, f"[Hợp đồng đã gửi] {name} ({when})",
+                       "\n".join(meta) + f"\n\n{summary}", url)
+
+
 def _notify(b, gate, text):
     chat_id = (gate.get("payload") or {}).get("chat_id")
     return b.pf.lark_send(chat_id, markdown=text) if chat_id else False
@@ -313,6 +370,11 @@ def _after_s2(b, gate, action, comment):
                          f"trình ký của công ty._")
         if d:
             b.drafts.save(sid, status="done")
+        p = gate.get("payload") or {}
+        index_sent_contract(b, p.get("template") or "hợp đồng",
+                            p.get("template") or "(không rõ mẫu)", url,
+                            p.get("summary") or "", p.get("requester_name"),
+                            gate.get("reviewer"))
         return None
     if action == "reject":
         _notify(b, gate, f"❌ Pháp chế **không thông qua** bản thảo.\nLý do: {comment}\n\n"
@@ -354,7 +416,12 @@ def _after_s3(b, gate, action, comment):
         _notify(b, gate, "✅ Hợp đồng đã được **người có thẩm quyền xác nhận**. "
                          "Bạn tiếp tục theo quy trình trình ký của công ty.")
         if rid:
-            b.reviews.save(rid, status="approved")
+            r = b.reviews.save(rid, status="approved")
+            index_sent_contract(
+                b, "hợp đồng đối tác (đã rà soát)", r.get("file_name") or "hợp đồng",
+                None, f"Đã xác nhận sau {r.get('round')} vòng rà soát. "
+                      f"{len(r.get('findings') or [])} điểm đã xử lý.",
+                r.get("requester"), gate.get("reviewer"))
     elif action == "reject":
         _notify(b, gate, f"❌ Hợp đồng **chưa được thông qua**.\nLý do: {comment}")
         if rid:
