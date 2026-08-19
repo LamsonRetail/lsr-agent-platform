@@ -23,6 +23,7 @@ import datetime
 import json
 import os
 import sys
+import time
 
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs")
 
@@ -44,6 +45,9 @@ def show_source() -> bool:
     cfg = load_config("reply_rules") or {}
     return bool(cfg.get("show_source", False))
 
+
+# consumer gắn hàm gọi platform vào đây lúc chạy: thailand_tools.API = consumer.api
+API = None
 
 NO_CONFIG = ("Chưa có config `{key}` (configs/{key}.json). Người phụ trách key này bổ sung "
              "là em trả lời được ngay — không cần deploy.")
@@ -565,6 +569,9 @@ _LOGISTICS_Q = ("logistic", "kho vận", "kho van", "vận chuyển", "van chuye
                 "hải quan", "hai quan", "3pl", "giao hàng", "giao hang", "lô hàng", "lo hang",
                 "tồn kho", "ton kho", "giá vốn", "gia von", "nvl", "nguyên vật liệu", "hộp",
                 "ruy băng", "packaging", "đóng gói", "dong goi", "scg", "anchanto", "ntk")
+_AGENTS_Q = ("agent nào", "danh bạ agent", "bot nào", "agent khác", "gọi agent", "a2a")
+_MEETING_Q = ("biên bản họp", "bien ban hop", "nội dung cuộc họp", "họp hôm", "mino", "gỡ băng",
+              "meeting note", "biên bản cuộc họp")
 _HOWWORK_Q = ("cơ chế", "co che", "kiến trúc", "kien truc", "em hoạt động", "hoạt động thế nào",
               "tự học", "tu hoc", "học thế nào", "hoc the nao", "system prompt", "cấu hình của em",
               "em được setup", "làm sao em biết", "sao em biết")
@@ -592,6 +599,10 @@ def route(q_low: str) -> str | None:
         parts.append(th_milestone_check())
     if any(k in q_low for k in _SEASON_Q):
         parts.append(th_season_calendar(filter_q=q_low))
+    if any(k in q_low for k in _AGENTS_Q):
+        return th_agents()
+    if any(k in q_low for k in _MEETING_Q):
+        return th_meeting_notes(q_low)
     if any(k in q_low for k in _HOWWORK_Q):
         return ploy_how_i_work()
     if any(k in q_low for k in _LOGISTICS_Q):
@@ -749,25 +760,101 @@ def th_logistics(topic: str = "") -> str:
 
 @tool("lsr-chung")
 def ploy_how_i_work() -> str:
-    """Cơ chế của Ploy ở mức khái niệm + cách cập nhật em (học pattern Jenny)."""
+    """Em lấy số/thông tin từ đâu và chọn tool thế nào — nêu thẳng, kể cả chỗ chưa có."""
     return (
-        "Em **không tự học trong lúc chạy** — kiến thức của em đến từ cấu hình do team setup, "
-        "không phải từ việc đọc chat rồi tự nhớ.\n\n"
-        "Ở mức khái niệm, luồng của em:\n"
-        "- Nhận tin qua Lark (chỉ trả lời khi được tag trong nhóm), mọi kênh vào cùng một hàng "
-        "đợi của platform.\n"
-        "- Lấy ngữ cảnh: hồ sơ người hỏi (vai trò, quyền xem số) + tóm tắt hội thoại + tri thức "
-        "đã duyệt.\n"
-        "- Tra dữ liệu THẬT trước: mốc BST · lịch mùa vụ · base target · số KQKD · logistics · "
-        "kho tri thức — mỗi mảng một config riêng, có nguồn.\n"
-        "- Không khớp mảng nào thì mới suy luận bằng model, và vẫn không được bịa số.\n"
-        "- Trả lời qua platform để nó gửi đúng chỗ; mọi lượt đều ghi log.\n\n"
-        "**Muốn em trả lời khác đi**: sửa config hoặc skill của em — hiệu lực ở phiên mới, không "
-        "cần deploy. Cụ thể: đổi số/lịch/mốc → sửa config; đổi cách làm việc → sửa skill; cần "
-        "việc mới hẳn → thêm tool. Anh/chị nói với **Vinh (CM)** là được cập nhật.\n"
-        "Riêng cấu hình chi tiết (system prompt, nội dung từng skill) là setup nội bộ, em không "
-        "chia sẻ ra ngoài."
+        "Em **không tự học lúc chạy**. Kiến thức = cấu hình do team setup.\n\n"
+        "**Em lấy dữ liệu từ 6 chỗ:**\n"
+        "1. Config của em — mốc BST · lịch mùa vụ · base target · số KQKD · logistics · tổ chức. "
+        "Có sẵn, trả lời tức thì.\n"
+        "2. Kho tri thức đã duyệt của squad (brain) — chỉ dùng mục đã có người duyệt.\n"
+        "3. **Hỏi agent khác qua A2A** — biên bản họp thì hỏi agent gỡ băng (Mino/Minh Anh), "
+        "tồn kho & PO thì hỏi Mira (KHHH). Cần admin cấp quyền gọi trước.\n"
+        "4. Tài liệu Lark (wiki/doc/base) — ⛔ chưa nối connector, đang chờ admin.\n"
+        "5. Dashboard/DB số liệu (BigQuery, Lark Base KQKD) — ⛔ chưa có quyền đọc; nên số của "
+        "em là **snapshot theo ngày**, không phải số sống như Jenny đọc BigQuery.\n"
+        "6. Job quét Lark 08:07 mỗi ngày — 14 nhóm Thái Lan, ghi lại mốc/số/rủi ro mới.\n\n"
+        "**Cách em chọn việc:** đọc câu hỏi → khớp mảng nào thì gọi tool mảng đó (mốc BST, mùa "
+        "vụ, số, logistics, tri thức, biên bản) → không mảng nào khớp mới suy luận bằng model, "
+        "và vẫn không được bịa số.\n"
+        "**Muốn em khác đi:** đổi số/mốc → sửa config · đổi cách làm → sửa skill · việc mới → "
+        "thêm tool. Nói với Vinh (CM). Cấu hình chi tiết em không chia sẻ ra ngoài."
     )
+
+
+# ---------------- nhóm 8 · lấy dữ liệu từ agent khác (A2A) & danh bạ ----------------
+
+
+@tool("liên-agent")
+def th_agents() -> str:
+    """Danh bạ agent LSR: ai làm được gì, em được phép gọi ai (A2A)."""
+    if API is None:
+        return "Tool này cần chạy trong agent (có token platform) — em chưa gọi được ở đây."
+    try:
+        d = API("GET", "/v1/self/directory")
+    except Exception as exc:
+        return f"Chưa tra được danh bạ agent: {exc}"
+    rows = d.get("agents") or []
+    if not rows:
+        return "Danh bạ agent đang trống."
+    lines = ["**Agent đang sống trên platform:**"]
+    for a in rows:
+        skills = a.get("skills") or []
+        sk = ", ".join(s if isinstance(s, str) else s.get("name", "?") for s in skills[:4])
+        mark = "✅ gọi được" if a.get("can_call") else "⛔ chưa được cấp quyền gọi"
+        lines.append(f"- **{a.get('name') or a.get('agent_id')}** ({a.get('agent_id')}) — "
+                     f"{sk or 'chưa khai skill'} · {mark}")
+    lines.append("\nMuốn em gọi agent nào mà đang ⛔ thì cần admin cấp quyền A2A.")
+    return "\n".join(lines)
+
+
+def th_ask_agent(who: str, question: str, wait: int = 40) -> str:
+    """Hỏi agent khác qua A2A rồi chờ kết quả. `who` = agent_id hoặc tên gần đúng."""
+    if API is None:
+        return "Tool này cần chạy trong agent (có token platform)."
+    target, cannot = who, None
+    try:
+        d = API("GET", "/v1/self/directory")
+        low = who.lower()
+        for a in d.get("agents") or []:
+            if low in (a.get("agent_id", "").lower() + " " + (a.get("name") or "").lower()):
+                target = a["agent_id"]
+                cannot = not a.get("can_call")
+                break
+    except Exception:
+        pass
+    if cannot:
+        return (f"Em chưa được cấp quyền gọi **{target}** (A2A grant). Nhờ admin cấp quyền là "
+                "em hỏi trực tiếp agent đó được ngay.")
+    try:
+        r = API("POST", f"/v1/self/a2a/{target}", {"task": question})
+    except Exception as exc:
+        return f"Không gọi được **{target}**: {exc}"
+    req_id = r.get("req_id")
+    for _ in range(max(1, wait // 4)):
+        time.sleep(4)
+        try:
+            res = API("GET", f"/v1/self/a2a/{req_id}")
+        except Exception:
+            continue
+        if (res.get("status") or "").lower() in ("done", "completed", "succeeded"):
+            out = res.get("result")
+            if isinstance(out, dict):
+                out = out.get("text") or json.dumps(out, ensure_ascii=False)
+            return f"**{target} trả lời:**\n{out}" if out else f"{target} đã xử lý nhưng không trả nội dung."
+        if (res.get("status") or "").lower() in ("failed", "error"):
+            return f"**{target}** xử lý lỗi: {res.get('last_error') or 'không rõ'}"
+    return (f"Đã gửi câu hỏi cho **{target}** (mã {req_id}) nhưng chưa có trả lời trong "
+            f"{wait}s. Em sẽ không đoán thay — anh/chị hỏi lại sau ít phút ạ.")
+
+
+@tool("liên-agent")
+def th_meeting_notes(topic: str = "") -> str:
+    """Nội dung/biên bản cuộc họp — do agent gỡ băng giữ; em hỏi lại qua A2A."""
+    if API is None:
+        return ("Biên bản họp do agent gỡ băng giữ (Mino/Minh Anh). Em hỏi lại qua A2A khi "
+                "chạy trong agent; ở đây em chưa gọi được.")
+    return th_ask_agent("minh", f"Cho tôi nội dung/biên bản cuộc họp liên quan: {topic or 'thị trường Thái Lan'}. "
+                                "Chỉ trả phần liên quan thị trường Thái Lan, kèm ngày họp.")
 
 
 def suggest_menu() -> str:

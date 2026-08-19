@@ -85,6 +85,9 @@ def api(method: str, path: str, payload=None, timeout: int = 40):
         return json.loads(b) if b else {}
 
 
+thailand_tools.API = api      # tool nào cần gọi platform (A2A, danh bạ) thì dùng hàm này
+
+
 # ----------------------------- định tuyến (phần nghiệp vụ) -----------------------------
 
 # Phủ định đứng gần chữ chốt/duyệt → KHÔNG phải confirm ("khoan, chưa chốt nhé").
