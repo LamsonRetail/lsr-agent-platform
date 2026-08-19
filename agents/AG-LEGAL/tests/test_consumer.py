@@ -311,3 +311,15 @@ def test_warns_when_claude_cli_missing(tmp_path, monkeypatch, capsys):
     with pytest.raises(KeyboardInterrupt):
         consumer.main()
     assert "KHÔNG tìm thấy CLI `claude`" in capsys.readouterr().err
+
+
+def test_lark_send_carries_app_id(monkeypatch):
+    """Phải gửi bằng ĐÚNG app đang là member của group; app khác thì không ai nhận được."""
+    from legalkb.platform import Platform
+    monkeypatch.setenv("LARK_APP_ID", "cli_test123")
+    monkeypatch.setenv("LSR_AGENT_TOKEN", "t")
+    pf = Platform()
+    seen = {}
+    monkeypatch.setattr(pf, "call", lambda m, p, payload=None, **k: seen.update(payload or {}))
+    pf.lark_send("oc_x", markdown="hi")
+    assert seen["app_id"] == "cli_test123" and seen["to"] == "oc_x"

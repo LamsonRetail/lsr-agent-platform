@@ -31,12 +31,16 @@ class PlatformError(RuntimeError):
 
 
 class Platform:
-    def __init__(self, url=None, token=None):
+    def __init__(self, url=None, token=None, app_id=None):
         self.url = (url or os.environ.get("LSR_PLATFORM_URL", DEFAULT_URL)).rstrip("/")
         # Runtime chính thức (POST /v1/self/deploy) truyền token bằng tên
         # LSR_TELEMETRY_API_KEY; chạy tay thì LSR_AGENT_TOKEN. Nhận cả hai.
         self.token = (token or os.environ.get("LSR_AGENT_TOKEN")
                       or os.environ.get("LSR_TELEMETRY_API_KEY") or "")
+        # Broker hỗ trợ đa app Lark. Phải gửi bằng ĐÚNG app đang là member của group,
+        # không thì tin đi bằng bot khác và không ai trong group nhận được. Rỗng = app
+        # mặc định của platform.
+        self.app_id = app_id if app_id is not None else os.environ.get("LARK_APP_ID", "")
 
     # ---------- HTTP ----------
 
@@ -131,8 +135,11 @@ class Platform:
 
     # ---------- Lark: CHỈ qua broker của platform ----------
 
-    def lark_send(self, to, text=None, markdown=None, to_type="chat_id"):
+    def lark_send(self, to, text=None, markdown=None, to_type="chat_id", app_id=None):
         body = {"to": to, "to_type": to_type}
+        aid = self.app_id if app_id is None else app_id
+        if aid:
+            body["app_id"] = aid
         if markdown:
             body["markdown"] = markdown
         else:
@@ -144,13 +151,19 @@ class Platform:
         r = self._quiet("POST", "/v1/lark/resolve", {"email": email}, what="lark/resolve")
         return (r or {}).get("open_id")
 
-    def lark_chats(self, app_id=""):
+    def lark_chats(self, app_id=None):
+        app_id = self.app_id if app_id is None else app_id
         qs = f"?app_id={urllib.parse.quote(app_id)}" if app_id else ""
         r = self._quiet("GET", f"/v1/lark/chats{qs}", what="lark/chats") or {}
         return r.get("chats", r if isinstance(r, list) else [])
 
-    def lark_resource(self, message_id, file_key, kind="file", app_id=""):
-        """Tải file/ảnh người dùng gửi kèm — KHÔNG cần app_secret."""
+    def lark_resource(self, message_id, file_key, kind="file", app_id=None):
+        """Tải file/ảnh người dùng gửi kèm — KHÔNG cần app_secret.
+
+        app_id phải là app ĐÃ NHẬN tin (lấy từ reply_to.app_id của job) để broker dùng
+        đúng tenant token; rỗng thì broker dùng app mặc định.
+        """
+        app_id = self.app_id if app_id is None else app_id
         qs = urllib.parse.urlencode({"type": kind, "app_id": app_id or ""})
         return self.call("GET", f"/v1/lark/resource/{message_id}/{file_key}?{qs}",
                          timeout=180, raw=True)

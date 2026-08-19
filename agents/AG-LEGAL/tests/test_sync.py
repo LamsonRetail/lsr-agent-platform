@@ -141,3 +141,15 @@ def test_store_usable_from_another_thread(tmp_path):
     t.join()
     assert not err, err
     assert store.get_meta("last_sync_at") == "now"
+
+
+def test_empty_doc_is_not_ingested_but_reported():
+    """Doc Lark mới tạo chỉ có tiêu đề → không nạp KB (chiếm quota + agent tưởng có tài
+    liệu), nhưng phải BÁO để legal team biết mục nào cần bổ sung."""
+    from legalkb.sync import _is_empty_text, MIN_TEXT_CHARS
+    assert _is_empty_text("Ký công ty", "Ký công ty")          # đúng ca gặp thật
+    assert _is_empty_text("Ký công ty", "  Ký công ty \n\n ")
+    assert _is_empty_text("X", "")
+    assert not _is_empty_text("Quy chế", "A" * MIN_TEXT_CHARS)
+    # nội dung ngắn nhưng KHÁC tiêu đề vẫn có thể là thật → không loại oan
+    assert not _is_empty_text("Hạn mức", "Giám đốc duyệt tới 500 triệu đồng.")

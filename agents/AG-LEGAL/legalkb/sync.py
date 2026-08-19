@@ -112,9 +112,24 @@ def plan_changes(inventory, store):
     return to_check, list(known.values())
 
 
+# Doc Lark mới tạo chỉ chứa đúng tiêu đề (raw_content = "Ký công ty" = 12 ký tự). Nạp
+# những doc này vào KB gây hai hại: chiếm quota ~300 source/notebook, và tệ hơn là agent
+# "thấy" có tài liệu tên hấp dẫn nhưng rỗng → trả lời dựa trên hư không. Bỏ qua và BÁO,
+# không im lặng, để legal team biết mục nào cần bổ sung nội dung.
+MIN_TEXT_CHARS = 80
+
+
+def _is_empty_text(title, body):
+    t = (body or "").strip()
+    if len(t) >= MIN_TEXT_CHARS:
+        return False
+    # rỗng hẳn, hoặc nội dung chỉ lặp lại tiêu đề
+    return not t or t.replace((title or "").strip(), "").strip() == ""
+
+
 def sync_once(lark, engine, store, space_id, drive_folder, log=print):
     report = {"checked": 0, "added": 0, "updated": 0, "removed": 0,
-              "unchanged_hash": 0, "errors": []}
+              "unchanged_hash": 0, "empty": [], "errors": []}
     inventory = collect_inventory(lark, space_id, drive_folder, log=log)
     to_check, to_remove = plan_changes(inventory, store)
     log(f"inventory={len(inventory)} thay_doi={len(to_check)} bien_mat={len(to_remove)}")
@@ -123,12 +138,14 @@ def sync_once(lark, engine, store, space_id, drive_folder, log=print):
         report["checked"] += 1
         try:
             content = d.fetch()
-            if content[0] == "text":
-                body = content[1]
-                h = _hash(body)
-            else:
-                body = content[1]
-                h = _hash(body)
+            body = content[1]
+            if content[0] == "text" and _is_empty_text(d.title, body):
+                report["empty"].append(d.title)
+                store.upsert(d.key, kind=d.kind, obj_type=d.obj_type, title=d.title,
+                             lark_url=d.url, edit_ts=d.edit_ts, status="empty",
+                             error="chưa có nội dung — chờ legal team bổ sung")
+                continue
+            h = _hash(body)
             row = store.get(d.key)
             if row and row.get("content_hash") == h and row.get("nlm_source_id"):
                 store.upsert(d.key, edit_ts=d.edit_ts, status="synced", error=None)
@@ -173,4 +190,9 @@ def sync_once(lark, engine, store, space_id, drive_folder, log=print):
 
     store.set_meta("last_sync_at", time.strftime("%Y-%m-%d %H:%M:%S"))
     store.set_meta("last_sync_report", str(report))
+    if report["empty"] and log:
+        log(f"⚠️ {len(report['empty'])} tài liệu RỖNG (chỉ có tiêu đề) — không nạp KB, "
+            f"cần legal team bổ sung nội dung: " + "; ".join(report["empty"][:10])
+            + ("..." if len(report["empty"]) > 10 else ""))
+
     return report
