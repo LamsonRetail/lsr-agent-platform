@@ -207,8 +207,9 @@ def answer(q: str, ctx: dict, payload: dict, notify=None) -> str:
         out = model.complete(build_prompt(ctx, q), system=model.lean_system())
         if out:
             return out
-    # Bí thì KHÔNG chỉ nói "chưa có" — kèm menu dạng câu hỏi em trả lời ngay được.
-    return knowledge.NO_DATA + "\n\n" + thailand_tools.suggest_menu()
+    # Bí thì nói ngắn, HẾT (Vinh 19/08: "không biết thì giải thích ngắn gọn, không phải bôi
+    # ra thêm"). Menu dạng câu hỏi chỉ dùng khi được hỏi thẳng "em làm được gì".
+    return knowledge.NO_DATA
 
 
 def handle_recording(q: str, payload: dict) -> str:

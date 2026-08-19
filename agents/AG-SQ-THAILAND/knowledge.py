@@ -20,8 +20,9 @@ SENSITIVE_WORDS = ("lương", "luong", "bảng lương", "giá vốn", "gia von"
                    "tài khoản ngân hàng", "mật khẩu", "password")
 _URL = re.compile(r"https?://\S+")
 
-NO_DATA = ("Chưa có thông tin đã được duyệt trong kho của squad Thái Lan cho câu này nên "
-           "tôi không đoán. Anh/chị gửi link Lark đối chứng để tôi đưa vào kho nhé.")
+# Vinh 19/08: không biết thì nói ngắn, KHÔNG bôi thêm menu/trích giá trị công ty.
+NO_DATA = ("Cái này em chưa có trong kho nên em không đoán. Anh/chị gửi link Lark thì em "
+           "nạp vào, lần sau em trả lời được ạ.")
 
 
 def is_save_request(text: str) -> bool:

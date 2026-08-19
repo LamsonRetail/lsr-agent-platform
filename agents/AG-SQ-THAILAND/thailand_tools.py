@@ -732,6 +732,20 @@ _COMPANY_Q = ("lịch sử", "lich su", "tầm nhìn", "tam nhin", "sứ mệnh"
               "lamson", "lam sơn", "hà túi", "ha tui", "văn phòng công ty", "trụ sở")
 
 
+_REL_MONTH = (("tháng sau", 1), ("thang sau", 1), ("tháng tới", 1), ("thang toi", 1),
+              ("tháng này", 0), ("thang nay", 0), ("tháng trước", -1), ("thang truoc", -1))
+
+
+def _resolve_relative_month(q_low: str, today: str = "") -> str:
+    """"tháng sau bán gì" → "tháng 9 bán gì". Người hỏi theo tháng tương đối, config chỉ
+    ghi tháng tuyệt đối → không quy đổi là rơi vào "chưa có trong kho" dù dữ liệu có sẵn."""
+    ref = datetime.date.fromisoformat(today) if today else datetime.date.today()
+    for phrase, delta in _REL_MONTH:
+        if phrase in q_low:
+            return q_low.replace(phrase, f"tháng {(ref.month - 1 + delta) % 12 + 1}")
+    return q_low
+
+
 def route(q_low: str) -> str | None:
     """Định tuyến câu hỏi bối cảnh TH → tool. Câu chạm NHIỀU nhóm thì ghép đủ các phần
     (vd "ưu tiên gì theo mốc BST và lịch mùa vụ" → mốc + mùa vụ). Không khớp → None.
@@ -740,6 +754,7 @@ def route(q_low: str) -> str | None:
     trong consumer.answer(). Lưu ý: câu chứa 'chốt'/'duyệt' bị gate confirm bắt trước.
     """
     parts = []
+    q_low = _resolve_relative_month(q_low)
     # Hỏi đích danh một người → 1 dòng vị trí.
     who = person_lookup(q_low)
     if who:
