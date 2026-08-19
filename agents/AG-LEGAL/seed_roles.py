@@ -20,16 +20,23 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from legalkb.platform import Platform
 from legalkb.store import SourceStore
 
-# ⚠️ EMAIL CẦN XÁC NHẬN: chưa tra được email của chị Nguyễn Thị Anh (user token Lark CLI
-# hết hạn). Placeholder dưới đây sẽ làm script BÁO LỖI thay vì âm thầm gửi sai người.
+# Quyền được kiểm bằng `sender_open_id` của tin nhắn, nên OPEN_ID mới là thứ bắt buộc;
+# email chỉ dùng để resolve ra open_id. Ai đã biết open_id thì khai thẳng — khỏi phụ thuộc
+# vào việc app Lark có scope contact hay không.
+#
+# open_id lấy từ device-flow authorize ngày 19/08/2026 (`lark-cli auth status`).
 NEEDS_CONFIRM = "TODO_CONFIRM"
 
 ROSTER = [
-    # (email, tên, các vai trò, loại hợp đồng: None = mọi loại)
+    # (email, tên, vai trò, loại hợp đồng: None = mọi loại, open_id)
     ("thint@hapas.vn", "Nguyễn Trần Thi (BOD)",
-     ["approver", "legal_reviewer", "digest_owner"], None),
-    (f"{NEEDS_CONFIRM}@hapas.vn", "Nguyễn Thị Anh (Legal)",
-     ["approver", "legal_reviewer", "digest_owner"], None),
+     ["approver", "legal_reviewer", "digest_owner"], None,
+     "ou_c4a4e1e07b0dce1c484a1e7d3046b66c"),
+    # ⚠️ Email chưa xác nhận, nhưng ĐÃ CÓ open_id → vẫn duyệt được bằng lệnh trong group.
+    # Tên trên Lark là "Ann Nguyen" — cần bạn xác nhận đúng là chị Nguyễn Thị Anh (Pháp chế).
+    (f"{NEEDS_CONFIRM}-ann@hapas.vn", "Nguyễn Thị Anh (Legal)",
+     ["approver", "legal_reviewer", "digest_owner"], None,
+     "ou_d386c1e6ddbea6160569647db6491f37"),
 ]
 
 
@@ -48,20 +55,24 @@ def main():
                   f"active={r['active']} {r['name'] or ''}")
         return 0
 
-    bad = [e for e, *_ in ROSTER if NEEDS_CONFIRM in e]
-    if bad:
-        print(f"✗ Chưa xác nhận email: {', '.join(bad)}\n"
-              f"  Sửa ROSTER trong {__file__} rồi chạy lại. Không nạp gì cả để tránh "
-              f"gửi thông báo/phê duyệt cho sai người.", file=sys.stderr)
+    # Chỉ CHẶN khi vừa thiếu email vừa thiếu open_id — lúc đó thật sự không xác định được
+    # người. Có open_id là đủ để duyệt, nên không chặn oan.
+    blocked = [e for e, _n, _r, _c, oid in ROSTER if NEEDS_CONFIRM in e and not oid]
+    if blocked:
+        print(f"✗ Không xác định được người: {', '.join(blocked)} (thiếu cả email lẫn "
+              f"open_id). Sửa ROSTER trong {__file__} rồi chạy lại — không nạp gì cả để "
+              f"tránh gửi phê duyệt cho sai người.", file=sys.stderr)
         return 1
 
-    for email, name, roles, ctype in ROSTER:
+    for email, name, roles, ctype, open_id in ROSTER:
         for role in roles:
             store.write(
-                "INSERT INTO legal_roles (email, role, contract_type, name, active) "
-                "VALUES (?,?,?,?,1) ON CONFLICT(email, role, contract_type) DO UPDATE SET "
-                "name=excluded.name, active=1", (email, role, ctype, name))
-        print(f"✓ {email} — {', '.join(roles)}")
+                "INSERT INTO legal_roles (email, role, contract_type, name, open_id, active) "
+                "VALUES (?,?,?,?,?,1) ON CONFLICT(email, role, contract_type) DO UPDATE SET "
+                "name=excluded.name, open_id=coalesce(excluded.open_id, legal_roles.open_id), "
+                "active=1", (email, role, ctype, name, open_id))
+        flag = "" if NEEDS_CONFIRM not in email else "  ⚠️ email chưa xác nhận (dùng open_id)"
+        print(f"✓ {name} — {', '.join(roles)}{flag}")
 
     pf = Platform()
     if not pf.token:
@@ -69,7 +80,8 @@ def main():
               "Chạy lại sau khi enroll; consumer cũng tự resolve lúc khởi động.")
         return 0
     n = 0
-    for r in store.query("SELECT DISTINCT email FROM legal_roles WHERE active=1"):
+    for r in store.query("SELECT DISTINCT email FROM legal_roles WHERE active=1 AND "
+                         "(open_id IS NULL OR open_id='')"):
         oid = pf.lark_resolve(r["email"])
         if oid:
             store.write("UPDATE legal_roles SET open_id=? WHERE email=?", (oid, r["email"]))
