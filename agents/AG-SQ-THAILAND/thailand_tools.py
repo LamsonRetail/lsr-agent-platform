@@ -22,7 +22,9 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import re
 import sys
+import re
 import time
 
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs")
@@ -586,7 +588,8 @@ _LOGISTICS_Q = ("logistic", "kho vận", "kho van", "vận chuyển", "van chuye
                 "tồn kho", "ton kho", "giá vốn", "gia von", "nvl", "nguyên vật liệu", "hộp",
                 "ruy băng", "packaging", "đóng gói", "dong goi", "scg", "anchanto", "ntk")
 _PEOPLE_Q = ("nhân sự", "nhan su", "có những ai", "co nhung ai", "ai phụ trách", "team gồm",
-             "danh sách người", "bao nhiêu người", "ai làm", "nhân viên")
+             "danh sách người", "bao nhiêu người", "ai làm", "nhân viên", "có ai", "co ai", "gồm những ai", "gom nhung ai", "team nào",
+              "danh sách nhân", "danh sach nhan", "đội ngũ", "doi ngu")
 _AGENTS_Q = ("agent nào", "danh bạ agent", "bot nào", "agent khác", "gọi agent", "a2a")
 _MEETING_Q = ("biên bản họp", "bien ban hop", "nội dung cuộc họp", "họp hôm", "mino", "gỡ băng",
               "meeting note", "biên bản cuộc họp")
@@ -607,6 +610,16 @@ def route(q_low: str) -> str | None:
     trong consumer.answer(). Lưu ý: câu chứa 'chốt'/'duyệt' bị gate confirm bắt trước.
     """
     parts = []
+    # Hỏi đích danh một người → 1 dòng vị trí.
+    who = person_lookup(q_low)
+    if who:
+        return who
+    # Tin NÊU ngày/mốc (không phải câu hỏi) → đối chiếu với dữ liệu của em, góp ý nếu lệch.
+    # Quyền Vinh cấp 19/08: được feedback về VIỆC và SỐ, không nhận xét con người.
+    if len(q_low) < 220 and not any(k in q_low for k in ("?", "khi nào", "ngày nào", "bao giờ")):
+        cc = th_crosscheck(q_low)
+        if cc:
+            return cc
     # Hỏi rõ BST nào → trả lời TRỌNG TÂM 1-3 dòng, không đọc cả bảng.
     focused = th_milestone_answer(q_low)
     if focused:
@@ -927,6 +940,62 @@ def th_meeting_notes(topic: str = "") -> str:
                                 "Chỉ trả phần liên quan thị trường Thái Lan, kèm ngày họp.")
 
 
+def _name_tokens(ten: str):
+    """('Nguyễn Thị Thu Hương (Hom)') -> (['nguyễn','thị','thu','hương'], ['hom'])"""
+    base, _, nick = ten.partition("(")
+    toks = [w.lower() for w in base.split() if len(w) >= 2]
+    nicks = [w.lower().strip(")") for w in nick.split() if len(w) >= 2]
+    return toks, nicks
+
+
+def person_lookup(q_low: str) -> str | None:
+    """Câu hỏi nhắc ĐÍCH DANH một người trong danh bạ TH → 1 dòng vị trí.
+
+    Tên người Việt trùng từ thường/địa danh rất nhiều ("Thái" trong "Thái Lan",
+    "Trang", "Chi", "Ngân"...). Vì vậy 3 mức, chặt trước lỏng sau:
+      1. cụm 2 từ liền nhau trong tên ("thu hương", "thành khôi") — luôn tính
+      2. nickname Thái trong ngoặc ("hom", "prim") — luôn tính
+      3. một từ trong tên, CHỈ khi câu đang hỏi về người VÀ từ đó không dễ nhầm
+    """
+    d = load_config("th_people") or {}
+    if not d:
+        return None
+    AMBIG = {"thái", "lan", "trang", "chi", "anh", "linh", "thu", "ngân", "dương", "minh",
+             "ngọc", "tùng", "huy", "đức", "hạnh", "nga", "hòa", "hoà", "thảo", "giang",
+             "nguyễn", "trần", "lê", "phạm", "hoàng", "vũ", "đinh", "bùi", "thị", "văn"}
+    ASK = ("là ai", "vị trí nào", "vi tri nao", "làm gì", "lam gi", "phụ trách gì",
+           "chức danh", "chuc danh", "là nhân sự", "la nhan su", "thuộc team", "ở team",
+           "trong team", "chức vụ", "chuc vu", "ai là", "làm ở", "phụ trách mảng")
+    asking = any(k in q_low for k in ASK)
+    pool = list(d.get("nguoi", [])) + [dict(x, nhom="MATE MADE TH (đã đóng)")
+                                       for x in (d.get("mate_made_th_da_dong", {}).get("nguoi") or [])]
+
+    def line(r):
+        cd = r.get("chuc_danh") or r.get("chuc_danh_cu", "")
+        extra = (" _(MATE MADE TH đã đóng 19/08 — vai trò mới chờ Vinh xác nhận)_"
+                 if "chuc_danh_cu" in r else "")
+        return f"**{r['ten']}** — {cd}{extra}"
+
+    def has(word):
+        return re.search(r"(?:^|\s)" + re.escape(word) + r"(?:\s|$|\?|,|\.|!|:)", q_low)
+
+    for r in pool:                                  # 1) cụm 2 từ
+        toks, _ = _name_tokens(r["ten"])
+        if any(has(f"{toks[i]} {toks[i + 1]}") for i in range(len(toks) - 1)):
+            return line(r)
+    for r in pool:                                  # 2) nickname Thái
+        _, nicks = _name_tokens(r["ten"])
+        if any(len(n) >= 3 and has(n) for n in nicks):
+            return line(r)
+    if not asking:
+        return None
+    for r in pool:                                  # 3) một từ, chỉ khi hỏi về người
+        toks, _ = _name_tokens(r["ten"])
+        if any(len(t) >= 3 and t not in AMBIG and has(t) for t in toks):
+            return line(r)
+    return None
+
+
 @tool("lsr-chung")
 def th_people(nhom: str = "") -> str:
     """Nhân sự thị trường Thái Lan: tên + chức danh, nhóm theo chức năng."""
@@ -935,7 +1004,12 @@ def th_people(nhom: str = "") -> str:
         return NO_CONFIG.format(key="th_people")
     rows = d.get("nguoi", [])
     q = nhom.lower()
-    hit = [r for r in rows if q and (q in r["nhom"] or q in r["chuc_danh"].lower())]
+    # 1) Hỏi ĐÍCH DANH một người → trả 1 dòng vị trí của người đó.
+    hit = [r for r in rows if q and (r["nhom"] in q or any(
+        w in q for w in ("booking", "marketing", "ads", "cskh", "kế toán", "thu mua",
+                         "kho vận", "vận hành", "kinh doanh", "dữ liệu", "tuyển dụng",
+                         "people", "tài chính", "sản phẩm")
+        if w in r["nhom"] or w in r["chuc_danh"].lower()))]
     if hit:
         lines = [f"**Nhân sự TH — {hit[0]['nhom']}** ({len(hit)} người):"]
         lines += [f"- {r['ten']} — {r['chuc_danh']}" for r in hit]
@@ -951,6 +1025,46 @@ def th_people(nhom: str = "") -> str:
         lines.append(f"\n_{mm.get('ghi_chu','')}_ " + " · ".join(x["ten"] for x in mm["nguoi"]))
     lines.append("\nHỏi hẹp hơn được: kinh doanh · booking · marketing · vận hành · cskh · nhân sự · tài chính.")
     return "\n".join(lines)
+
+
+_DATE_RE = re.compile(r"\b(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?\b")
+
+
+@tool("liên-agent")
+def th_crosscheck(text: str, today: str = "") -> str | None:
+    """Soi ngày/mốc người khác nêu so với dữ liệu Ploy. None nếu không có gì để góp ý.
+
+    Quyền Vinh cấp 19/08: được feedback với người và agent khác, CHỈ về việc và số —
+    nêu cả hai bản, đề nghị chốt nguồn chuẩn, không nhận xét ai đúng/sai.
+    """
+    cfg = load_config("th_bst_milestones")
+    if not cfg:
+        return None
+    bst = _match_bst(text)
+    if not bst:
+        return None
+    said = {f"{int(m.group(2)):02d}-{int(m.group(1)):02d}" for m in _DATE_RE.finditer(text)}
+    if not said:
+        return None
+    want = _match_milestone(text) or "Launching Day"
+    rows = [m for m in cfg.get("milestones", [])
+            if m["bst"] == bst and want in m["milestone"] and m.get("date")
+            and not m.get("superseded")]
+    if not rows:
+        return None
+    official = [m for m in rows if m.get("official")]
+    ours = official or rows
+    our_md = {m["date"][5:] for m in ours}
+    if said & our_md:
+        return None                      # khớp rồi, không cần góp ý
+    ngay_ta = " hoặc ".join(_dmy(m["date"]) for m in ours[:3])
+    ngay_ho = ", ".join(f"{d[3:]}/{d[:2]}" for d in sorted(said))
+    if official:
+        return (f"Em đối chiếu giúp: **{bst} · {want}** trong dữ liệu của em là **{ngay_ta}** "
+                f"(đã chốt), còn tin này ghi {ngay_ho}. Nếu mốc đã đổi thì anh/chị nói để em "
+                f"cập nhật; nếu chưa thì bản chốt vẫn là {ngay_ta} ạ.")
+    return (f"Em thấy lệch: **{bst} · {want}** — dữ liệu của em ghi **{ngay_ta}**, tin này ghi "
+            f"{ngay_ho}. Mốc này hiện chưa ai chốt nguồn chuẩn; anh/chị chốt giúp em một ngày.")
 
 
 def suggest_menu() -> str:
