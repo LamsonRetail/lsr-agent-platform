@@ -302,9 +302,8 @@ def handle(job: dict) -> str:
         # MỘT lời gọi cho mọi kênh — platform tự gửi đúng Lark/Telegram/web/A2A.
         api("POST", f"/v1/self/jobs/{job['id']}/reply", {"text": text})
 
+    # Vinh 19/08: bỏ câu "em vừa được bật lại nên trả lời trễ" — trả lời luôn, không rào trước.
     reply_text = answer(q, ctx, payload, notify=send)
-    if time.time() - START_TS < STALE_WINDOW:
-        reply_text = LATE_NOTE + "\n\n" + reply_text
     send(reply_text)
 
     api("POST", "/v1/self/session/turn", {"session_id": sid, "role": "user", "text": q,

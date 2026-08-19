@@ -9,8 +9,8 @@
     "Travel bag KHÔNG có tên 'Packed_With_Love' ở bất kỳ nguồn nào. Tên chính thức: **BST Travel bag**, SKU SORA / KAIA / LYRA.",
     "BST T10: mốc 'Chốt sản phẩm BST' là **20/07/2026** (quá hạn), không phải 20/08; và không có mốc 'chốt 3/7 mẫu'.",
     "✅ Ngày Travel bag **05/09 CÓ THẬT** — trong sheet launching nhúng của CM WEEKLY REPORT (kỳ 16.8 & 21.8), chốt ở họp 16.8 để dồn cho ngày sale 09/09. Lần tra đầu chỉ tìm trong wiki tiến độ nên không thấy.",
-    "⚠️ Tote: wiki tiến độ + 2 base ghi **07/09**, sheet CM Weekly ghi **23/09** → chưa rõ 'BST T9 (Special Booming)' và 'Tote' có phải cùng một BST không. Nêu cả hai, KHÔNG tự chọn.",
-    "⚠️ BST T10: wiki ghi **08/10**, sheet CM Weekly ghi **07/10**, thân bài CM Weekly kỳ 07.8 ghi **23/10** (CEO chốt giảm T10-T11, tăng T12) → 3 phiên bản."
+    "⚠️ BST T10: wiki ghi **08/10**, sheet CM Weekly ghi **07/10**, thân bài CM Weekly kỳ 07.8 ghi **23/10** (CEO chốt giảm T10-T11, tăng T12) → 3 phiên bản.",
+    "✅ Tote launching = **23/09/2026** — Vinh (CM) chốt trong nhóm Lark 19/08. Bản 07/09 là cũ."
   ],
   "milestones": [
     {
@@ -82,8 +82,9 @@
       "milestone": "Launching Day",
       "date": "2026-09-07",
       "source": "5 nguồn khớp: bảng mốc 23/07 · bảng 15/07 · bảng 21/07 · Base BOOKING 'HP-TOTE S26' · Base KOC 'TOTE COLLECTION - AUG'",
-      "status": "Chưa launch — rủi ro: sự cố chuyển nhầm màu đợt 1 (nâu đậm → nâu nhạt), đang promote 'limited color & stock'",
-      "done": false
+      "status": "(bản cũ — Vinh đã chốt lại 23/09)",
+      "done": false,
+      "superseded": true
     },
     {
       "bst": "BST Travel bag (Sora/Kaia/Lyra)",
@@ -370,10 +371,11 @@
       "launch": null,
       "milestone": "Launching Day",
       "date": "2026-09-23",
-      "source": "CM WEEKLY REPORT kỳ 16.8 & 21.8 — sheet launching nhúng (5Gv8Fn/t4Smyo), bản MỚI NHẤT",
+      "source": "Vinh (CM) CHỐT trong nhóm Lark 19/08/2026",
       "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/XUtUd5MrMogxFYxTNIVlJDixgAu",
-      "status": "⚠️ Sheet CM Weekly ghi 23/09 (target 10 tỷ) trong khi 5 nguồn khác ghi 07/09 → NGHI 'BST T9' và 'Tote' là CÙNG một BST, cần Vinh xác nhận",
-      "done": false
+      "status": "Nguồn chuẩn — Vinh chốt 19/08",
+      "done": false,
+      "official": true
     },
     {
       "bst": "BST T10 (Color Trend)",

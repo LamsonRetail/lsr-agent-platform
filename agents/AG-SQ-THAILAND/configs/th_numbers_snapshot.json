@@ -1,0 +1,36 @@
+{
+  "owner_config": "Hương (Trưởng KD HAPAS TH)",
+  "as_of": "2026-08-19",
+  "scope": "TỔNG kênh TMĐT Thái Lan (Shopee + TikTok) — KHÔNG tách HAPAS / MATE MADE",
+  "canh_bao": "Đây là SNAPSHOT chốt ngày 19/08/2026, không phải số sống. Khi trả lời phải nói rõ 'số đến ngày 19/08'. Số mới hơn phải mở BC KQKD Daily.",
+  "sources": {
+    "daily": "https://o4pvcegwn6b.sg.larksuite.com/wiki/RtGZwGfsciypgekQJ9FlHEGpgPf",
+    "weekly": "https://o4pvcegwn6b.sg.larksuite.com/wiki/Ivx2wb92piowcKkyXEnlLMlSgmd",
+    "cm_weekly": "https://o4pvcegwn6b.sg.larksuite.com/docx/XUtUd5MrMogxFYxTNIVlJDixgAu"
+  },
+  "thang_8_2026": {
+    "target": {"dt": "13 triệu THB", "lndg": "2,4 triệu THB", "ap_tu": "05/08/2026"},
+    "thuc_hien_19_08": {"dt": "8,4 triệu THB", "dt_mtd": "127%", "lndg": "1,1 triệu THB", "lndg_mtd": "73%", "lndg_mtd_don_tao": "76%", "nguon": "BC KQKD Daily 19/08"},
+    "du_kien_cuoi_thang": {"lndg": "1,8 triệu THB / target 2,4 triệu THB", "nguon": "BC KQKD Daily 19/08"},
+    "lich_su_gan": [
+      {"ngay": "18/08", "dt": "8,2 triệu THB (MTD 116%)", "lndg": "1,1 triệu THB (MTD 81%)", "nguon": "Weekly 18/8"},
+      {"ngay": "17/08", "dt": "7,9 triệu THB (MTD 127%)", "lndg": "1,2 triệu THB (MTD 94%)", "nguon": "Daily 17/8"},
+      {"ngay": "15/08", "dt": "6,2 tỷ VND (MTD 132%) → dự kiến cuối tháng 10 tỷ", "lndg": "800 triệu VND (MTD 87%) → dự kiến 1,6 tỷ", "nguon": "CM Weekly kỳ 16.8"}
+    ],
+    "tong_ket_t7": {"dt": "7,3 / 8 triệu THB (91%)", "lndg": "1,3 / 1,5 triệu THB (83%)", "nguon": "Weekly 3/8"}
+  },
+  "🔴_van_de_dang_thay": [
+    "DOANH THU vượt nhịp (MTD 127%) nhưng LỢI NHUẬN hụt (MTD 73%, dự kiến cuối tháng chỉ 1,8/2,4 triệu THB). Đây là khoảng cách đáng chú ý nhất của tháng 8.",
+    "Dữ kiện liên quan tới việc lợi nhuận hụt (từ CM Weekly, KHÔNG phải suy đoán): tồn kho Mother's Day 4 tỷ VND dự kiến không clear hết trong T8 → **đã giảm giá đẩy 2–3 ngày**; CIR TikTok theo KPI T8 là 51,42% (Shopee 36,03%); tốc độ bán 217 sp/ngày; ngày tồn kho 157 (đã giảm 40 ngày so với tuần trước).",
+    "Camel chiếm 20% tổng doanh số (giảm từ 35% tháng trước vì có BST mới) — nguồn CM Weekly 16.8.",
+    "DT HAPAS trên TikTok Shop đứng thứ 18 (CM Weekly 07.8)."
+  ],
+  "kenh": {
+    "kpi_t8_theo_kenh": "TikTok 5,974 tỷ VND (LN 67%, CIR 51,42%, LNĐG 15,58%) · Shopee 3,399 tỷ (LN 66,5%, CIR 36,03%) · Facebook 1,030 tỷ · tổng TMĐT KPI 10,403 tỷ VND (12.922.981 THB)",
+    "tang_truong": "Toàn kênh +113% vs tháng trước (CM Weekly 16.8); TikTok +68% và Shopee +10% vs tuần trước (CM Weekly 07.8)",
+    "nguon": "CM Weekly — sheet qZM9LG"
+  },
+  "ton_kho": {"thai_lan": "46 tỷ VND", "tai_ncc": "60 tỷ VND", "ngay_ton": "157 ngày (giảm 40 ngày so tuần trước)", "ton_khong_ban_duoc": "tập trung ở BST Tháng 4, Songkran, normal collection", "nguon": "CM Weekly 07.8 + 16.8"},
+  "dong_tien": {"cap_nhat": "12/08/2026", "so_du_dau_ky": "10.387.894 THB", "so_du_cuoi_ky": "11.740.095 THB", "vi_lon_nhat": "TikTok HP 5.579.108 THB · Shopee HP 4.765.800 THB", "du_kien_tra_mua_hang": "T8: 2,5 tỷ · T9: 3 tỷ", "ghi_chu": "đã trừ 5 tỷ để chuyển Newco", "nguon": "CM Weekly 16.8 — sheet Ckwnjs"},
+  "booking_mkt": {"traffic": "21.580.997 lượt", "hieu_qua": "155% với 83,65% chi phí đặt ra ban đầu", "er": "4,7% (thấp hơn mức trung bình 5%)", "koc_win": "75% dự án", "cpm_branding": "giảm còn 6 so với target 9 → tiếp tục tăng ngân sách", "luot_xem_tuan": "1,1 triệu", "nguon": "CM Weekly 07.8 + 16.8"}
+}

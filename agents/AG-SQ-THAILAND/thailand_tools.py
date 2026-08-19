@@ -39,6 +39,12 @@ def load_config(key: str):
         return None
 
 
+def show_source() -> bool:
+    """Vinh 19/08: không cần in nguồn ra câu trả lời. Bật lại: reply_rules.show_source=true."""
+    cfg = load_config("reply_rules") or {}
+    return bool(cfg.get("show_source", False))
+
+
 NO_CONFIG = ("Chưa có config `{key}` (configs/{key}.json). Người phụ trách key này bổ sung "
              "là em trả lời được ngay — không cần deploy.")
 
@@ -153,14 +159,40 @@ def th_base_targets() -> str:
     if kc:
         lines.append("\n⚠️ **Các chỗ số liệu đang lệch giữa nguồn** (em không tự chọn hộ):")
         lines += [f"- {c}" for c in kc]
-    lines.append(f"\n(nguồn: {t.get('source', '?')})")
+    if show_source():
+        lines.append(f"\n(nguồn: {t.get('source', '?')})")
+    return "\n".join(lines)
+
+
+@tool("báo-cáo")
+def th_numbers_snapshot() -> str:
+    """Số KQKD chốt tới 19/08: DT/LNĐG/%MTD + vấn đề đang thấy + tồn kho + dòng tiền."""
+    s = load_config("th_numbers_snapshot")
+    if not s:
+        return NO_CONFIG.format(key="th_numbers_snapshot")
+    m8 = s.get("thang_8_2026", {})
+    tg, th = m8.get("target", {}), m8.get("thuc_hien_19_08", {})
+    lines = [f"**Số tới {s.get('as_of')}** ({s.get('scope', '')}):",
+             f"- DT **{th.get('dt')}** / target {tg.get('dt')} — MTD **{th.get('dt_mtd')}**",
+             f"- LNĐG **{th.get('lndg')}** / target {tg.get('lndg')} — MTD **{th.get('lndg_mtd')}**",
+             f"- Dự kiến cuối tháng: LNĐG {m8.get('du_kien_cuoi_thang', {}).get('lndg', '?')}"]
+    probs = s.get("🔴_van_de_dang_thay") or []
+    if probs:
+        lines.append("\n🔴 **Đang lệch:**")
+        lines += [f"- {p}" for p in probs[:3]]
+    tk = s.get("ton_kho", {})
+    if tk:
+        lines.append(f"\n**Tồn kho:** TH {tk.get('thai_lan')} · tại NCC {tk.get('tai_ncc')} · "
+                     f"{tk.get('ngay_ton')}")
+    lines.append(f"\n_{s.get('canh_bao', '')}_")
     return "\n".join(lines)
 
 
 @tool("báo-cáo", status="stub")
 def th_numbers_read(period: str = "", brand: str = "") -> str:
-    """Đọc DT/LNĐG/%MTD từ 3 doc KQKD, chuẩn hoá JSON — cần connector Lark."""
-    return _stub("th_numbers_read", "Phase 1")
+    """Đọc DT/LNĐG/%MTD LIVE từ 3 doc KQKD — cần connector Lark (bản chốt: th_numbers_snapshot)."""
+    return _stub("th_numbers_read", "Phase 1",
+                 "Số chốt tới 19/08 có sẵn: gọi `th_numbers_snapshot`.")
 
 
 @tool("báo-cáo", status="stub")
@@ -281,7 +313,11 @@ def th_milestone_answer(q: str, today: str = "") -> str | None:
 
     want = _match_milestone(q)
     if want:
-        hit = [m for m in rows if want in m["milestone"]]
+        hit = [m for m in rows if want in m["milestone"] and not m.get("superseded")]
+        # Mốc đã được chốt chính thức (vd Vinh chốt trong nhóm) → chỉ nói mốc đó, hết.
+        official = [m for m in hit if m.get("official")]
+        if official:
+            hit = official[:1]
         if hit:
             dates = sorted({m["date"] for m in hit})
             if len(dates) == 1:
@@ -290,12 +326,11 @@ def th_milestone_answer(q: str, today: str = "") -> str | None:
                        f"({_countdown(m['date'], ref)})")
                 if m.get("status") and ("🔴" in m["status"] or "QUÁ HẠN" in m["status"].upper()):
                     out += f"\n{m['status']}"
-                return out + f"\n_nguồn: {m.get('source', '?')}_"
+                return out
             # nhiều nguồn ghi khác ngày → nói thẳng là đang lệch, không chọn hộ
-            lines = [f"⚠️ **{bst} · {want}** đang lệch giữa các nguồn — em không tự chọn:"]
-            for m in sorted(hit, key=lambda x: x["date"]):
-                lines.append(f"- {_dmy(m['date'])} — {m.get('source', '?')}")
-            lines.append("→ Cần chốt 1 nguồn chuẩn rồi cập nhật config.")
+            lines = [f"⚠️ **{bst} · {want}** đang có {len(dates)} ngày khác nhau, chưa ai chốt:"]
+            lines += [f"- {_dmy(d)}" for d in dates]
+            lines.append("→ Anh/chị chốt giúp em ngày nào là chuẩn.")
             return "\n".join(lines)
 
     # Có BST nhưng không rõ mốc nào → tóm tắt gọn đúng BST đó
@@ -501,7 +536,8 @@ def th_context(brand: str = "") -> str:
             lines.append(f"  ⚠️ {t['note']}")
     for w in ctx.get("canh_bao_du_lieu", []):
         lines.append(f"- ⚠️ {w}")
-    lines.append(f"(nguồn: {ctx.get('source', '?')})")
+    if show_source():
+        lines.append(f"(nguồn: {ctx.get('source', '?')})")
     return "\n".join(lines)
 
 
@@ -515,12 +551,17 @@ _SEASON_Q = ("mùa vụ", "mua vu", "dịp lễ", "dip le", "noel", "năm mới"
              "songkran", "valentine", "tết", "nguyên đán", "ngày của mẹ", "ngay cua me",
              "tháng 12", "thang 12", "giáng sinh")
 _TARGET_Q = ("base target", "base nào", "base nao", "target nào", "target nao",
-             "target tháng", "target ngày", "rebase", "%mtd", "mtd")
+             "target tháng", "target ngày", "rebase")
+_NUMBERS_Q = ("doanh thu", "doanh so", "doanh số", "lợi nhuận", "loi nhuan", "lnđg", "lndg",
+              "mtd", "tình hình", "tinh hinh", "kqkd", "tồn kho", "ton kho", "dòng tiền",
+              "dong tien", "bán được bao nhiêu", "số tháng 8", "thang 8 the nao")
 _KB_Q = ("kho tri thức", "kho tri thuc", "master file", "mục lục", "muc luc",
          "file nào", "file nao", "có những file", "tài liệu nào", "tai lieu nao")
 _MM_Q = ("mate made", "matemade")
 _CULTURE_Q = ("văn hoá", "van hoa", "văn hóa", "giá trị cốt lõi", "gia tri cot loi", "giá trị của lsr",
               "keeper test", "nguyên tắc làm việc", "check-in", "chuẩn mực", "tuyên ngôn")
+_DIGEST_Q = ("hôm nay có gì", "hom nay co gi", "bản tin", "ban tin", "digest", "tin mới",
+             "tin moi", "cập nhật hôm nay", "có gì mới")
 _COMPANY_Q = ("lịch sử", "lich su", "tầm nhìn", "tam nhin", "sứ mệnh", "su menh", "bod là ai",
               "công ty", "cong ty", "lamson", "lam sơn", "hà túi", "ha tui", "văn phòng", "kho ")
 
@@ -543,6 +584,10 @@ def route(q_low: str) -> str | None:
         parts.append(th_milestone_check())
     if any(k in q_low for k in _SEASON_Q):
         parts.append(th_season_calendar(filter_q=q_low))
+    if any(k in q_low for k in _DIGEST_Q):
+        parts.append(th_daily_digest())
+    if any(k in q_low for k in _NUMBERS_Q):
+        parts.append(th_numbers_snapshot())
     if any(k in q_low for k in _TARGET_Q):
         parts.append(th_base_targets())
     if any(k in q_low for k in _KB_Q):
@@ -610,7 +655,33 @@ def lsr_company() -> str:
     lines.append(f"**Kho:** {cs.get('kho', '')}")
     g = c.get("gio_lam_viec", {})
     lines.append(f"\n**Giờ làm việc:** {g.get('khoi_van_phong', '')}. {g.get('hop_dinh_ky', '')}")
-    lines.append(f"\n(nguồn: {c.get('source', '?')})")
+    if show_source():
+        lines.append(f"\n(nguồn: {c.get('source', '?')})")
+    return "\n".join(lines)
+
+
+@tool("tri-thức")
+def th_daily_digest() -> str:
+    """Bản tin quét Lark hằng ngày: điểm chính, số mới, mốc bị đổi, rủi ro, việc chờ quyết."""
+    d = load_config("th_daily_digest")
+    if not d:
+        return NO_CONFIG.format(key="th_daily_digest")
+    if not d.get("as_of"):
+        return ("Chưa có bản tin nào — job quét Lark hằng ngày (08:07) chưa chạy lần đầu ạ.")
+    lines = [f"**Bản tin thị trường Thái Lan — {d['as_of']}**"]
+    for k, title in (("diem_chinh", "Điểm chính"), ("cho_vinh_quyet", "Chờ anh/chị quyết")):
+        if d.get(k):
+            lines.append(f"\n**{title}:**")
+            lines += [f"- {x}" for x in d[k][:5]]
+    if d.get("so_moi"):
+        lines.append("\n**Số mới:**")
+        lines += [f"- {s.get('chi_so')}: {s.get('gia_tri')} ({s.get('ngay')})" for s in d["so_moi"][:5]]
+    if d.get("moc_thay_doi"):
+        lines.append("\n**Mốc bị đổi:**")
+        lines += [f"- {m.get('bst')} · {m.get('milestone')} → {m.get('ngay_moi')}" for m in d["moc_thay_doi"][:5]]
+    if d.get("rui_ro"):
+        lines.append("\n🔴 **Rủi ro:**")
+        lines += [f"- {r.get('noi_dung')}" for r in d["rui_ro"][:4]]
     return "\n".join(lines)
 
 
