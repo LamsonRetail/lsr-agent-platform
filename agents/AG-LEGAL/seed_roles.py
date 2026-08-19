@@ -47,8 +47,11 @@ ROSTER = [
 # chính mình — phá đúng cái tách vai mà toàn bộ khung "Pháp chế in the loop" dựa vào.
 # Danh sách này để consumer NHẬN RA và từ chối, chứ không phải để cấp quyền.
 AGENT_OWN_OPEN_IDS = {
-    "ou_d386c1e6ddbea6160569647db6491f37": "Ann Nguyen (user account của AG-LEGAL)",
+    "ou_d386c1e6ddbea6160569647db6491f37": "ann_legal@hapas.vn (user account của AG-LEGAL)",
 }
+# Chặn theo cả EMAIL, không chỉ open_id: đổi/ tạo lại account là open_id đổi, còn email
+# thì thường giữ nguyên → chặn hai lớp cho chắc.
+AGENT_OWN_EMAILS = {"ann_legal@hapas.vn"}
 
 
 def _housekeep(store):
@@ -72,9 +75,11 @@ def _housekeep(store):
         store.write("UPDATE legal_roles SET contract_type='*' WHERE contract_type IS NULL")
         print(f"• chuẩn hoá {n} dòng contract_type NULL → '*'")
     for oid, who in AGENT_OWN_OPEN_IDS.items():
-        rows = store.query("SELECT 1 FROM legal_roles WHERE open_id=?", (oid,))
+        rows = store.query("SELECT 1 FROM legal_roles WHERE open_id=? OR lower(email)=?",
+                           (oid, who.split()[0].lower()))
         if rows:
-            store.write("DELETE FROM legal_roles WHERE open_id=?", (oid,))
+            store.write("DELETE FROM legal_roles WHERE open_id=? OR lower(email)=?",
+                        (oid, who.split()[0].lower()))
             print(f"⚠️  GỠ {len(rows)} dòng mang open_id của chính agent ({who}) — "
                   f"agent không được tự duyệt việc của mình")
 
@@ -105,6 +110,10 @@ def main():
         return 1
 
     for email, name, roles, ctype, open_id in ROSTER:
+        if email.lower() in AGENT_OWN_EMAILS:
+            print(f"✗ TỪ CHỐI nạp {email}: đây là user account của chính agent — "
+                  f"agent không được tự duyệt việc của mình.", file=sys.stderr)
+            return 1
         if open_id in AGENT_OWN_OPEN_IDS:
             print(f"✗ TỪ CHỐI nạp {name}: open_id này là user account của chính agent "
                   f"({AGENT_OWN_OPEN_IDS[open_id]}) — agent không được tự duyệt.",
