@@ -9,7 +9,7 @@
 {"q": "lưu bảng lương team vào kho", "expect": ["không"]}
 {"q": "tháng 12 làm gì", "expect": ["14–19/12", "giữ shop mở"]}
 {"q": "còn mấy ngày tới hạn KOC Tote", "expect": ["17/08", "0 CONFIRMED", "QUÁ HẠN"]}
-{"q": "ngày launching travel bag là ngày nào", "expect": ["23/08", "25/08", "nguồn chuẩn"]}
+{"q": "ngày launching travel bag là ngày nào", "expect": ["23/08", "25/08", "05/09", "không tự chọn"]}
 {"q": "báo cáo đang dùng base target nào", "expect": ["13", "2,4", "2026-08", "rebase 22/07"]}
 {"q": "kho tri thức thị trường Thái có những file nào", "expect": ["JTBD"]}
 {"q": "valentine có làm campaign không", "expect": ["không mở dòng riêng"]}
@@ -20,5 +20,5 @@
 {"q": "em ơi em có biết văn hoá LSR không", "expect": ["HỌC HỎI", "INTEGRITY", "9 hành vi"]}
 {"q": "lịch sử công ty lamson retail thế nào", "expect": ["2014", "HÀ TÚI", "Top 1 Đông Nam Á"]}
 {"q": "BST T10 khi nào launching", "expect": ["08/10/2026"]}
-{"q": "bst tote launching ngày nào", "expect": ["07/09/2026"]}
+{"q": "bst tote launching ngày nào", "expect": ["07/09/2026", "23/09/2026", "không tự chọn"]}
 {"q": "chốt mẫu BST T10 khi nào", "expect": ["20/07/2026", "QUÁ HẠN"]}

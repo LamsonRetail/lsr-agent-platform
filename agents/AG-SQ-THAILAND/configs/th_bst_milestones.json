@@ -6,57 +6,435 @@
   "khung_9_moc_chuan": "Kick-off sản phẩm (D-120) → Chốt sản phẩm BST → Kick-off dự án team (D-75) → Kết quả khảo sát SP (D-75) → Bán test lấy tỷ trọng → Xuống đơn hàng PO (D-73) → Hàng về cho KOC (D-21) → Mở bán chính thức (D-20) → Hàng về SLL (D-10) → Launching Day",
   "dinh_chinh_hieu_sai": [
     "KHÔNG có mốc riêng tên 'chốt KOC'. Mốc '17/08' là **Hàng về cho KOC (D-21)** của BST Tote.",
-    "BST Tote launching **07/09/2026** (5 nguồn độc lập khớp), KHÔNG phải 23/09. Ngày 23/09 là launching của **BST T9 (Special Booming)**.",
-    "Travel bag KHÔNG có tên 'Packed_With_Love' ở bất kỳ nguồn nào (tìm cả Drive+Wiki: 0 kết quả). Tên chính thức: **BST Travel bag**, SKU SORA / KAIA / LYRA.",
-    "Ngày Travel bag '05/09' KHÔNG tồn tại trong nguồn nào — chỉ có Weekly 18/8 nói định tính 'tháng 9 launching 2 BST là Travel Bag và Tote'. Cần xác nhận người phát ngôn.",
-    "BST T10 'chốt 3/7 mẫu 20/08' không đúng: mốc Chốt sản phẩm BST của T10 là **20/07/2026** (đang quá hạn 30 ngày); launching **08/10** (không phải 07/10)."
+    "Travel bag KHÔNG có tên 'Packed_With_Love' ở bất kỳ nguồn nào. Tên chính thức: **BST Travel bag**, SKU SORA / KAIA / LYRA.",
+    "BST T10: mốc 'Chốt sản phẩm BST' là **20/07/2026** (quá hạn), không phải 20/08; và không có mốc 'chốt 3/7 mẫu'.",
+    "✅ Ngày Travel bag **05/09 CÓ THẬT** — trong sheet launching nhúng của CM WEEKLY REPORT (kỳ 16.8 & 21.8), chốt ở họp 16.8 để dồn cho ngày sale 09/09. Lần tra đầu chỉ tìm trong wiki tiến độ nên không thấy.",
+    "⚠️ Tote: wiki tiến độ + 2 base ghi **07/09**, sheet CM Weekly ghi **23/09** → chưa rõ 'BST T9 (Special Booming)' và 'Tote' có phải cùng một BST không. Nêu cả hai, KHÔNG tự chọn.",
+    "⚠️ BST T10: wiki ghi **08/10**, sheet CM Weekly ghi **07/10**, thân bài CM Weekly kỳ 07.8 ghi **23/10** (CEO chốt giảm T10-T11, tăng T12) → 3 phiên bản."
   ],
   "milestones": [
-    {"bst": "BST T10 (Color Trend)", "launch": "2026-10-08", "milestone": "Xuống đơn hàng PO (D-73)", "date": "2026-07-30", "source": "bảng mốc 23/07 + cảnh báo 15/07", "status": "🔴 RỦI RO CAO NHẤT — hạn cứng để kịp launch 08/10, vẫn 'Chưa bắt đầu'", "done": false},
-    {"bst": "BST T10 (Color Trend)", "launch": "2026-10-08", "milestone": "Chốt sản phẩm BST", "date": "2026-07-20", "source": "bảng mốc 23/07", "status": "Chưa chốt — 18/08 vẫn đang bán test The big move / Versa / Neutral để chọn bộ 3 SP", "done": false},
-    {"bst": "BST T10 (Color Trend)", "launch": "2026-10-08", "milestone": "Kick-off dự án toàn bộ team (D-75)", "date": "2026-07-25", "source": "bảng mốc 23/07", "status": "Chưa bắt đầu", "done": false},
-    {"bst": "BST T10 (Color Trend)", "launch": "2026-10-08", "milestone": "Launching Day", "date": "2026-10-08", "source": "bảng mốc 23/07 + bảng 15/07 + bảng 21/07 (3 nguồn khớp)", "status": "Chưa launch", "done": false},
-
-    {"bst": "BST Tote bag - VN (Roam/Kerry/Sienna)", "launch": "2026-09-07", "milestone": "Hàng về cho KOC (D-21)", "date": "2026-08-17", "source": "bảng mốc 23/07", "status": "🔴 Chưa bắt đầu — Base Booking: 121 KOC, **0 CONFIRMED**, 70 Contacted, 1 Responded, 50 trống, 0 đã gửi hàng", "done": false},
-    {"bst": "BST Tote bag - VN (Roam/Kerry/Sienna)", "launch": "2026-09-07", "milestone": "Mở bán chính thức các kênh (D-20)", "date": "2026-08-18", "source": "bảng mốc 23/07", "status": "Chưa bắt đầu (03/08 đã có GMV 2.970 THB mã ROAM trắng)", "done": false},
-    {"bst": "BST Tote bag - VN (Roam/Kerry/Sienna)", "launch": "2026-09-07", "milestone": "Hàng về số lượng lớn SLL (D-10)", "date": "2026-08-28", "source": "bảng mốc 23/07", "status": "Chưa bắt đầu", "done": false},
-    {"bst": "BST Tote bag - VN (Roam/Kerry/Sienna)", "launch": "2026-09-07", "milestone": "Launching Day", "date": "2026-09-07", "source": "5 nguồn khớp: bảng mốc 23/07 · bảng 15/07 · bảng 21/07 · Base BOOKING 'HP-TOTE S26' · Base KOC 'TOTE COLLECTION - AUG'", "status": "Chưa launch — rủi ro: sự cố chuyển nhầm màu đợt 1 (nâu đậm → nâu nhạt), đang promote 'limited color & stock'", "done": false},
-
-    {"bst": "BST Travel bag (Sora/Kaia/Lyra)", "launch": "2026-08-25", "milestone": "Hàng về cho KOC (D-21)", "date": "2026-08-07", "source": "bảng mốc 23/07", "status": "Chưa bắt đầu — Base Booking: 373 KOC, 28 CONFIRMED (đã gửi hàng), 15 added to group, 86 Contacted, 10 Rejected, 232 trống", "done": false},
-    {"bst": "BST Travel bag (Sora/Kaia/Lyra)", "launch": "2026-08-25", "milestone": "Hàng về số lượng lớn SLL (D-10)", "date": "2026-08-13", "source": "bảng mốc 23/07", "status": "Chưa bắt đầu — sát ngày launch", "done": false},
-    {"bst": "BST Travel bag (Sora/Kaia/Lyra)", "launch": null, "milestone": "Launching Day", "date": "2026-08-25", "source": "BC KQKD Weekly 11/8 ('lùi lịch launching sang 25/08') + cột Launching Day bảng 23/07 · 15/07 · 21/07", "status": "BẢN MỚI NHẤT theo thời gian (11/08). Lý do lùi: lệch tỷ trọng + hàng về muộn + hàng gửi KOC muộn", "done": false},
-    {"bst": "BST Travel bag (Sora/Kaia/Lyra)", "launch": null, "milestone": "Launching Day", "date": "2026-08-23", "source": "dòng mốc D-Day bảng 23/07 + Base BOOKING 'HP - TRAVEL BAG S26'", "status": "Cùng bảng 23/07 TỰ MÂU THUẪN: dòng mốc ghi 23/08, cột Launching Day ghi 25/08", "done": false},
-    {"bst": "BST Travel bag (Sora/Kaia/Lyra)", "launch": null, "milestone": "Launching Day", "date": "2026-08-13", "source": "Base KOC 6_CAMPAIGN 'TRAVEL BAG - AUG' (Launching Date MKT)", "status": "BẢN CŨ chưa cập nhật — mốc gốc đã bị lùi từ 16/06", "done": false},
-
-    {"bst": "BST Tổng hợp (SP win)", "launch": "2026-11-09", "milestone": "Chốt sản phẩm BST", "date": "2026-08-21", "source": "bảng mốc 23/07", "status": "Chưa bắt đầu — SẮP TỚI", "done": false},
-    {"bst": "BST Tổng hợp (SP win)", "launch": "2026-11-09", "milestone": "Kick-off sản phẩm (D-120)", "date": "2026-07-12", "source": "bảng mốc 23/07", "status": "Chưa bắt đầu", "done": false},
-    {"bst": "BST Tổng hợp (SP win)", "launch": "2026-11-09", "milestone": "Kick-off dự án toàn bộ team (D-75)", "date": "2026-08-26", "source": "bảng mốc 23/07", "status": "Chưa bắt đầu", "done": false},
-    {"bst": "BST Tổng hợp (SP win)", "launch": "2026-11-09", "milestone": "Xuống đơn hàng PO (D-73)", "date": "2026-08-31", "source": "bảng mốc 23/07 (cột mốc)", "status": "Chưa bắt đầu — LỆCH: Next Step cùng bảng ghi 'ngày 4/10 xuống ĐH'", "done": false},
-    {"bst": "BST Tổng hợp (SP win)", "launch": null, "milestone": "Launching Day", "date": "2026-11-09", "source": "bảng mốc 23/07", "status": "bản 23/07", "done": false},
-    {"bst": "BST Tổng hợp (SP win)", "launch": null, "milestone": "Launching Day", "date": "2026-11-23", "source": "bảng 15/07", "status": "lệch với bản 23/07", "done": false},
-    {"bst": "BST Tổng hợp (SP win)", "launch": null, "milestone": "Launching Day", "date": "2026-09-11", "source": "bảng 21/07", "status": "nghi lỗi nhập ngày/tháng (11-Sep)", "done": false},
-
-    {"bst": "BST T11 (Thu Đông)", "launch": "2026-11-23", "milestone": "Bán test lấy tỷ trọng", "date": "2026-08-10", "source": "bảng mốc 23/07 + tab Kế hoạch Test (3 SP, NS 20.000 THB, cửa sổ 10/08–09/09)", "status": "Chưa bắt đầu", "done": false},
-    {"bst": "BST T11 (Thu Đông)", "launch": "2026-11-23", "milestone": "Kick-off sản phẩm (D-120)", "date": "2026-07-26", "source": "bảng mốc 23/07", "status": "Chưa bắt đầu", "done": false},
-    {"bst": "BST T11 (Thu Đông)", "launch": "2026-11-23", "milestone": "Khảo sát offline mẫu thực tế", "date": "2026-08-29", "source": "Next Step bảng 23/07", "status": "Chưa đến hạn — chọn 4/9 mẫu ghép vào BST", "done": false},
-    {"bst": "BST T11 (Thu Đông)", "launch": null, "milestone": "Launching Day", "date": "2026-11-23", "source": "bảng mốc 23/07", "status": "⚠️ Weekly 18/08 chốt: T11 **KHÔNG cần launching BST**, chỉ làm Campaign bổ sung traffic (lễ tốt nghiệp, bán SP win Camel/Roam)", "done": false},
-    {"bst": "BST T11 (Thu Đông)", "launch": null, "milestone": "Launching Day", "date": "2026-11-09", "source": "bảng 15/07", "status": "lệch với bản 23/07", "done": false},
-
-    {"bst": "BST T9 (Special Booming - Bloomly/Stella/Chloe)", "launch": "2026-09-23", "milestone": "Hàng về cho KOC (D-21)", "date": "2026-09-02", "source": "bảng mốc 23/07", "status": "Chưa đến hạn", "done": false},
-    {"bst": "BST T9 (Special Booming - Bloomly/Stella/Chloe)", "launch": "2026-09-23", "milestone": "Mở bán chính thức các kênh (D-20)", "date": "2026-09-03", "source": "bảng mốc 23/07", "status": "Chưa đến hạn", "done": false},
-    {"bst": "BST T9 (Special Booming - Bloomly/Stella/Chloe)", "launch": "2026-09-23", "milestone": "Hàng về số lượng lớn SLL (D-10)", "date": "2026-09-13", "source": "bảng mốc 23/07", "status": "Chưa đến hạn", "done": false},
-    {"bst": "BST T9 (Special Booming - Bloomly/Stella/Chloe)", "launch": "2026-09-23", "milestone": "Dừng cửa sổ bán test", "date": "2026-08-26", "source": "tab Kế hoạch Test (3 SP, 990 THB)", "status": "Đang test — 18/08 đã có 25 video, chưa lên Camp", "done": false},
-    {"bst": "BST T9 (Special Booming - Bloomly/Stella/Chloe)", "launch": "2026-09-23", "milestone": "Launching Day", "date": "2026-09-23", "source": "3 nguồn khớp (bảng 23/07 · 15/07 · 21/07)", "status": "Chưa launch — tỷ lệ mẫu 50-40-10, kem/nâu 50-50", "done": false},
-
-    {"bst": "BST Giáng Sinh / Năm mới", "launch": "2026-12-09", "milestone": "Dừng cửa sổ bán test", "date": "2026-09-16", "source": "tab Kế hoạch Test (3 SP, 3.199 THB, NS 20.000 THB)", "status": "Cửa sổ test mở từ 17/08", "done": false},
-    {"bst": "BST Giáng Sinh / Năm mới", "launch": "2026-12-09", "milestone": "Chốt sản phẩm BST", "date": "2026-09-20", "source": "bảng mốc 23/07", "status": "Chưa bắt đầu", "done": false},
-    {"bst": "BST Giáng Sinh / Năm mới", "launch": "2026-12-09", "milestone": "Xuống đơn hàng PO (D-73)", "date": "2026-09-30", "source": "bảng mốc 23/07 (3 ô cùng bảng đều 30/09)", "status": "Chưa bắt đầu — dự án lớn cuối năm, target 10 tỷ", "done": false},
-    {"bst": "BST Giáng Sinh / Năm mới", "launch": "2026-12-09", "milestone": "Launching Day", "date": "2026-12-09", "source": "3 nguồn khớp", "status": "Chưa launch — kick-off đã làm 11/08 (Weekly 18/8) dù bảng chưa update", "done": false},
-
-    {"bst": "BST Ví (mới)", "launch": null, "milestone": "Dừng bán test", "date": "2026-09-02", "source": "tab Kế hoạch Test", "status": "Target 300 triệu VND · 4 mẫu · 990 THB · NS 20.000 THB — CHƯA có mốc launching", "done": false},
-    {"bst": "BST Tết VN (bán màu đỏ / cho Xmas)", "launch": null, "milestone": "Bán test lấy tỷ trọng", "date": "2026-08-10", "source": "bảng mốc 23/07", "status": "Chưa bắt đầu", "done": false},
-    {"bst": "BST Tết VN (bán màu đỏ / cho Xmas)", "launch": null, "milestone": "Launching Day (TBD)", "date": "2026-11-25", "source": "cột H bảng 23/07 — ghi rõ 'TBD'", "status": "'Bán nhưng KHÔNG launching 2026; nếu bán được sẽ làm BST cho 2027'. Không tính vào tổng target 51 tỷ", "done": false},
-    {"bst": "BST Balo", "launch": null, "milestone": "Launching Day", "date": "2026-07-25", "source": "bảng mốc 23/07", "status": "XUNG ĐỘT: cột Launching ghi 'Không launching'; 11/08 chốt **Bỏ** mã Balo Solis", "done": false}
+    {
+      "bst": "BST T10 (Color Trend)",
+      "launch": "2026-10-08",
+      "milestone": "Xuống đơn hàng PO (D-73)",
+      "date": "2026-07-30",
+      "source": "bảng mốc 23/07 + cảnh báo 15/07",
+      "status": "🔴 RỦI RO CAO NHẤT — hạn cứng để kịp launch 08/10, vẫn 'Chưa bắt đầu'",
+      "done": false
+    },
+    {
+      "bst": "BST T10 (Color Trend)",
+      "launch": "2026-10-08",
+      "milestone": "Chốt sản phẩm BST",
+      "date": "2026-07-20",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa chốt — 18/08 vẫn đang bán test The big move / Versa / Neutral để chọn bộ 3 SP",
+      "done": false
+    },
+    {
+      "bst": "BST T10 (Color Trend)",
+      "launch": "2026-10-08",
+      "milestone": "Kick-off dự án toàn bộ team (D-75)",
+      "date": "2026-07-25",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa bắt đầu",
+      "done": false
+    },
+    {
+      "bst": "BST T10 (Color Trend)",
+      "launch": "2026-10-08",
+      "milestone": "Launching Day",
+      "date": "2026-10-08",
+      "source": "bảng mốc 23/07 + bảng 15/07 + bảng 21/07 (3 nguồn khớp)",
+      "status": "Chưa launch",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": "2026-09-07",
+      "milestone": "Hàng về cho KOC (D-21)",
+      "date": "2026-08-17",
+      "source": "bảng mốc 23/07",
+      "status": "🔴 Chưa bắt đầu — Base Booking: 121 KOC, **0 CONFIRMED**, 70 Contacted, 1 Responded, 50 trống, 0 đã gửi hàng",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": "2026-09-07",
+      "milestone": "Mở bán chính thức các kênh (D-20)",
+      "date": "2026-08-18",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa bắt đầu (03/08 đã có GMV 2.970 THB mã ROAM trắng)",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": "2026-09-07",
+      "milestone": "Hàng về số lượng lớn SLL (D-10)",
+      "date": "2026-08-28",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa bắt đầu",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": "2026-09-07",
+      "milestone": "Launching Day",
+      "date": "2026-09-07",
+      "source": "5 nguồn khớp: bảng mốc 23/07 · bảng 15/07 · bảng 21/07 · Base BOOKING 'HP-TOTE S26' · Base KOC 'TOTE COLLECTION - AUG'",
+      "status": "Chưa launch — rủi ro: sự cố chuyển nhầm màu đợt 1 (nâu đậm → nâu nhạt), đang promote 'limited color & stock'",
+      "done": false
+    },
+    {
+      "bst": "BST Travel bag (Sora/Kaia/Lyra)",
+      "launch": "2026-08-25",
+      "milestone": "Hàng về cho KOC (D-21)",
+      "date": "2026-08-07",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa bắt đầu — Base Booking: 373 KOC, 28 CONFIRMED (đã gửi hàng), 15 added to group, 86 Contacted, 10 Rejected, 232 trống",
+      "done": false
+    },
+    {
+      "bst": "BST Travel bag (Sora/Kaia/Lyra)",
+      "launch": "2026-08-25",
+      "milestone": "Hàng về số lượng lớn SLL (D-10)",
+      "date": "2026-08-13",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa bắt đầu — sát ngày launch",
+      "done": false
+    },
+    {
+      "bst": "BST Travel bag (Sora/Kaia/Lyra)",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-08-25",
+      "source": "BC KQKD Weekly 11/8 ('lùi lịch launching sang 25/08') + cột Launching Day bảng 23/07 · 15/07 · 21/07",
+      "status": "BẢN MỚI NHẤT theo thời gian (11/08). Lý do lùi: lệch tỷ trọng + hàng về muộn + hàng gửi KOC muộn",
+      "done": false
+    },
+    {
+      "bst": "BST Travel bag (Sora/Kaia/Lyra)",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-08-23",
+      "source": "dòng mốc D-Day bảng 23/07 + Base BOOKING 'HP - TRAVEL BAG S26'",
+      "status": "Cùng bảng 23/07 TỰ MÂU THUẪN: dòng mốc ghi 23/08, cột Launching Day ghi 25/08",
+      "done": false
+    },
+    {
+      "bst": "BST Travel bag (Sora/Kaia/Lyra)",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-08-13",
+      "source": "Base KOC 6_CAMPAIGN 'TRAVEL BAG - AUG' (Launching Date MKT)",
+      "status": "BẢN CŨ chưa cập nhật — mốc gốc đã bị lùi từ 16/06",
+      "done": false
+    },
+    {
+      "bst": "BST Tổng hợp (SP win)",
+      "launch": "2026-11-09",
+      "milestone": "Chốt sản phẩm BST",
+      "date": "2026-08-21",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa bắt đầu — SẮP TỚI",
+      "done": false
+    },
+    {
+      "bst": "BST Tổng hợp (SP win)",
+      "launch": "2026-11-09",
+      "milestone": "Kick-off sản phẩm (D-120)",
+      "date": "2026-07-12",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa bắt đầu",
+      "done": false
+    },
+    {
+      "bst": "BST Tổng hợp (SP win)",
+      "launch": "2026-11-09",
+      "milestone": "Kick-off dự án toàn bộ team (D-75)",
+      "date": "2026-08-26",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa bắt đầu",
+      "done": false
+    },
+    {
+      "bst": "BST Tổng hợp (SP win)",
+      "launch": "2026-11-09",
+      "milestone": "Xuống đơn hàng PO (D-73)",
+      "date": "2026-08-31",
+      "source": "bảng mốc 23/07 (cột mốc)",
+      "status": "Chưa bắt đầu — LỆCH: Next Step cùng bảng ghi 'ngày 4/10 xuống ĐH'",
+      "done": false
+    },
+    {
+      "bst": "BST Tổng hợp (SP win)",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-11-09",
+      "source": "bảng mốc 23/07",
+      "status": "bản 23/07",
+      "done": false
+    },
+    {
+      "bst": "BST Tổng hợp (SP win)",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-11-23",
+      "source": "bảng 15/07",
+      "status": "lệch với bản 23/07",
+      "done": false
+    },
+    {
+      "bst": "BST Tổng hợp (SP win)",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-09-11",
+      "source": "bảng 21/07",
+      "status": "nghi lỗi nhập ngày/tháng (11-Sep)",
+      "done": false
+    },
+    {
+      "bst": "BST T11 (Thu Đông)",
+      "launch": "2026-11-23",
+      "milestone": "Bán test lấy tỷ trọng",
+      "date": "2026-08-10",
+      "source": "bảng mốc 23/07 + tab Kế hoạch Test (3 SP, NS 20.000 THB, cửa sổ 10/08–09/09)",
+      "status": "Chưa bắt đầu",
+      "done": false
+    },
+    {
+      "bst": "BST T11 (Thu Đông)",
+      "launch": "2026-11-23",
+      "milestone": "Kick-off sản phẩm (D-120)",
+      "date": "2026-07-26",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa bắt đầu",
+      "done": false
+    },
+    {
+      "bst": "BST T11 (Thu Đông)",
+      "launch": "2026-11-23",
+      "milestone": "Khảo sát offline mẫu thực tế",
+      "date": "2026-08-29",
+      "source": "Next Step bảng 23/07",
+      "status": "Chưa đến hạn — chọn 4/9 mẫu ghép vào BST",
+      "done": false
+    },
+    {
+      "bst": "BST T11 (Thu Đông)",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-11-23",
+      "source": "bảng mốc 23/07",
+      "status": "⚠️ Weekly 18/08 chốt: T11 **KHÔNG cần launching BST**, chỉ làm Campaign bổ sung traffic (lễ tốt nghiệp, bán SP win Camel/Roam)",
+      "done": false
+    },
+    {
+      "bst": "BST T11 (Thu Đông)",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-11-09",
+      "source": "bảng 15/07",
+      "status": "lệch với bản 23/07",
+      "done": false
+    },
+    {
+      "bst": "BST T9 (Special Booming - Bloomly/Stella/Chloe)",
+      "launch": "2026-09-23",
+      "milestone": "Hàng về cho KOC (D-21)",
+      "date": "2026-09-02",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa đến hạn",
+      "done": false
+    },
+    {
+      "bst": "BST T9 (Special Booming - Bloomly/Stella/Chloe)",
+      "launch": "2026-09-23",
+      "milestone": "Mở bán chính thức các kênh (D-20)",
+      "date": "2026-09-03",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa đến hạn",
+      "done": false
+    },
+    {
+      "bst": "BST T9 (Special Booming - Bloomly/Stella/Chloe)",
+      "launch": "2026-09-23",
+      "milestone": "Hàng về số lượng lớn SLL (D-10)",
+      "date": "2026-09-13",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa đến hạn",
+      "done": false
+    },
+    {
+      "bst": "BST T9 (Special Booming - Bloomly/Stella/Chloe)",
+      "launch": "2026-09-23",
+      "milestone": "Dừng cửa sổ bán test",
+      "date": "2026-08-26",
+      "source": "tab Kế hoạch Test (3 SP, 990 THB)",
+      "status": "Đang test — 18/08 đã có 25 video, chưa lên Camp",
+      "done": false
+    },
+    {
+      "bst": "BST T9 (Special Booming - Bloomly/Stella/Chloe)",
+      "launch": "2026-09-23",
+      "milestone": "Launching Day",
+      "date": "2026-09-23",
+      "source": "3 nguồn khớp (bảng 23/07 · 15/07 · 21/07)",
+      "status": "Chưa launch — tỷ lệ mẫu 50-40-10, kem/nâu 50-50",
+      "done": false
+    },
+    {
+      "bst": "BST Giáng Sinh / Năm mới",
+      "launch": "2026-12-09",
+      "milestone": "Dừng cửa sổ bán test",
+      "date": "2026-09-16",
+      "source": "tab Kế hoạch Test (3 SP, 3.199 THB, NS 20.000 THB)",
+      "status": "Cửa sổ test mở từ 17/08",
+      "done": false
+    },
+    {
+      "bst": "BST Giáng Sinh / Năm mới",
+      "launch": "2026-12-09",
+      "milestone": "Chốt sản phẩm BST",
+      "date": "2026-09-20",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa bắt đầu",
+      "done": false
+    },
+    {
+      "bst": "BST Giáng Sinh / Năm mới",
+      "launch": "2026-12-09",
+      "milestone": "Xuống đơn hàng PO (D-73)",
+      "date": "2026-09-30",
+      "source": "bảng mốc 23/07 (3 ô cùng bảng đều 30/09)",
+      "status": "Chưa bắt đầu — dự án lớn cuối năm, target 10 tỷ",
+      "done": false
+    },
+    {
+      "bst": "BST Giáng Sinh / Năm mới",
+      "launch": "2026-12-09",
+      "milestone": "Launching Day",
+      "date": "2026-12-09",
+      "source": "3 nguồn khớp",
+      "status": "Chưa launch — kick-off đã làm 11/08 (Weekly 18/8) dù bảng chưa update",
+      "done": false
+    },
+    {
+      "bst": "BST Ví (mới)",
+      "launch": null,
+      "milestone": "Dừng bán test",
+      "date": "2026-09-02",
+      "source": "tab Kế hoạch Test",
+      "status": "Target 300 triệu VND · 4 mẫu · 990 THB · NS 20.000 THB — CHƯA có mốc launching",
+      "done": false
+    },
+    {
+      "bst": "BST Tết VN (bán màu đỏ / cho Xmas)",
+      "launch": null,
+      "milestone": "Bán test lấy tỷ trọng",
+      "date": "2026-08-10",
+      "source": "bảng mốc 23/07",
+      "status": "Chưa bắt đầu",
+      "done": false
+    },
+    {
+      "bst": "BST Tết VN (bán màu đỏ / cho Xmas)",
+      "launch": null,
+      "milestone": "Launching Day (TBD)",
+      "date": "2026-11-25",
+      "source": "cột H bảng 23/07 — ghi rõ 'TBD'",
+      "status": "'Bán nhưng KHÔNG launching 2026; nếu bán được sẽ làm BST cho 2027'. Không tính vào tổng target 51 tỷ",
+      "done": false
+    },
+    {
+      "bst": "BST Balo",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-07-25",
+      "source": "bảng mốc 23/07",
+      "status": "XUNG ĐỘT: cột Launching ghi 'Không launching'; 11/08 chốt **Bỏ** mã Balo Solis",
+      "done": false
+    },
+    {
+      "bst": "BST Travel bag (Sora/Kaia/Lyra)",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-09-05",
+      "source": "CM WEEKLY REPORT kỳ 16.8 & 21.8 — sheet launching nhúng (5Gv8Fn/t4Smyo), bản MỚI NHẤT",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/XUtUd5MrMogxFYxTNIVlJDixgAu",
+      "status": "Đã CHỐT dời (họp 16.8): 'dời lịch air 5.9 để push 9.9' — 09/09 là ngày sale lớn nhất năm mà chưa có nhịp launching nào. Lý do: hàng KOC chậm vì kho vào dịp sale lớn",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-09-23",
+      "source": "CM WEEKLY REPORT kỳ 16.8 & 21.8 — sheet launching nhúng (5Gv8Fn/t4Smyo), bản MỚI NHẤT",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/XUtUd5MrMogxFYxTNIVlJDixgAu",
+      "status": "⚠️ Sheet CM Weekly ghi 23/09 (target 10 tỷ) trong khi 5 nguồn khác ghi 07/09 → NGHI 'BST T9' và 'Tote' là CÙNG một BST, cần Vinh xác nhận",
+      "done": false
+    },
+    {
+      "bst": "BST T10 (Color Trend)",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-10-07",
+      "source": "CM WEEKLY REPORT kỳ 16.8 & 21.8 — sheet launching nhúng (5Gv8Fn/t4Smyo), bản MỚI NHẤT",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/XUtUd5MrMogxFYxTNIVlJDixgAu",
+      "status": "Sheet CM Weekly ghi 07/10 (target 7 tỷ/3 tháng)",
+      "done": false
+    },
+    {
+      "bst": "BST T10 (Color Trend)",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-10-23",
+      "source": "CM WEEKLY REPORT kỳ 07.8 — thân bài (feedback CEO)",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/XUtUd5MrMogxFYxTNIVlJDixgAu",
+      "status": "'chuyển launching từ 07/10 → 23/10, có thể để sang tháng 11'; CEO chốt giảm T10-T11, tăng T12",
+      "done": false
+    },
+    {
+      "bst": "BST T11 (Thu Đông)",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-11-09",
+      "source": "CM WEEKLY REPORT kỳ 16.8 & 21.8 — sheet launching nhúng (5Gv8Fn/t4Smyo), bản MỚI NHẤT",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/XUtUd5MrMogxFYxTNIVlJDixgAu",
+      "status": "Sheet CM Weekly vẫn giữ 09/11 + target 5 tỷ ('Gom SP key') — xung đột với Weekly 18/8 nói T11 không launching",
+      "done": false
+    },
+    {
+      "bst": "BST Giáng Sinh / Năm mới",
+      "launch": null,
+      "milestone": "Launching Day",
+      "date": "2026-12-01",
+      "source": "CM WEEKLY REPORT kỳ 16.8 & 21.8 — sheet launching nhúng (5Gv8Fn/t4Smyo), bản MỚI NHẤT",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/XUtUd5MrMogxFYxTNIVlJDixgAu",
+      "status": "Sheet CM Weekly ghi 01/12, target 20 tỷ/2 tháng (T11: 1 tỷ, T12: 9 tỷ). CEO: 'boom thẳng vào T12', mục tiêu Noel 20-30 tỷ",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": null,
+      "milestone": "Gửi hàng KOC (20 mã ROAM nâu đậm)",
+      "date": "2026-09-03",
+      "source": "CM WEEKLY REPORT kỳ 16.8",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/XUtUd5MrMogxFYxTNIVlJDixgAu",
+      "status": "Khôi xin 20 mã ở VN",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": null,
+      "milestone": "Xuất đơn hàng",
+      "date": "2026-09-15",
+      "source": "CM WEEKLY REPORT kỳ 16.8",
+      "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/XUtUd5MrMogxFYxTNIVlJDixgAu",
+      "status": "Tote/ROAM",
+      "done": false
+    }
   ],
   "tong_target_bst": "51.000.000.000 VND (chưa gồm BST Tết VN — TBD). Nguồn: dòng TỔNG TARGET bảng mốc 23/07",
   "thay_doi_cau_truc_q4": "BC KQKD Weekly 18/08 (mới nhất): 'Cắt các BST, quý 4 chỉ giữ 3 bộ (mỗi tháng 1 bộ, launching trước ngày sale đôi), plan ban đầu 5 bộ' → bảng mốc 23/07 ĐÃ LẠC HẬU về cấu trúc Q4.",
@@ -75,5 +453,12 @@
     "hang_ve_sll": "D-10",
     "kick_off_san_pham": "D-120",
     "kick_off_du_an_team": "D-75"
+  },
+  "⚠️_lech_launching_5_bst": "Sheet launching trong CM WEEKLY REPORT (bản mới nhất 16.8/21.8) LỆCH với wiki tiến độ ở CẢ 5 BST: Travel 05/09 (wiki 23-25/08) · Tote 23/09 (wiki 07/09) · T10 07/10 (wiki 08/10, thân bài 07.8 nói 23/10) · T11 09/11 (wiki 23/11) · Noel 01/12 (wiki 09/12). CM Weekly là cấp báo cáo cao nhất và mới nhất → khi được hỏi phải nêu CẢ HAI và đề nghị chốt 1 nguồn chuẩn, KHÔNG tự chọn.",
+  "target_theo_thang_tu_cm_weekly": {
+    "T9": "Travel 3 tỷ + Tote 2 tỷ + T10 100tr",
+    "Q3": "Travel 11,4 tỷ · Tote 12,9 tỷ · T10 6,9 tỷ · Noel 10 tỷ",
+    "Q4": "Travel 8,25 tỷ · Tote 10,7 tỷ · T10 6,8 tỷ · T11 5 tỷ · Noel 10 tỷ",
+    "unit": "VND"
   }
 }
