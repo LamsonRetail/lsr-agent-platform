@@ -117,6 +117,23 @@ services:
     restart: unless-stopped
 
   # Long-connection cho app Lark của Data Support (squad Data — AG-DATA-SUPPORT).
+  # Long-connection cho app Lark riêng của AG-LEGAL.
+  # CHƯA CHẠY tới khi .env có LEGAL_LARK_APP_ID/SECRET (container chỉ idle + log cảnh báo).
+  # KHÔNG được trỏ LEGAL_LARK_APP_ID vào MINH_ANH_LARK_APP_ID: hai long-connection trên
+  # cùng một app thì Lark chia event cho một trong hai — tin sẽ rơi rụng ngẫu nhiên.
+  # add-lark-app.sh đã chặn ca này.
+  event_gateway_legal:
+    build: ./event_gateway
+    depends_on: [platform_api]
+    environment:
+      PLATFORM_URL: http://platform_api:8090
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
+      LARK_APP_ID: ${LEGAL_LARK_APP_ID:-}
+      LARK_APP_SECRET: ${LEGAL_LARK_APP_SECRET:-}
+      LARK_DOMAIN_CONST: LARK
+    restart: unless-stopped
+
   event_gateway_data:
     build: ./event_gateway
     depends_on: [platform_api]
@@ -217,7 +234,8 @@ services:
                          "${SOURCING_LARK_APP_ID:-}": "${SOURCING_LARK_APP_SECRET:-}",
                          "${DATA_LARK_APP_ID:-}": "${DATA_LARK_APP_SECRET:-}",
                          "${HARRY_LARK_APP_ID:-}": "${HARRY_LARK_APP_SECRET:-}",
-                         "${LYLY_LARK_APP_ID:-}": "${LYLY_LARK_APP_SECRET:-}"}'
+                         "${LYLY_LARK_APP_ID:-}": "${LYLY_LARK_APP_SECRET:-}",
+                         "${LEGAL_LARK_APP_ID:-}": "${LEGAL_LARK_APP_SECRET:-}"}'
       # Bản đồ app_id -> tiền tố env (KHÔNG có secret). Để AG-OPS in đúng lệnh
       # add-lark-app.sh khi phát hiện app thiếu/sai secret — sai tiền tố là ghi
       # secret vào block không ai đọc (đúng lỗi đã gặp với Sawadee).
@@ -225,7 +243,8 @@ services:
                            "${SOURCING_LARK_APP_ID:-}": "SOURCING",
                            "${DATA_LARK_APP_ID:-}": "DATA",
                            "${HARRY_LARK_APP_ID:-}": "HARRY",
-                           "${LYLY_LARK_APP_ID:-}": "LYLY"}'
+                           "${LYLY_LARK_APP_ID:-}": "LYLY",
+                           "${LEGAL_LARK_APP_ID:-}": "LEGAL"}'
       LARK_NOTIFY_CHAT_ID: ${LARK_NOTIFY_CHAT_ID:-}
       LARK_DOMAIN: ${LARK_DOMAIN:-https://open.larksuite.com}
       # P10: đăng nhập console qua Lark OAuth + kiểm tra ORG + quyền mặc định

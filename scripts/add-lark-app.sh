@@ -30,6 +30,21 @@ ROOT="${LSR_ROOT:-/opt/lsr-platform}"
 DOMAIN="${LARK_DOMAIN:-https://open.larksuite.com}"
 cd "$ROOT"
 
+# Chống trùng app: hai long-connection trên CÙNG một app thì Lark chỉ đẩy event cho
+# một trong hai container — tin nhắn rơi rụng ngẫu nhiên, cực khó lần ra. Nên nếu app_id
+# này đã được khai dưới một tiền tố KHÁC thì dừng ngay.
+if [ -f .env ]; then
+  DUP=$(grep -nE "^[A-Z_]*APP_ID=${APP_ID}$" .env | grep -v "^[0-9]*:${K_ID}=" || true)
+  if [ -n "$DUP" ]; then
+    echo "✗ app_id $APP_ID ĐÃ được khai ở biến khác:"
+    echo "$DUP" | sed 's/^/    /'
+    echo "  App này đã có gateway lắng nghe. Thêm listener thứ hai cho cùng một app sẽ"
+    echo "  làm Lark chia event cho một trong hai → mất tin. Muốn agent có bot RIÊNG thì"
+    echo "  tạo custom app mới trong Lark Developer Console và dùng app_id mới."
+    exit 1
+  fi
+fi
+
 echo -n "Dán App Secret cho $APP_ID (dùng NÚT COPY trong Lark Developer Console) rồi Enter (ẩn): "
 read -r -s SECRET; echo
 # Làm sạch: bỏ \r (paste từ Windows/Lark web), khoảng trắng và dấu nháy bao quanh.

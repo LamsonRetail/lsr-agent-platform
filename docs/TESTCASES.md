@@ -583,3 +583,7 @@ tồn tại chính vì lý do đó, đừng coi auto-prune là bảo hiểm.
 | 21.4 | tiền tố env lấy từ `LARK_APP_PREFIXES` | lệnh in ra đúng `LYLY` + `event_gateway_lyly` | ✅ |
 | 21.5 | thiếu `LARK_APP_PREFIXES` | fallback quét os.environ, không vỡ | ✅ |
 | 21.6 | AG-OPS chạy thật | tạo `pending_actions #419` đúng nội dung | ✅ |
+| 21.7 | `add-lark-app.sh LEGAL <app của Minh Anh>` | CHẶN, không ghi .env (2 listener/1 app = Lark chia event, mất tin) | ✅ |
+| 21.8 | `add-lark-app.sh LEGAL <app_id mới>` | đi tiếp bình thường tới bước nhập secret | ✅ |
+| 21.9 | `add-lark-app.sh LYLY <app_id của chính LYLY>` | KHÔNG coi là trùng (cập nhật lại secret cũ) | ✅ |
+| 21.10 | `LEGAL_LARK_APP_ID` rỗng | `LARK_EXTRA_APPS`/`LARK_APP_PREFIXES` vẫn parse được, không mất app phụ nào | ✅ |
