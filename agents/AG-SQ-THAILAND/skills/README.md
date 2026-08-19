@@ -12,7 +12,6 @@
 |---|---|---|---|
 | **Vinh (CM)** | Persona + phân quyền + F1 tri thức | `th-internal-knowledge.md` ✅ | `persona` · `th_context` · `role_permissions` · `th_squads` |
 | **Hương (KD HAPAS)** | F2 báo cáo — 8 nguồn & base target | `th-weekly-report.md` ⬜ | `th_report_sources` · `th_base_targets` |
-| **Trang (KD MATE MADE)** | Bối cảnh brand MM | `th-brand-matemade.md` ⬜ | `th_context_mm` |
 | **Tùng (MKT Manager)** | F3 lịch mùa vụ & dịp lễ | `th-season-calendar.md` ⬜ | `th_season_calendar` |
 | **Khôi (Sản phẩm)** | F3 mốc BST | `th-bst-milestones.md` ⬜ | `th_bst_milestones` |
 | **Hạnh (Booking)** | F4 giao việc & đôn đốc | `th-assignments.md` ⬜ | (dùng `th_squads` của Vinh) |

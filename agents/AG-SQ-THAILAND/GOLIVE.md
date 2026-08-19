@@ -12,9 +12,9 @@
 | Mô tả mục đích | Kho tri thức chung có nguồn cho squad TH; hỏi đáp qua Lark/Telegram/web; biên bản họp với gate chủ trì chốt |
 | Owner | `[CẦN CHỐT: thint@hapas.vn (theo manifest) hay vinhnd@hapas.vn (CM, theo kế hoạch Ploy)]` |
 | Backup owner | `[CẦN ĐIỀN email]` |
-| Squad phục vụ | SQ-THAILAND (HAPAS TH + MATE MADE TH) — **là squad agent chính** |
+| Squad phục vụ | SQ-THAILAND (HAPAS Thailand — MATE MADE TH đã đóng 19/08/2026) — **là squad agent chính** |
 | Thành viên team | Theo `configs/th_squads.json` — `[CẦN ĐIỀN lark_user_id từng người]` |
-| Approver | Vinh (CM). Riêng biên bản họp: chủ trì cuộc họp đó. Giao việc: chỉ Vinh & Sơn |
+| Approver | Vinh (CM). Riêng biên bản họp: chủ trì cuộc họp đó. Giao việc: chỉ Vinh |
 | Phối hợp người–máy | Agent tự làm: trả lời có nguồn, dựng nháp biên bản, index tài liệu. Phải hỏi người: chốt biên bản (chủ trì), duyệt tri thức (reviewer), duyệt task (console HITL) |
 | Kênh làm việc chính | Nhóm Lark "Sawatdee HAPAS" (+ nhóm squad TH khi mở rộng) · web console `/agent/AG-SQ-THAILAND` |
 
@@ -49,8 +49,8 @@
 
 | Mục | Giá trị |
 |---|---|
-| Bộ test | 18 case `tests.jsonl` + nhãn tool `tests/agent_tests.yaml` + regression đa lượt `tests/selfcheck_flows.py` (12 check gate HITL) — **pass 100% local 12/08**; chạy trên platform sau khi register |
-| Trường hợp từ chối / escalation | Lương/PII/giá vốn → từ chối, chỉ bộ phận phụ trách · ngoài phạm vi TH → chỉ đúng kênh · giao việc bởi người ngoài Vinh/Sơn → từ chối · lead MM im 24h → Trang + Vinh |
+| Bộ test | 32 case `tests.jsonl` + nhãn tool `tests/agent_tests.yaml` + regression đa lượt `tests/selfcheck_flows.py` (12 check gate HITL) — **pass 100% local 12/08**; chạy trên platform sau khi register |
+| Trường hợp từ chối / escalation | Lương/PII/giá vốn → từ chối, chỉ bộ phận phụ trách · ngoài phạm vi TH → chỉ đúng kênh · giao việc bởi người ngoài Vinh → từ chối · Chapter Lead/BOD veto trong 24h |
 | Rủi ro + giảm thiểu | Bịa số → chỉ trả lời có nguồn + luật cứng trong model.py · biên bản sai → gate chủ trì chốt (đã chống phủ định "chưa chốt" + chống chốt trùng) · Whisper chết → DLQ replay · cost → quota console |
 | Review tuần đầu | `[CẦN ĐIỀN — đề xuất: Vinh đọc 100% output 3 ngày đầu, sau đó Hương mỗi ngày 1 lần]` |
 | Lịch định kỳ | Phase 0: chưa có. Phase 1 sẽ thêm: draft báo cáo tuần (thứ 5) + nhắc mốc BST (thứ 2) — khai vào `schedule:` của manifest khi làm |

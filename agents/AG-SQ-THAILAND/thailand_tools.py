@@ -522,14 +522,6 @@ def th_context(brand: str = "") -> str:
     ctx = load_config("th_context")
     if not ctx:
         return NO_CONFIG.format(key="th_context")
-    if brand.lower() in ("mm", "mate made", "matemade"):
-        mm = load_config("th_context_mm")
-        if not mm:
-            return NO_CONFIG.format(key="th_context_mm")
-        lo, hi = mm.get("price_band_thb", [0, 0])
-        return ("**MATE MADE Thailand** — giai đoạn: " + mm.get("stage", "?") +
-                f"\n- Vùng giá: {lo:,}–{hi:,}฿".replace(",", ".") +
-                f"\n- {mm.get('ebitda_rule', '')}\n- {mm.get('reporting_rule', '')}")
     t = ctx.get("targets_2026") or {}
     lines = ["**Thị trường Thái Lan** — CM: " + ctx.get("cm", "?"),
              "- Brand: " + " · ".join(ctx.get("brands", [])),
@@ -566,7 +558,26 @@ _NUMBERS_Q = ("doanh thu", "doanh so", "doanh số", "lợi nhuận", "loi nhuan
               "dong tien", "bán được bao nhiêu", "số tháng 8", "thang 8 the nao")
 _KB_Q = ("kho tri thức", "kho tri thuc", "master file", "mục lục", "muc luc",
          "file nào", "file nao", "có những file", "tài liệu nào", "tai lieu nao")
-_MM_Q = ("mate made", "matemade")
+_MM_Q = ("mate made", "matemade", "mate-made", "mm th")
+
+
+def mate_made_answer(q_low: str) -> str:
+    """MATE MADE Thái Lan đã đóng 19/08. MM Việt Nam ngoài phạm vi Ploy."""
+    cfg = load_config("th_agent_routing") or {}
+    row = next((r for r in cfg.get("routing", []) if r["agent"] == "AG-JENNY-BOD"), {})
+    vn = any(k in q_low for k in ("việt nam", "viet nam", " vn", "vn "))
+    head = "**MATE MADE Thái Lan đã đóng** (19/08/2026) — em không còn giữ số mảng này."
+    if not vn:
+        return head + "\nNếu anh/chị hỏi MATE MADE **Việt Nam** thì nói rõ giúp em — đó là thị trường VN, ngoài phạm vi em."
+    who = f"**{row.get('ten', 'Jenny')}** ({row.get('agent', 'AG-JENNY-BOD')})"
+    can = row.get("can_call")
+    tail = (f"Số MATE MADE **Việt Nam** do {who} giữ (BigQuery). "
+            + ("Em hỏi được — nói em hỏi là em gọi." if can else
+               "Em CHƯA được cấp quyền gọi; nhờ admin cấp A2A grant."))
+    ds = cfg.get("🔴_data_support_khong_chay")
+    if ds and not can:
+        tail += "\n_AG-DATA-SUPPORT đã có quyền nhưng gọi 2 lần không phản hồi — agent đó chưa chạy._"
+    return head + "\n" + tail
 _CULTURE_Q = ("văn hoá", "van hoa", "văn hóa", "giá trị cốt lõi", "gia tri cot loi", "giá trị của lsr",
               "keeper test", "nguyên tắc làm việc", "check-in", "chuẩn mực", "tuyên ngôn")
 _LOGISTICS_Q = ("logistic", "kho vận", "kho van", "vận chuyển", "van chuyen", "hàng về",
@@ -621,7 +632,7 @@ def route(q_low: str) -> str | None:
     if any(k in q_low for k in _KB_Q):
         parts.append(th_kb_index())
     if any(k in q_low for k in _MM_Q):
-        parts.append(th_context(brand="mm"))
+        return mate_made_answer(q_low)
     if any(k in q_low for k in _CULTURE_Q):
         parts.append(lsr_culture())
     if any(k in q_low for k in _COMPANY_Q):

@@ -56,7 +56,7 @@ _QUESTION_RE = re.compile(r"(khi nào|khi nao|ngày nào|ngay nao|bao giờ|bao 
 CAPABILITY_WORDS = ("làm được gì", "lam duoc gi", "giúp gì", "giup gi", "bạn là ai")
 TASK_WORDS = ("tạo task", "tao task", "giao việc", "tạo đầu việc")
 
-INTRO = ("Dạ em là **Ploy** — trợ lý thị trường **Thái Lan** (HAPAS TH + MATE MADE TH). "
+INTRO = ("Dạ em là **Ploy** — trợ lý thị trường **Thái Lan** (HAPAS Thailand). "
          "Em giữ kho dữ liệu chung của squad, theo mốc BST & lịch mùa vụ Thái, và làm biên "
          "bản họp. Cả nhóm cứ tag em rồi hỏi ạ.")
 # Cấu trúc đánh số + TUYÊN BỐ GIỚI HẠN QUYỀN — học từ bot Mira (KHHH) trong nhóm sharing:

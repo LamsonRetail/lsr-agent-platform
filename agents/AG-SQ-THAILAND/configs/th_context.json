@@ -2,31 +2,50 @@
   "owner_config": "Vinh",
   "source": "Squad Model - Thái Lan · Sale Forecast 2026 · 2026 TARGET & BUDGET THAILAND · BC KQKD Daily/Weekly — đọc thật 19/08/2026",
   "market": "Thái Lan",
-  "brands": ["HAPAS Thailand", "MATE MADE Thailand"],
+  "brands": [
+    "HAPAS Thailand"
+  ],
   "squads": [
-    "SQ HAPAS TH — lead: Vinh (kiêm Country Manager)",
-    "SQ MATE MADE TH — lead: anh Sơn (CCO, remote)"
+    "SQ HAPAS TH — lead: Vinh (kiêm Country Manager)"
   ],
   "cm": "Vinh (Country Manager Thái Lan)",
-  "market_goal": "Hoà vốn 11–12 tỷ VND/tháng trong T9/2026. HAPAS TH: T8 10,3 tỷ → T9 13 tỷ, có lãi từ Q4. MATE MADE: giai đoạn học thị trường, không ép số lớn (EBITDA âm ≤ 5%). (nguồn: Squad Model - Thái Lan)",
+  "market_goal": "Hoà vốn thị trường Thái Lan. HAPAS TH: T8 10,3 tỷ → T9 13 tỷ, có lãi từ Q4. MATE MADE Thái Lan ĐÃ ĐÓNG 19/08/2026 — không còn trong phạm vi.",
   "targets_2026": {
     "unit": "tỷ VND (GMV)",
     "source": "Sale Forecast 2026, sheet 'Monthly 2026 - 2nd Half' (bản sheet Overall liên kết tới)",
     "source_url": "https://o4pvcegwn6b.sg.larksuite.com/sheets/GfifsgQeYh17rjtsxbslFRGegsf",
-    "HAPAS": {"2026-08": 11.0, "2026-09": 13.0, "2026-10": 16.0, "2026-11": 20.0, "2026-12": 25.0, "ca_nam": 151.3},
-    "MATE_MADE": {"2026-08": 10.0, "2026-09": 15.0, "2026-10": 18.0, "2026-11": 23.0, "2026-12": 42.0, "ca_nam": 117.5},
-    "note": "T9 MATE MADE cột ghi 'hết SP'. Doc TARGET & BUDGET (chỉ có HAPAS, Q3 Ver 2 17/06 ghi CHỐT) lại ghi T8 10,3 · T9 12,0 · T10 15,42 · T11 20,204 · T12 25,0 tỷ VND."
+    "HAPAS": {
+      "2026-08": 11.0,
+      "2026-09": 13.0,
+      "2026-10": 16.0,
+      "2026-11": 20.0,
+      "2026-12": 25.0,
+      "ca_nam": 151.3
+    },
+    "note": "Doc TARGET & BUDGET (chỉ HAPAS, Q3 Ver 2 17/06 ghi CHỐT) ghi T8 10,3 · T9 12,0 · T10 15,42 · T11 20,204 · T12 25,0 tỷ VND. Số MATE MADE đã gỡ (brand đóng 19/08)."
   },
   "mkt_budget_2026": {
     "unit": "tỷ VND",
     "source": "MKT - Thailand 2026 (sheet KẾ HOẠCH TỔNG 2026)",
-    "ca_nam": {"doanh_thu": 148.1, "cp_mkt": 9.63, "cir": "≈6,5%"},
-    "h2_theo_thang": {"T7": "8 / 0,48", "T8": "10 / 0,50", "T9": "14 / 0,70", "T10": "15 / 0,795", "T11": "19 / 1,026", "T12": "25 / 1,375"},
+    "ca_nam": {
+      "doanh_thu": 148.1,
+      "cp_mkt": 9.63,
+      "cir": "≈6,5%"
+    },
+    "h2_theo_thang": {
+      "T7": "8 / 0,48",
+      "T8": "10 / 0,50",
+      "T9": "14 / 0,70",
+      "T10": "15 / 0,795",
+      "T11": "19 / 1,026",
+      "T12": "25 / 1,375"
+    },
     "co_cau": "Booking chiếm 60–79% ngân sách MKT nửa cuối năm (T12: Ads 17% / Media 4% / Booking 79%)"
   },
   "canh_bao_du_lieu": [
-    "Số THỰC HIỆN (DT/LNĐG/%MTD) trong BC KQKD Daily & Weekly là TỔNG kênh TMĐT (Shopee + TikTok) — KHÔNG tách HAPAS / MATE MADE. Không được gán số đó cho riêng một brand.",
-    "Target T8 HAPAS có 4 con số khác nhau giữa các nguồn (10,3 · 11,0 · 12,0 tỷ VND và 13 triệu THB) — xem th_base_targets để biết chi tiết.",
-    "Target MATE MADE lệch giữa 2 sheet cùng workbook: bản chính 117,5 tỷ/năm vs bản '(Copy)' 66,5 tỷ/năm."
-  ]
+    "Số THỰC HIỆN (DT/LNĐG/%MTD) trong BC KQKD là TỔNG kênh TMĐT (Shopee + TikTok). Số TRƯỚC 19/08 còn gộp cả MATE MADE TH — khi so sánh chuỗi thời gian phải nhớ điểm cắt này.",
+    "Target T8 HAPAS có 4 con số khác nhau giữa các nguồn (10,3 · 11,0 · 12,0 tỷ VND và 13 triệu THB) — xem th_base_targets."
+  ],
+  "thay_doi_pham_vi": "MATE MADE Thái Lan ĐÓNG 19/08/2026 (Vinh thông báo). Ploy chỉ còn phụ trách **HAPAS Thailand**. Câu hỏi về MATE MADE **Việt Nam** là NGOÀI phạm vi Ploy — số do Jenny (AG-JENNY-BOD) / Data Support (AG-DATA-SUPPORT) giữ.",
+  "mate_made_thailand": "ĐÃ ĐÓNG 19/08/2026 — không theo dõi, không lưu số."
 }

@@ -9,21 +9,128 @@
     "Không bình luận, xếp hạng, so sánh cá nhân trong công ty (kể cả BOD)."
   ],
   "roles": [
-    {"role": "Country Manager + Squad Lead HAPAS TH", "people": ["Vinh"], "can_see": "tất cả", "can_do": "tất cả, kể cả giao việc; quyết nguồn lực dùng chung; quyết việc ngoài quyền squad"},
-    {"role": "Squad Lead MATE MADE (CCO) + Chapter Lead Kinh doanh", "people": ["anh Sơn"], "can_see": "tất cả squad MM + trục KD cả 2 squad", "can_do": "giao việc trong squad MM; định hướng KD/traffic/AOV/CR"},
-    {"role": "Chapter Lead Sản phẩm (CEO)", "people": ["anh Chung"], "can_see": "sản phẩm + marketing cả 2 squad", "can_do": "chốt BST/thiết kế; gate scale sản phẩm MM"},
-    {"role": "Chapter Lead Marketing (CMO)", "people": ["anh Tài"], "can_see": "marketing cả 2 squad", "can_do": "kiểm duyệt concept, giữ branding"},
-    {"role": "Chapter Lead Vận hành (COO)", "people": ["anh Thi"], "can_see": "vận hành + S&OP cả 2 squad", "can_do": "chuẩn vận hành, S&OP"},
-    {"role": "Trưởng Kinh doanh HAPAS TH", "people": ["Hương"], "can_see": "số HAPAS (không xem lương)", "can_do": "giao việc trong team KD HAPAS; Project Owner phần lớn BST Thái"},
-    {"role": "Trưởng Kinh doanh MATE MADE TH", "people": ["Trang"], "can_see": "số MATE MADE", "can_do": "giao việc trong team KD MM; quyết cùng Vinh khi anh Sơn im 24h"},
-    {"role": "MKT Manager TH (2 brand)", "people": ["anh Tùng"], "can_see": "DT & traffic cả 2 brand, không xem LNĐG/P&L", "can_do": "xếp lịch MKT, giao thực thi cho Ngân/Yến Nhi"},
-    {"role": "Marketing account (VN-based)", "people": ["Ngân (HAPAS)", "Yến Nhi (MM)"], "can_see": "DT & traffic brand mình", "can_do": "thực thi plan từ anh Tùng, cập nhật assignment"},
-    {"role": "Kinh doanh HAPAS TH", "people": ["Khuê", "Phúc", "Phương Chi", "Shetsuda", "Siriporn"], "can_see": "số HAPAS phần mình phụ trách", "can_do": "cập nhật assignment"},
-    {"role": "Kinh doanh MATE MADE TH", "people": ["H.Dung", "N.Tuyền", "P.Linh", "K.Linh", "Bhornwan"], "can_see": "số MM phần mình phụ trách", "can_do": "cập nhật assignment"},
-    {"role": "Kế hoạch / Thu mua", "people": ["Khôi (HAPAS)", "T.Dương (HAPAS)", "M.Thảo (MM)", "P.Thảo (MM)"], "can_see": "mốc BST, nghiên cứu, JTBD", "can_do": "cập nhật mốc BST"},
-    {"role": "Booking / CSKH (dùng chung)", "people": ["Hạnh", "Dịu", "T.Dương", "N.Quỳnh"], "can_see": "lịch launching, booking", "can_do": "cập nhật assignment"},
-    {"role": "S&OP", "people": ["Tuấn Anh"], "can_see": "số S&OP (chốt ngày 23 hàng tháng)", "can_do": "cập nhật S&OP"},
-    {"role": "Kế toán tại Thái", "people": ["Hiền (backup: chị Hoà)"], "can_see": "số tài chính theo phân công", "can_do": "—"},
-    {"role": "People Ops / Nhân sự - pháp lý", "people": ["Kim Ngọc (PINMUK) — ⚠️ cần xác nhận còn giữ vai", "Thu"], "can_see": "headcount, tuyển dụng", "can_do": "cập nhật assignment"}
-  ]
+    {
+      "role": "Country Manager + Squad Lead HAPAS TH",
+      "people": [
+        "Vinh"
+      ],
+      "can_see": "tất cả",
+      "can_do": "tất cả, kể cả giao việc; quyết nguồn lực dùng chung; quyết việc ngoài quyền squad"
+    },
+    {
+      "role": "Chapter Lead Kinh doanh (CCO)",
+      "people": [
+        "anh Sơn"
+      ],
+      "can_see": "trục kinh doanh",
+      "can_do": "định hướng KD/traffic/AOV/CR"
+    },
+    {
+      "role": "Chapter Lead Sản phẩm (CEO)",
+      "people": [
+        "anh Chung"
+      ],
+      "can_see": "sản phẩm + marketing squad Thái Lan",
+      "can_do": "chốt BST/thiết kế"
+    },
+    {
+      "role": "Chapter Lead Marketing (CMO)",
+      "people": [
+        "anh Tài"
+      ],
+      "can_see": "marketing squad Thái Lan",
+      "can_do": "kiểm duyệt concept, giữ branding"
+    },
+    {
+      "role": "Chapter Lead Vận hành (COO)",
+      "people": [
+        "anh Thi"
+      ],
+      "can_see": "vận hành + S&OP squad Thái Lan",
+      "can_do": "chuẩn vận hành, S&OP"
+    },
+    {
+      "role": "Trưởng Kinh doanh HAPAS TH",
+      "people": [
+        "Hương"
+      ],
+      "can_see": "số HAPAS (không xem lương)",
+      "can_do": "giao việc trong team KD HAPAS; Project Owner phần lớn BST Thái"
+    },
+    {
+      "role": "MKT Manager TH",
+      "people": [
+        "anh Tùng"
+      ],
+      "can_see": "DT & traffic HAPAS TH, không xem LNĐG/P&L",
+      "can_do": "xếp lịch MKT, giao thực thi cho Ngân"
+    },
+    {
+      "role": "Marketing account (VN-based)",
+      "people": [
+        "Ngân (HAPAS)"
+      ],
+      "can_see": "DT & traffic brand mình",
+      "can_do": "thực thi plan từ anh Tùng, cập nhật assignment"
+    },
+    {
+      "role": "Kinh doanh HAPAS TH",
+      "people": [
+        "Khuê",
+        "Phúc",
+        "Phương Chi",
+        "Shetsuda",
+        "Siriporn"
+      ],
+      "can_see": "số HAPAS phần mình phụ trách",
+      "can_do": "cập nhật assignment"
+    },
+    {
+      "role": "Kế hoạch / Thu mua",
+      "people": [
+        "Khôi (HAPAS)",
+        "T.Dương (HAPAS)"
+      ],
+      "can_see": "mốc BST, nghiên cứu, JTBD",
+      "can_do": "cập nhật mốc BST"
+    },
+    {
+      "role": "Booking / CSKH (dùng chung)",
+      "people": [
+        "Hạnh",
+        "Dịu",
+        "T.Dương",
+        "N.Quỳnh"
+      ],
+      "can_see": "lịch launching, booking",
+      "can_do": "cập nhật assignment"
+    },
+    {
+      "role": "S&OP",
+      "people": [
+        "Tuấn Anh"
+      ],
+      "can_see": "số S&OP (chốt ngày 23 hàng tháng)",
+      "can_do": "cập nhật S&OP"
+    },
+    {
+      "role": "Kế toán tại Thái",
+      "people": [
+        "Hiền (backup: chị Hoà)"
+      ],
+      "can_see": "số tài chính theo phân công",
+      "can_do": "—"
+    },
+    {
+      "role": "People Ops / Nhân sự - pháp lý",
+      "people": [
+        "Kim Ngọc (PINMUK) — ⚠️ cần xác nhận còn giữ vai",
+        "Thu"
+      ],
+      "can_see": "headcount, tuyển dụng",
+      "can_do": "cập nhật assignment"
+    }
+  ],
+  "thay_doi_pham_vi": "MATE MADE Thái Lan ĐÓNG 19/08/2026 (Vinh thông báo). Ploy chỉ còn phụ trách **HAPAS Thailand**. Câu hỏi về MATE MADE **Việt Nam** là NGOÀI phạm vi Ploy — số do Jenny (AG-JENNY-BOD) / Data Support (AG-DATA-SUPPORT) giữ.",
+  "mate_made_thailand": "ĐÃ ĐÓNG 19/08/2026 — đã gỡ các vai trò MM khỏi bảng quyền."
 }

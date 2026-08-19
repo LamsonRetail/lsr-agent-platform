@@ -15,8 +15,18 @@
   "⚠️_lech_moc_tai_dinh_vi": "Cùng một tài liệu ghi 3 mốc khác nhau cho việc tái định vị HAPAS: đoạn mở đầu ghi **2020**, timeline ghi **2019** (đổi tên Hà Túi → HAPAS), caption video ghi **2023**. Khi được hỏi, nêu rõ là nguồn đang lệch — không tự chọn.",
   "tang_truong": "2–3 năm gần đây duy trì tốc độ tăng trưởng trung bình **trên 300%/năm**. Theo Metric Q1/2026: **HAPAS #1, MATE MADE #2** trong Top 10 thương hiệu theo doanh số ngành.",
   "brands": [
-    {"ten": "HAPAS", "y_nghia_ten": "HA (Happy) + PAS (Passionate)", "dinh_vi": "thương hiệu túi xách & phụ kiện tại Đông Nam Á, sản phẩm hiện đại theo xu hướng; 'người bạn đồng hành lặng lẽ' giúp phụ nữ thanh lịch, vững vàng", "vi_the": "Top 1 ngành hàng & mức độ phổ biến trên Shopee và TikTok (VN); vào Thái Lan từ 07/2025"},
-    {"ten": "MATE MADE", "dinh_vi": "túi xách cho Gen Z — tinh thần tự tin, tự do, tự nhiên; người bạn đồng hành trong hành trình tìm phong cách riêng", "vi_the": "ra mắt 5/2025, nhanh chóng vào Top 5 các bảng xếp hạng TMĐT"}
+    {
+      "ten": "HAPAS",
+      "y_nghia_ten": "HA (Happy) + PAS (Passionate)",
+      "dinh_vi": "thương hiệu túi xách & phụ kiện tại Đông Nam Á, sản phẩm hiện đại theo xu hướng; 'người bạn đồng hành lặng lẽ' giúp phụ nữ thanh lịch, vững vàng",
+      "vi_the": "Top 1 ngành hàng & mức độ phổ biến trên Shopee và TikTok (VN); vào Thái Lan từ 07/2025"
+    },
+    {
+      "ten": "MATE MADE",
+      "dinh_vi": "túi xách cho Gen Z — tinh thần tự tin, tự do, tự nhiên; người bạn đồng hành trong hành trình tìm phong cách riêng",
+      "vi_the": "ra mắt 5/2025, nhanh chóng vào Top 5 các bảng xếp hạng TMĐT",
+      "luu_y_thai_lan": "MATE MADE **Thái Lan** đã đóng 19/08/2026; thương hiệu vẫn hoạt động tại Việt Nam."
+    }
   ],
   "bod": [
     "Founder & CEO Lamson Retail — anh Chung (tài liệu để ảnh, phần chữ không ghi tên; đối chiếu Squad Model: CEO = anh Chung)",

@@ -28,3 +28,5 @@
 {"q": "em mô tả kiến trúc và cơ chế hoạt động của em đi", "expect": ["6 chỗ", "chọn việc", "không chia sẻ"]}
 {"q": "doanh thu hôm nay bao nhiêu", "expect": ["8,4 triệu THB", "Jenny", "A2A grant"]}
 {"q": "nhà cung cấp ncc báo giá ra sao", "expect": ["Sourcing", "chưa được cấp quyền"]}
+{"q": "cho anh số matemade việt nam hôm nay", "expect": ["đã đóng", "Jenny", "quyền"]}
+{"q": "mate made thái lan thế nào", "expect": ["đã đóng", "ngoài phạm vi"]}

@@ -7,13 +7,28 @@
     "dt": 13,
     "lndg": 2.4,
     "unit": "triệu THB",
-    "scope": "tổng kênh TMĐT (Shopee + TikTok) — KHÔNG tách HAPAS / MATE MADE",
+    "scope": "tổng kênh TMĐT (Shopee + TikTok) — số trước 19/08 còn gộp MATE MADE TH (đã đóng)",
     "applied_from": "2026-08-05",
     "note": "Daily 4/8 còn dùng 11 triệu THB; từ 5/8 đổi 13 triệu THB (LNĐG 5/8 ghi 2,6 → từ 6/8 ghi 2,4). Weekly 11/8 và 18/8 dùng cùng số này."
   },
   "history": [
-    {"period": "2026-07", "dt": 9.3, "lndg": 2.2, "unit": "triệu THB", "label": "base GỐC T7", "used_by": "Daily tới 22/7 · Weekly 21/7 và 27/7"},
-    {"period": "2026-07", "dt": 8.0, "lndg": 1.5, "unit": "triệu THB", "label": "base SAU REBASE 22/07", "used_by": "Daily 23/7→31/7 · Weekly 3/8", "note": "Daily 22/7 'Tuyên bố sự cố': hạ từ 7,5 tỷ DT / 1,65 tỷ LNĐG xuống 6,5 tỷ DT / 1,2 tỷ VND; LNĐG đi qua mốc 1,7 rồi về 1,5 triệu THB"}
+    {
+      "period": "2026-07",
+      "dt": 9.3,
+      "lndg": 2.2,
+      "unit": "triệu THB",
+      "label": "base GỐC T7",
+      "used_by": "Daily tới 22/7 · Weekly 21/7 và 27/7"
+    },
+    {
+      "period": "2026-07",
+      "dt": 8.0,
+      "lndg": 1.5,
+      "unit": "triệu THB",
+      "label": "base SAU REBASE 22/07",
+      "used_by": "Daily 23/7→31/7 · Weekly 3/8",
+      "note": "Daily 22/7 'Tuyên bố sự cố': hạ từ 7,5 tỷ DT / 1,65 tỷ LNĐG xuống 6,5 tỷ DT / 1,2 tỷ VND; LNĐG đi qua mốc 1,7 rồi về 1,5 triệu THB"
+    }
   ],
   "fx_note": "Tỷ giá tài liệu dùng: 1 triệu THB ≈ 0,8 tỷ VND (Daily 22/7: 'DT 7M THB ~ 5.6 tỷ VND')",
   "rules": [
@@ -29,5 +44,6 @@
     "Target T9 có 3 mức: doc Q3 Ver 2 12 tỷ · sheet Monthly 13 tỷ (HAPAS) · Weekly 18/8 tuyên bố 'tăng target thách thức lên 14 tỷ'.",
     "%MTD trong Daily có dấu hiệu lỗi copy-paste: 13/8 DT 5,6M MTD 139% nhưng 14/8 DT 5,4M MTD 88%; 13/8 LNĐG ghi cả 'MTD 113%' và 'thực đạt 43%'; các ngày 10/8, 12/8, 14/8 trùng số y hệt.",
     "DT ngày 18/8 lệch giữa 2 báo cáo: Weekly ghi 8,2M THB (MTD 116%) · Daily 19/8 ghi 8,4M THB (MTD 127%)."
-  ]
+  ],
+  "thay_doi_pham_vi": "MATE MADE Thái Lan ĐÓNG 19/08/2026 (Vinh thông báo). Ploy chỉ còn phụ trách **HAPAS Thailand**. Câu hỏi về MATE MADE **Việt Nam** là NGOÀI phạm vi Ploy — số do Jenny (AG-JENNY-BOD) / Data Support (AG-DATA-SUPPORT) giữ."
 }
