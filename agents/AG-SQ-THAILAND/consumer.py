@@ -36,6 +36,13 @@ TOKEN = os.environ.get("LSR_AGENT_TOKEN", "")
 AGENT_ID = os.environ.get("LSR_AGENT_ID", "AG-SQ-THAILAND")
 DRY_RUN = os.environ.get("DRY_RUN", "true").lower() != "false"
 
+# Job nhận được trong ~90s đầu sau khi bật = job ĐÃ nằm chờ trong hàng đợi (bot vừa tắt/
+# restart) → nói thật là trả lời trễ, thay vì im lặng xuất hiện sau nhiều giờ.
+START_TS = time.time()
+STALE_WINDOW = 90
+LATE_NOTE = ("_(Em vừa được bật lại nên trả lời trễ — tin của anh/chị nằm trong hàng đợi. "
+             "Không mất tin nào ạ.)_")
+
 RECORDING_TYPES = {"audio", "media", "file", "video"}
 TRANSCRIPT_HINTS = ("họp xong", "hop xong", "nội dung họp", "noi dung hop", "biên bản:",
                     "transcript", "ghi chú họp", "tóm tắt họp")
@@ -43,14 +50,24 @@ GREET_WORDS = ("chào", "chao", "hello", "hi ", "xin chao")
 CAPABILITY_WORDS = ("làm được gì", "lam duoc gi", "giúp gì", "giup gi", "bạn là ai")
 TASK_WORDS = ("tạo task", "tao task", "giao việc", "tạo đầu việc")
 
-INTRO = ("Xin chào! Tôi là trợ lý của **squad Thái Lan**. Tôi giữ kho dữ liệu chung của "
-         "squad và làm biên bản họp — cả nhóm hỏi gì cứ nhắn ở đây.")
-CAPABILITY = ("Tôi làm 3 việc cho squad Thái Lan:\n"
-              "1. **Kho dữ liệu chung** — gửi tài liệu/link vào, tôi đưa vào kho (chờ duyệt) "
+INTRO = ("Dạ em là **Ploy** — trợ lý thị trường **Thái Lan** (HAPAS TH + MATE MADE TH). "
+         "Em giữ kho dữ liệu chung của squad, theo mốc BST & lịch mùa vụ Thái, và làm biên "
+         "bản họp. Cả nhóm cứ tag em rồi hỏi ạ.")
+# Cấu trúc đánh số + TUYÊN BỐ GIỚI HẠN QUYỀN — học từ bot Mira (KHHH) trong nhóm sharing:
+# nói rõ việc gì em tự làm, việc gì phải người duyệt, để không ai kỳ vọng sai.
+CAPABILITY = ("Dạ em là **Ploy**, trợ lý thị trường Thái Lan. Em làm 5 việc:\n"
+              "1. **Kho dữ liệu chung** — gửi tài liệu/link vào, em đưa vào kho (chờ duyệt) "
               "rồi ai cũng tra được, luôn kèm nguồn.\n"
               "2. **Hỏi đáp cả squad** — qua nhóm Lark, Telegram hay web chat đều được.\n"
-              "3. **Biên bản họp** — gửi recording, tôi dựng biên bản, chủ trì chốt rồi tôi "
-              "lưu kho và đề xuất đầu việc.")
+              "3. **Mốc BST** — đếm ngược tới hạn, cảnh báo quá hạn, và soi khi một mốc có "
+              "nhiều phiên bản ngày giữa các nguồn.\n"
+              "4. **Lịch mùa vụ Thái** — dịp lễ nào nên làm / không làm, kèm lý do.\n"
+              "5. **Biên bản họp** — gửi recording hoặc dán nội dung, em dựng biên bản; "
+              "chủ trì trả lời `chốt` thì em mới lưu kho và đề xuất đầu việc.\n\n"
+              "Giới hạn của em, nói trước để anh/chị không chờ nhầm: em **không tự tạo task** "
+              "(chỉ đề xuất, người duyệt trên console) · **không gửi tin ra ngoài** nhóm đang "
+              "trao đổi · **không đưa số khi chưa có nguồn đã duyệt** · không xử lý lương / "
+              "giá vốn / thông tin cá nhân khách hàng.")
 
 
 def api(method: str, path: str, payload=None, timeout: int = 40):
@@ -174,7 +191,8 @@ def answer(q: str, ctx: dict, payload: dict, notify=None) -> str:
         out = model.complete(build_prompt(ctx, q), system=model.lean_system())
         if out:
             return out
-    return knowledge.NO_DATA
+    # Bí thì KHÔNG chỉ nói "chưa có" — kèm menu dạng câu hỏi em trả lời ngay được.
+    return knowledge.NO_DATA + "\n\n" + thailand_tools.suggest_menu()
 
 
 def handle_recording(q: str, payload: dict) -> str:
@@ -272,6 +290,8 @@ def handle(job: dict) -> str:
         api("POST", f"/v1/self/jobs/{job['id']}/reply", {"text": text})
 
     reply_text = answer(q, ctx, payload, notify=send)
+    if time.time() - START_TS < STALE_WINDOW:
+        reply_text = LATE_NOTE + "\n\n" + reply_text
     send(reply_text)
 
     api("POST", "/v1/self/session/turn", {"session_id": sid, "role": "user", "text": q,

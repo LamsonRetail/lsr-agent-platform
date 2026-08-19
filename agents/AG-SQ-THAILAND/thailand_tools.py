@@ -407,6 +407,26 @@ def route(q_low: str) -> str | None:
     return "\n\n".join(parts) if parts else None
 
 
+def suggest_menu() -> str:
+    """Menu 'em trả lời ngay được mấy dạng này' — dạy người dùng cách hỏi khi em bí.
+
+    Học từ bot Mira (KHHH) trong nhóm 'Sharing ai thích học cái mới': khi không hiểu
+    câu hỏi thì liệt kê dạng câu trả lời tốt, thay vì chỉ nói 'không biết'.
+    Chỉ liệt kê những gì đang chạy THẬT (tool ready), không hứa thứ chưa có.
+    """
+    return ("Em trả lời **ngay** mấy dạng này ạ:\n"
+            "• \"còn mấy ngày tới hạn KOC Tote?\" — đếm ngược mốc BST, cảnh báo quá hạn\n"
+            "• \"tháng 12 làm gì?\" — lịch mùa vụ Thái, kèm kết luận làm / không làm\n"
+            "• \"ngày launching Travel bag?\" — soi mốc đang lệch giữa các nguồn\n"
+            "• \"đang dùng base target nào?\" — 9,3M THB (tháng) · 8,0M THB (ngày)\n"
+            "• \"kho tri thức có gì?\" — mục lục nguồn Lark của thị trường TH\n"
+            "• dán nội dung họp → em dựng **biên bản**; chủ trì trả lời `chốt` là em lưu "
+            "kho + đề xuất đầu việc\n\n"
+            "_Giá trị **HỌC HỎI** của LSR: \"đừng xấu hổ khi không biết, hãy xấu hổ khi không "
+            "học\" — nên em nói thẳng là chưa biết, chứ không đoán. Anh/chị chỉ nguồn thì em "
+            "học ngay ạ._")
+
+
 # ----------------------------- CLI: --list / --call -----------------------------
 
 

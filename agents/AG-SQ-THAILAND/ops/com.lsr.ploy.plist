@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- launchd agent: giữ Ploy sống trên máy macOS (tự bật lại khi crash / sau khi đăng nhập).
+     Cài: xem ops/README.md. Đây là giải pháp TẠM — bản chính thức là container trên VM. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.lsr.ploy</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/admin/LSR agent/lsr-agent-platform/agents/AG-SQ-THAILAND/ops/run-ploy.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/admin/LSR agent/lsr-agent-platform/agents/AG-SQ-THAILAND</string>
+
+  <!-- Bật lại nếu tiến trình chết; chờ 10s giữa 2 lần để không quay vòng liên tục. -->
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/admin/Library/Logs/ploy.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/admin/Library/Logs/ploy.err.log</string>
+
+  <!-- claude CLI nằm trong ~/.npm-global/bin — launchd không có PATH của shell. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/admin/.npm-global/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>
