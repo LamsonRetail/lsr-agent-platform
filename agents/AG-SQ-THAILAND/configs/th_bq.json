@@ -1,0 +1,43 @@
+{
+  "_chu_thich": "Truy vấn BigQuery đã được rà soát trước. Ploy KHÔNG tự viết SQL từ câu chat (chống prompt-injection + chống đốt tiền quét dữ liệu). Muốn thêm câu hỏi mới thì thêm một mục vào cac_truy_van và chạy tests.",
+  "bat": true,
+  "project": "surya-495408",
+  "brand_id": "HPTH",
+  "don_vi_trong_db": "VND",
+  "ty_gia_thb_vnd": null,
+  "_ty_gia_ghi_chu": "DB quy hết về VND. Muốn Ploy trả lời bằng THB thì Vinh điền tỷ giá vào đây (số VND cho 1 THB). Chưa điền thì Ploy trả lời bằng VND và nói rõ.",
+  "gioi_han": {
+    "so_dong": 200,
+    "cache_giay": 900
+  },
+  "khong_co_trong_db": [
+    "LNĐG: ads_cost_branding và operation_cost của HPTH đang NULL 100% (kiểm 19/08/2026) → không tính được lãi từ DB. Số LNĐG vẫn lấy từ th_numbers_snapshot (người nhập).",
+    "Target Thái Lan: 10_lsr.fact_target_detail chỉ có MMVN và HPVN, không có HPTH → target lấy từ th_base_targets."
+  ],
+  "cac_truy_van": {
+    "mtd": {
+      "mo_ta": "Doanh số tháng này đến hôm nay (MTD) + cùng kỳ tháng trước",
+      "sql": "WITH d AS (SELECT date, gmv_success, net_revenue_success, count_order_success, count_order_return FROM `surya-495408.01_hptl_report.hptl_pnl_dashboard` WHERE brand_id='HPTH' AND date >= DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Bangkok'), MONTH), INTERVAL 1 MONTH)) SELECT CASE WHEN date >= DATE_TRUNC(CURRENT_DATE('Asia/Bangkok'), MONTH) THEN 'thang_nay' ELSE 'thang_truoc_cung_ky' END AS ky, ROUND(SUM(gmv_success)/1e6,1) AS gmv_trieu_vnd, ROUND(SUM(net_revenue_success)/1e6,1) AS dt_thuan_trieu_vnd, CAST(SUM(count_order_success) AS INT64) AS don, MAX(date) AS den_ngay FROM d WHERE date <= CURRENT_DATE('Asia/Bangkok') AND EXTRACT(DAY FROM date) <= EXTRACT(DAY FROM CURRENT_DATE('Asia/Bangkok')) GROUP BY ky ORDER BY ky DESC"
+    },
+    "theo_ngay": {
+      "mo_ta": "Doanh số 14 ngày gần nhất, theo ngày",
+      "sql": "SELECT date AS ngay, ROUND(SUM(gmv_success)/1e6,1) AS gmv_trieu_vnd, ROUND(SUM(net_revenue_success)/1e6,1) AS dt_thuan_trieu_vnd, CAST(SUM(count_order_success) AS INT64) AS don FROM `surya-495408.01_hptl_report.hptl_pnl_dashboard` WHERE brand_id='HPTH' AND date >= DATE_SUB(CURRENT_DATE('Asia/Bangkok'), INTERVAL 14 DAY) GROUP BY ngay ORDER BY ngay DESC"
+    },
+    "theo_kenh": {
+      "mo_ta": "Doanh số MTD chia theo kênh bán",
+      "sql": "SELECT channel_key AS kenh, ROUND(SUM(gmv_success)/1e6,1) AS gmv_trieu_vnd, ROUND(SUM(net_revenue_success)/1e6,1) AS dt_thuan_trieu_vnd, CAST(SUM(count_order_success) AS INT64) AS don FROM `surya-495408.01_hptl_report.hptl_pnl_dashboard` WHERE brand_id='HPTH' AND date >= DATE_TRUNC(CURRENT_DATE('Asia/Bangkok'), MONTH) GROUP BY kenh ORDER BY gmv_trieu_vnd DESC"
+    },
+    "hom_qua": {
+      "mo_ta": "Doanh số hôm qua",
+      "sql": "SELECT date AS ngay, ROUND(SUM(gmv_success)/1e6,1) AS gmv_trieu_vnd, ROUND(SUM(net_revenue_success)/1e6,1) AS dt_thuan_trieu_vnd, CAST(SUM(count_order_success) AS INT64) AS don, CAST(SUM(count_order_return) AS INT64) AS don_hoan FROM `surya-495408.01_hptl_report.hptl_pnl_dashboard` WHERE brand_id='HPTH' AND date = DATE_SUB(CURRENT_DATE('Asia/Bangkok'), INTERVAL 1 DAY) GROUP BY ngay"
+    },
+    "ton_kho": {
+      "mo_ta": "Tồn kho Thái Lan theo kho",
+      "sql": "SELECT * FROM `surya-495408.01_hptl_report.hptl_inventory` LIMIT 50"
+    },
+    "hom_nay": {
+      "mo_ta": "Doanh số hôm nay (số chốt trong DB tới thời điểm gọi)",
+      "sql": "SELECT date AS ngay, ROUND(SUM(gmv_success)/1e6,1) AS gmv_trieu_vnd, ROUND(SUM(net_revenue_success)/1e6,1) AS dt_thuan_trieu_vnd, CAST(SUM(count_order_success) AS INT64) AS don, CAST(SUM(count_order_return) AS INT64) AS don_hoan FROM `surya-495408.01_hptl_report.hptl_pnl_dashboard` WHERE brand_id='HPTH' AND date = CURRENT_DATE('Asia/Bangkok') GROUP BY ngay"
+    }
+  }
+}

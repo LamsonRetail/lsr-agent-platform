@@ -31,9 +31,9 @@
 
 | Mục | Giá trị |
 |---|---|
-| Nguồn được truy cập | 19 nguồn Lark trong `configs/th_kb_files.json` + 8 nguồn báo cáo trong `configs/th_report_sources.json` + brain riêng của agent. BigQuery: **chưa dùng** Phase 1 |
+| Nguồn được truy cập | 19 nguồn Lark trong `configs/th_kb_files.json` + 8 nguồn báo cáo trong `configs/th_report_sources.json` + brain riêng của agent. BigQuery **đã nối 19/08/2026**: service account `agent-data@surya-495408` (Data Viewer + Job User), chỉ-đọc, chỉ chạy SQL đã rà soát trong `configs/th_bq.json` (xem `env/README.md`) |
 | Dữ liệu KHÔNG đụng | Lương, đánh giá cá nhân, giá vốn, PII khách hàng (`configs/role_permissions.json` + chặn từ khoá trong `knowledge.py`) |
-| Skill/MCP + lý do | `resource-index`, `brain` (kho có nguồn) · `transcribe` (biên bản) · `thailand_tools.py` local (bối cảnh TH từ config) |
+| Skill/MCP + lý do | `resource-index`, `brain` (kho có nguồn) · `transcribe` (biên bản) · `thailand_tools.py` local (bối cảnh TH từ config) · `bq.py` (BigQuery chỉ-đọc, SELECT-only) |
 | Ghi/sửa dữ liệu ở đâu | CHỈ: brain items `pending_review` + `actions/propose` (task qua HITL). Không ghi trực tiếp hệ thống nào khác, không tự gửi tin ngoài nhóm |
 
 ## 4. Kỹ thuật
@@ -49,7 +49,7 @@
 
 | Mục | Giá trị |
 |---|---|
-| Bộ test | 32 case `tests.jsonl` + nhãn tool `tests/agent_tests.yaml` + regression đa lượt `tests/selfcheck_flows.py` (12 check gate HITL) — **pass 100% local 12/08**; chạy trên platform sau khi register |
+| Bộ test | 36 case `tests.jsonl` + `tests/check_bq.py` (số sống BigQuery) + nhãn tool `tests/agent_tests.yaml` + regression đa lượt `tests/selfcheck_flows.py` (12 check gate HITL) — **pass 100% local 12/08**; chạy trên platform sau khi register |
 | Trường hợp từ chối / escalation | Lương/PII/giá vốn → từ chối, chỉ bộ phận phụ trách · ngoài phạm vi TH → chỉ đúng kênh · giao việc bởi người ngoài Vinh → từ chối · Chapter Lead/BOD veto trong 24h |
 | Rủi ro + giảm thiểu | Bịa số → chỉ trả lời có nguồn + luật cứng trong model.py · biên bản sai → gate chủ trì chốt (đã chống phủ định "chưa chốt" + chống chốt trùng) · Whisper chết → DLQ replay · cost → quota console |
 | Review tuần đầu | `[CẦN ĐIỀN — đề xuất: Vinh đọc 100% output 3 ngày đầu, sau đó Hương mỗi ngày 1 lần]` |

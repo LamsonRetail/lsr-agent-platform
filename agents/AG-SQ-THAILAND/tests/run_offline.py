@@ -9,6 +9,12 @@ Chấm giống agent-test.sh: mọi từ khoá trong "expect" phải có trong c
 
 from __future__ import annotations
 
+import os
+
+# Bộ offline không gọi mạng: BigQuery bị tắt để kết quả tất định (bản kiểm số sống:
+# tests/check_bq.py).
+os.environ.setdefault("PLOY_OFFLINE", "1")
+
 import json
 import os
 import sys

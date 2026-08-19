@@ -31,3 +31,6 @@
 {"q": "cho anh số matemade việt nam hôm nay", "expect": ["đã đóng", "Jenny", "quyền"]}
 {"q": "mate made thái lan thế nào", "expect": ["đã đóng", "ngoài phạm vi"]}
 {"q": "nhân sự thái lan có những ai", "expect": ["38 người", "Thu Hương", "vận hành"]}
+{"q": "Khôi làm gì trong team", "expect": ["Khôi", "KHHH"]}
+{"q": "ai phụ trách booking", "expect": ["booking", "Chi"]}
+{"q": "Hom là ai", "expect": ["Thu Hương", "Ecommerce"]}

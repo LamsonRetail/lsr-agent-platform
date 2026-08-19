@@ -22,3 +22,27 @@
 - **19/07** — Kho Flash áp **bọc chống sốc 3 lớp theo tiêu chuẩn VN**; combo Mother's Day + Songkran **đóng tại bàn** (phụ phí 2–3 THB/đơn). Nguồn: nhóm THAILAND - VẬN HÀNH CUNG ỨNG.
 - **19/07** — Dùng nhóm **THAILAND - VẬN HÀNH CUNG ỨNG** để báo nhanh sự cố kho/tồn kho, không đợi họp 1-1. **Vinh (CM)** chốt.
 - **22/07** — **Rebase target T7**: từ 9,3 triệu THB DT / 2,2 LNĐG xuống 8,0 / 1,5 triệu THB ("Tuyên bố sự cố" trong BC Daily). Lưu ý: BC Weekly KHÔNG rebase theo, nên 2 báo cáo lệch nhau tới 27/7.
+
+## 19/08/2026 — Ploy tự tra BigQuery (không chờ A2A grant)
+
+**Quyết định (Vinh):** cấp service account riêng `agent-data@surya-495408` cho Ploy đọc
+BigQuery, thay vì chờ admin cấp A2A grant sang Jenny.
+
+**Vì sao:** đường A2A đứng bánh (issue #34 chưa xử; AG-DATA-SUPPORT không chạy). Có khoá
+riêng thì Ploy tự trả lời số doanh số ngay, không phụ thuộc agent khác còn sống hay không.
+
+**Đã dựng:** `bq.py` (REST + JWT ký bằng openssl, không cần cài thư viện), khoá đặt ở
+`env/bq-service-account.json` (git bỏ qua), câu SQL rà soát trước trong `configs/th_bq.json`.
+Ploy KHÔNG tự viết SQL từ câu chat.
+
+**Số đối chiếu đầu tiên (MTD 01→19/08, brand HPTH):** GMV 7,29 tỷ VND · DT thuần 6,75 tỷ ·
+4.700 đơn · cùng kỳ T7 3,71 tỷ → +96%. Kênh: TikTok Shop 4,78 tỷ / Shopee 2,50 tỷ, các sàn
+khác chưa phát sinh.
+
+**Hai lỗ hổng của DB (đã ghi vào config):**
+1. LNĐG không tính được — `ads_cost_branding` và `operation_cost` của HPTH NULL 100%.
+2. Target Thái Lan không có trong `10_lsr.fact_target_detail` (chỉ MMVN, HPVN) → target vẫn
+   lấy từ `th_base_targets` (13M THB DT / 2,4M LNĐG, base 05/08).
+
+**Đang chờ Vinh:** tỷ giá THB→VND để Ploy so số DB (VND) với target (THB). Chưa có thì Ploy
+trả lời bằng VND và nói rõ là chưa quy đổi — không tự đoán tỷ giá.

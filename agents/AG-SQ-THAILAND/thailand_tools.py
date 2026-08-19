@@ -24,7 +24,6 @@ import json
 import os
 import re
 import sys
-import re
 import time
 
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs")
@@ -191,6 +190,136 @@ def th_numbers_snapshot() -> str:
         lines.append(f"\n**Tồn kho:** TH {tk.get('thai_lan')} · tại NCC {tk.get('tai_ncc')} · "
                      f"{tk.get('ngay_ton')}")
     lines.append(f"\n_{s.get('canh_bao', '')}_")
+    return "\n".join(lines)
+
+
+def th_numbers(q_low: str = "") -> str:
+    """Số KQKD: ưu tiên số sống BigQuery, ghép thêm LNĐG/target từ snapshot (DB không có)."""
+    live = th_bq_sales(q_low)
+    snap = th_numbers_snapshot()
+    if not live:
+        return snap
+    if any(k in q_low for k in ("lnđg", "lndg", "lãi", "lai gop", "lợi nhuận", "loi nhuan",
+                               "target", "kế hoạch", "ke hoach")):
+        return live + "\n\n" + snap
+    return live
+
+
+# ----------------------------- số sống từ BigQuery -----------------------------
+
+_BQ_CACHE_DIR = "/tmp"
+
+
+def _bq_run(ten_truy_van: str):
+    """Chạy một truy vấn ĐÃ RÀ SOÁT trong configs/th_bq.json, có cache theo phút.
+
+    Ploy không bao giờ dựng SQL từ câu chat: chỉ chọn theo tên trong config. Lý do:
+    câu chat có thể bị cài chỉ thị, và một câu SELECT sai có thể quét cả kho (tốn tiền).
+    Trả None nếu tắt/lỗi/không mạng — nơi gọi phải tự lùi về số snapshot.
+    """
+    # PLOY_OFFLINE=1: bộ test offline không được gọi mạng (kết quả phải tất định)
+    if os.environ.get("PLOY_OFFLINE") == "1":
+        return None
+    cfg = load_config("th_bq") or {}
+    if not cfg.get("bat"):
+        return None
+    q = (cfg.get("cac_truy_van") or {}).get(ten_truy_van)
+    if not q:
+        return None
+    ttl = int((cfg.get("gioi_han") or {}).get("cache_giay", 900))
+    cache = os.path.join(_BQ_CACHE_DIR, f"ploy-bq-{ten_truy_van}.json")
+    try:
+        if os.path.exists(cache) and time.time() - os.path.getmtime(cache) < ttl:
+            with open(cache, encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    try:
+        import bq
+        res = bq.query(q["sql"], max_rows=(cfg.get("gioi_han") or {}).get("so_dong", 200))
+    except Exception:
+        return None
+    try:
+        with open(cache, "w", encoding="utf-8") as f:
+            json.dump(res, f)
+    except Exception:
+        pass
+    return res
+
+
+def _bq_rows(res):
+    """[[v,...]] + tên cột -> [{cot: v}] cho dễ đọc."""
+    return [dict(zip(res["cot"], r)) for r in res["dong"]]
+
+
+@tool("báo-cáo")
+def th_bq_sales(q_low: str = "") -> str:
+    """Doanh số Thái Lan LIVE từ BigQuery (01_hptl_report.hptl_pnl_dashboard, brand HPTH).
+
+    DB quy hết về VND. Chưa khai tỷ giá THB thì KHÔNG quy đổi — nói rõ đơn vị.
+    """
+    ten = "mtd"
+    if any(k in q_low for k in ("hôm qua", "hom qua")):
+        ten = "hom_qua"
+    elif any(k in q_low for k in ("hôm nay", "hom nay", "sáng nay", "sang nay")):
+        ten = "hom_nay"
+    elif any(k in q_low for k in ("kênh", "kenh", "tiktok", "shopee", "lazada", "sàn nào", "san nao")):
+        ten = "theo_kenh"
+    elif any(k in q_low for k in ("theo ngày", "theo ngay", "từng ngày", "tung ngay",
+                                 "14 ngày", "mấy ngày qua", "may ngay qua")):
+        ten = "theo_ngay"
+    res = _bq_run(ten)
+    if not res or not res["dong"]:
+        return ""
+    rows = _bq_rows(res)
+    cfg = load_config("th_bq") or {}
+    tg = cfg.get("ty_gia_thb_vnd")
+
+    def ty(v):
+        """triệu VND -> '7,29 tỷ VND' (+ THB nếu Vinh đã khai tỷ giá)."""
+        if v in (None, ""):
+            return "chưa có"
+        x = float(v)
+        out = f"{x / 1000:,.2f} tỷ VND".replace(",", " ") if x >= 1000 else f"{x:,.0f} tr VND".replace(",", " ")
+        if tg:
+            out += f" (~{x * 1e6 / float(tg) / 1e6:,.1f}M THB)".replace(",", " ")
+        return out
+
+    if ten == "mtd":
+        nay = next((r for r in rows if r.get("ky") == "thang_nay"), None)
+        truoc = next((r for r in rows if r.get("ky") == "thang_truoc_cung_ky"), None)
+        if not nay:
+            return ""
+        out = [f"**Doanh số TH tới {nay.get('den_ngay')}** (số sống, BigQuery):",
+               f"- GMV **{ty(nay.get('gmv_trieu_vnd'))}** · DT thuần {ty(nay.get('dt_thuan_trieu_vnd'))} "
+               f"· {int(float(nay.get('don') or 0)):,} đơn".replace(",", " ")]
+        if truoc and truoc.get("gmv_trieu_vnd"):
+            d = (float(nay["gmv_trieu_vnd"]) / float(truoc["gmv_trieu_vnd"]) - 1) * 100
+            out.append(f"- Cùng kỳ tháng trước: {ty(truoc.get('gmv_trieu_vnd'))} → **{d:+.0f}%**")
+        if not tg:
+            out.append("- _DB ghi theo VND; chưa khai tỷ giá THB nên em không quy đổi._")
+        return "\n".join(out)
+
+    if ten in ("hom_qua", "hom_nay"):
+        r = rows[0]
+        nhan = "Hôm nay" if ten == "hom_nay" else "Hôm qua"
+        return (f"**{nhan} {r.get('ngay')}** (BigQuery): GMV {ty(r.get('gmv_trieu_vnd'))} · "
+                f"DT thuần {ty(r.get('dt_thuan_trieu_vnd'))} · {int(float(r.get('don') or 0))} đơn "
+                f"· {int(float(r.get('don_hoan') or 0))} đơn hoàn")
+
+    if ten == "theo_kenh":
+        có = [r for r in rows if r.get("gmv_trieu_vnd")]
+        lines = [f"**Doanh số MTD theo kênh** (BigQuery, tới hôm nay):"]
+        lines += [f"- {r['kenh']}: GMV {ty(r.get('gmv_trieu_vnd'))} · "
+                  f"{int(float(r.get('don') or 0)):,} đơn".replace(",", " ") for r in có[:5]]
+        trong = [r["kenh"] for r in rows if not r.get("gmv_trieu_vnd")]
+        if trong:
+            lines.append(f"- Chưa phát sinh: {', '.join(trong[:5])}")
+        return "\n".join(lines)
+
+    lines = ["**Doanh số theo ngày** (BigQuery, 7 ngày gần nhất):"]
+    lines += [f"- {r['ngay']}: GMV {ty(r.get('gmv_trieu_vnd'))} · {int(float(r.get('don') or 0))} đơn"
+              for r in rows[:7]]
     return "\n".join(lines)
 
 
@@ -557,7 +686,8 @@ _TARGET_Q = ("base target", "base nào", "base nao", "target nào", "target nao"
              "target tháng", "target ngày", "rebase")
 _NUMBERS_Q = ("doanh thu", "doanh so", "doanh số", "lợi nhuận", "loi nhuan", "lnđg", "lndg",
               "mtd", "tình hình", "tinh hinh", "kqkd", "dòng tiền",
-              "dong tien", "bán được bao nhiêu", "số tháng 8", "thang 8 the nao")
+              "dong tien", "bán được bao nhiêu", "số tháng 8", "thang 8 the nao", "kênh nào", "kenh nao", "sàn nào", "san nao", "bán tốt", "ban tot",
+               "tiktok", "shopee", "lazada", "theo kênh", "theo kenh", "theo ngày")
 _KB_Q = ("kho tri thức", "kho tri thuc", "master file", "mục lục", "muc luc",
          "file nào", "file nao", "có những file", "tài liệu nào", "tai lieu nao")
 _MM_Q = ("mate made", "matemade", "mate-made", "mm th")
@@ -643,7 +773,9 @@ def route(q_low: str) -> str | None:
     if any(k in q_low for k in _DIGEST_Q):
         parts.append(th_daily_digest())
     if any(k in q_low for k in _NUMBERS_Q):
-        parts.append(_with_agent_hint(th_numbers_snapshot(), q_low))
+        n = th_numbers(q_low)
+        # có số sống từ BigQuery thì không gợi ý đi hỏi agent khác nữa
+        parts.append(n if "BigQuery" in n else _with_agent_hint(n, q_low))
     if any(k in q_low for k in _TARGET_Q):
         parts.append(th_base_targets())
     if any(k in q_low for k in _KB_Q):
