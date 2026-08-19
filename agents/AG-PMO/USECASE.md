@@ -91,19 +91,46 @@ gán người.
 
 ## Dữ liệu cần truy cập
 
-| Nguồn | Domain tri thức | Scope | Trạng thái |
+Đã khảo sát thực tế trên Lark (20/08/2026) — **nguồn dữ liệu đã tồn tại, không cần dựng mới**.
+
+**Wiki space `LSR - PMO`** — `space_id: 7638442489078157023`
+*"Tổng hợp tất cả các thông tin về dự án toàn LSR và việc quản lý dự án"*. Chứa 3 mục:
+`CÁC DỰ ÁN LAMSON RETAIL 2026` (Base), `LSR - PMO - Định hướng và kế hoạch` (doc),
+`TEMPLATE BÁO CÁO DỰ ÁN` (doc, có mục con).
+
+**Lark Base `CÁC DỰ ÁN LAMSON RETAIL 2026`** — `app_token: WCd8bTo39arpYKsIDAalwiG8gwh`
+
+| Bảng | table_id | Số dòng | Vai trò với agent |
 |---|---|---|---|
-| **Lark Base — danh mục dự án** (dự án, brand, phòng liên quan, chủ trì, milestone, deadline, trạng thái, việc đang tắc) | `pmo-projects` | shared | ⬜ cần `app_token` — **nguồn sự thật chính** |
-| **Lark Wiki / Docs — tài liệu dự án** (kế hoạch, phạm vi đã chốt, SOP) | `pmo-docs` | shared | ⬜ cần `folder_token` / `space_id` |
-| **Biên bản họp dự án đã chốt** | `pmo-meeting` | shared | agent tự sinh |
-| Dữ liệu hạn chế của dự án (ngân sách, chi phí, điều khoản nhà cung cấp) | `pmo-confidential` | **agent** (chỉ AG-PMO) | ⬜ cần Base/bảng riêng + danh sách người được xem |
+| `TỔNG HỢP DỰ ÁN LSR` | `tblXGSGOetbLTx8o` | 61 dự án, 44 field | **Bảng chiều** — danh tính dự án: `Project ID`, `Project Name`, `Brand` (HAPAS/MATE MADE/LSR), `Market`, `Project Status`, `Project Owner`, `Project Sponsor`, các mốc ngày, `Project Chat Channel` |
+| `BÁO CÁO DỰ ÁN` | `tblIgOwS5IV2pDXK` | 143 báo cáo tuần | **Nguồn sự thật về hiện trạng** — `REPORTING DATE`, `WEEK`, `OVERVIEW`, `RISK`, `ISSUE`, `NEXT ACTION`, `PIC`, `Mức độ BLG` |
+| `THÔNG TIN POD CÁC THÀNH VIÊN DỰ ÁN ON GOING` | `tbl95nPxvXbf2eCK` | 17 | Ai thuộc POD dự án nào |
+| `PRODUCT PLAN LAM SON 2026 (RnD)` | `tblvn3D3mRJ01Wla` | 54 | Kế hoạch sản phẩm |
+
+> **Quan trọng: hiện trạng dự án nằm ở `BÁO CÁO DỰ ÁN`, KHÔNG nằm ở bảng tổng hợp.** Ở bảng
+> tổng hợp, `Blockers` và `NEXT ACTION` **rỗng toàn bộ 61/61 dòng**, `Project Health` chỉ điền
+> 7/61. Agent phải lấy **báo cáo tuần mới nhất của từng dự án** làm câu trả lời, không đọc
+> `Blockers` ở bảng tổng hợp.
+
+| Domain tri thức | Nguồn | Scope |
+|---|---|---|
+| `pmo-projects` | `TỔNG HỢP DỰ ÁN LSR` — trừ các field tài chính bên dưới | shared |
+| `pmo-status` | `BÁO CÁO DỰ ÁN` — `OVERVIEW`, `RISK`, `ISSUE`, `NEXT ACTION`, `PIC` | shared |
+| `pmo-docs` | Wiki `LSR - PMO` + `DỰ ÁN HAPAS` (`7294455484684173343`) + `DOANH THU ĐỘT PHÁ` (`7297080474252394528`) | shared |
+| `pmo-meeting` | biên bản agent tự sinh | shared (giới hạn người dự họp + PMO) |
+| `pmo-confidential` | `Financial Target`, `Budget`, `Budget Used`, `Target GM (BLG)`, `Actual GM (BLG)`, `Margin Gap`, `Actual Financial Achivement`, `% Target Achievement`, `CHI PHÍ`, `BLG %` | **agent** — chỉ `PMO_CONFIDENTIAL_VIEWERS` |
+
+> ⚠️ **Dữ liệu mật nằm CÙNG bảng với dữ liệu thường.** Base không tách bảng riêng cho tài
+> chính — `Budget`, `Actual GM (BLG)`, `Margin Gap` nằm ngay trong `TỔNG HỢP DỰ ÁN LSR`. Nên
+> agent **bắt buộc lọc theo field khi sync**, không được đẩy cả record vào tri thức `shared`.
+> Đây là lỗi dễ mắc nhất và hậu quả là lộ biên lợi nhuận toàn công ty.
+
+**Wiki KHÔNG được sync:** `TEAM KINH DOANH MATE MADE` (`7496094770155061279`) — LYLY ghi rõ
+AG-LEGAL đã đồng bộ space này. Đã kiểm tra và xác nhận space này tồn tại, tránh sync trùng.
+`PHÁP CHẾ` (`7595876759661186785`) cũng nên coi là địa bàn AG-LEGAL.
 
 Đồng bộ bằng job sync chạy hàng ngày. Mọi tri thức vào hàng chờ `status=pending`, **PMO duyệt**
 trên console rồi agent mới dùng được.
-
-> ⚠️ **Trước khi khai `space_id` Wiki phải kiểm tra space đó đã có agent khác sync chưa.** Tiền
-> lệ: LYLY ghi rõ trong manifest *"KHÔNG sync wiki space 7496094770155061279 — AG-LEGAL đã đồng
-> bộ space đó"*. Hai agent sync cùng space sẽ nhân đôi tri thức và tốn chi phí gấp đôi.
 
 ## Ranh giới dữ liệu (ai thấy được gì)
 
@@ -138,7 +165,11 @@ vào đó xin biên bản đã chốt của LYLY nộp vào tri thức dự án.
 |---|---|---|
 | **Gom nội dung họp của mọi brand và mọi phòng vào một chỗ, một owner** — mức tập trung dữ liệu cao nhất trong các agent hiện có. Họp giá, họp nhân sự, đàm phán nhà cung cấp đều có thể lọt vào. Nghị định 13/2023 về dữ liệu cá nhân áp dụng. | **Cao — chặn golive kênh thật** | Giai đoạn 1 chỉ nhận **2-3 nhóm dự án** được admin gán, chạy `DRY_RUN=true`. Chỉ xử lý bản ghi mà người tổ chức **đã chủ động bật**, không để bot tự join ghi âm. Cần chính sách chính thức của công ty trước khi mở rộng. |
 | **Bịa thông tin dự án** — người ta lên kế hoạch dựa trên deadline bịa, kéo theo cả 4 phòng làm sai | Cao | Bắt buộc tra tri thức trước khi trả lời; không có hit → câu từ chối cố định. Đo bằng tỷ lệ câu trả lời có trích nguồn |
-| **Trả thông tin ĐÚNG nhưng của kỳ CŨ** — dự án thay đổi liên tục, đây là lỗi âm thầm, không ai phát hiện ngay | Cao | Mọi câu trả lời bắt buộc nêu **ngày cập nhật dữ liệu**. Sync hàng ngày. Trạng thái cũ hơn 7 ngày phải cảnh báo rõ trong câu trả lời |
+| **Trả thông tin ĐÚNG nhưng của kỳ CŨ** — dự án thay đổi liên tục, đây là lỗi âm thầm, không ai phát hiện ngay. **Đây KHÔNG phải rủi ro lý thuyết: khảo sát 20/08/2026 cho thấy báo cáo tuần mới nhất là 30/07/2026 — trễ 21 ngày, tức khoảng 3 kỳ báo cáo tuần chưa được cập nhật.** | **Cao — đang xảy ra** | Mọi câu trả lời bắt buộc nêu **ngày báo cáo** đã dùng. Báo cáo cũ hơn 14 ngày → agent phải nói rõ *"số liệu mới nhất em có là tuần ... , đã ... ngày chưa cập nhật"* trước khi trả lời nội dung. Không được trả lời như thể là hiện trạng hôm nay |
+| **Dữ liệu báo cáo điền không đầy đủ** — khảo sát 143 báo cáo: `OVERVIEW` 65%, `NEXT ACTION` 58%, `RISK` 49%, `ISSUE` 35%, `Cần Support` **0%**. Chỉ **39/61 dự án** từng có báo cáo → 22 dự án chưa bao giờ được báo cáo | Cao | Agent phải phân biệt rõ *"dự án này chưa có báo cáo nào"* với *"dự án này không có rủi ro"* — hai câu này khác nhau hoàn toàn. Không được im lặng bỏ qua field rỗng |
+| **Tên dự án trùng giữa các brand** — `BST Travel Bag`, `BST TRANG SỨC`, `BST NƯỚC HOA` đều tồn tại ở cả HAPAS và MATE MADE | Trung bình | Bắt buộc hỏi lại brand khi tên trùng, không tự chọn. Ưu tiên dùng `Project ID` (`PRJ-2026xxx`) làm khoá thật |
+| **Giá trị select có khoảng trắng cuối** (`"ON GOING "`, `"On Track "`) và có bản ghi tự mâu thuẫn (`BST Travel Bag` MATE MADE: `Project Health = At Risk` nhưng `Project Status = DONE`) | Trung bình | Chuẩn hoá (trim) khi sync; gặp bản ghi mâu thuẫn thì nêu rõ mâu thuẫn cho người hỏi thay vì chọn một bên |
+| **Lookup bị vỡ**: `Latest Weekly Status` và `Last Update Date` trỏ tới bảng `tblFi6vWe1KrJPTD` không nằm trong Base này → trả `null` toàn bộ 61 dòng | Trung bình | Agent **không dùng 2 field này**. Tự tính ngày cập nhật từ `max(REPORTING DATE)` trong `BÁO CÁO DỰ ÁN` theo từng `PROJECT ID` |
 | **Tự quyết phạm vi / deadline / nguồn lực** | Cao | Chặn bằng luật trong `consumer.py` **trước** mọi nhánh khác — không phụ thuộc prompt. Có test case |
 | **Lộ nội dung họp sang phòng không liên quan** — PMO thấy hết nên agent cũng thấy hết, dễ trả lời cho người không nên biết | Cao | `pmo-meeting` giới hạn người dự họp + PMO; `pmo-confidential` để `scope=agent`; chặn **trước** khi tra tri thức nên nội dung mật không vào ngữ cảnh |
 | **A2A chưa được xây** (`docs/ARCHITECTURE.md` mục 7 ghi trạng thái "Chưa") → không hỏi được LYLY, AG-SOURCING, AG-LEGAL về dữ liệu phòng họ | **Trung bình — giới hạn thiết kế** | Giai đoạn 1 **không phụ thuộc A2A**: PMO tự sync từ Lark Base/Wiki của mình. Dữ liệu phòng ban khác đưa vào qua danh mục dự án do PMO cập nhật, không qua agent khác |
@@ -151,8 +182,9 @@ vào đó xin biên bản đã chốt của LYLY nộp vào tri thức dự án.
 
 ## Phụ thuộc bên ngoài (chặn golive, không chặn code)
 
-- [ ] `app_token` Lark Base danh mục dự án — **quan trọng nhất**, chưa có thì không có nguồn sự thật
-- [ ] `space_id` / `folder_token` Wiki-Docs tài liệu dự án, **kèm xác nhận space đó chưa có agent khác sync**
+- [x] ~~`app_token` Lark Base danh mục dự án~~ — **đã có**: `WCd8bTo39arpYKsIDAalwiG8gwh`
+- [x] ~~`space_id` Wiki tài liệu dự án~~ — **đã có**: `7638442489078157023` (`LSR - PMO`), đã kiểm tra không trùng space của AG-LEGAL
+- [ ] **Báo cáo tuần được cập nhật lại** — hiện trễ 21 ngày. Đây là phụ thuộc *nghiệp vụ*, không phải kỹ thuật: agent không thể chính xác hơn dữ liệu nó đọc
 - [ ] `chat_id` của 2-3 nhóm dự án cho giai đoạn 1, admin gán ở Console → Ingress
 - [ ] Chốt với admin ranh giới nhóm giữa AG-PMO · LYLY · AG-MINH-ANH
 - [ ] Danh sách `PMO_CONFIDENTIAL_VIEWERS`
