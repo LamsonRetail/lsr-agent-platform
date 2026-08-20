@@ -38,12 +38,33 @@ def build_prompt(ctx, question):
     parts.append(f"user: {question}")
     return "\n\n".join(parts)
 
-def answer(prompt, ctx):
-    """<<< SỬA Ở ĐÂY: gọi model của bạn với `prompt` và trả câu trả lời >>>
+_STORE = None
 
-    Gợi ý: dùng Claude Agent SDK / claude CLI. Model nên lấy từ ctx.get("model").
+
+def _store():
+    """Nạp danh mục dự án một lần, giữ lại cho các job sau (tránh gọi Lark mỗi câu hỏi)."""
+    global _STORE
+    if _STORE is None:
+        from pmo_data import tu_lark
+        _STORE = tu_lark()
+    return _STORE
+
+
+def answer(prompt, ctx, *, question="", email=None):
+    """Trả lời câu hỏi dự án.
+
+    Đường đi CỐ Ý không qua model cho phần lớn câu: ``pmo_answer.tra_loi()`` đã cho câu
+    trả lời tất định từ dữ liệu thật (có nêu ngày báo cáo, có chặn xin-quyết-định và chặn
+    field tài chính mật). Gọi model ở đây chỉ thêm rủi ro diễn giải lệch số.
+
+    Model chỉ dùng khi ``can_model=True`` — hiện chưa có nhánh nào cần, sẽ dùng ở giai đoạn
+    biên bản họp (tóm tắt transcript) vì việc đó thực sự cần model.
     """
-    return f"(demo) đã nhận prompt {len(prompt)} ký tự — thay hàm answer() bằng lời gọi model."
+    from pmo_answer import tra_loi
+    kq = tra_loi(question or prompt, email=email, store=_store())
+    if not kq.get("can_model"):
+        return kq["text"]
+    return kq["text"]  # TODO(GĐ1-biên bản họp): gọi Claude Agent SDK để tóm tắt transcript
 
 def handle(job):
     payload = job.get("payload") or {}
@@ -53,7 +74,9 @@ def handle(job):
 
     ctx = api("GET", f"/v1/self/context?session_id={sid}&user_ref={uref}"
                      f"&q={urllib.parse.quote(q[:200])}")
-    reply = answer(build_prompt(ctx, q), ctx)
+    # email dùng để xét quyền xem field tài chính mật (PMO_CONFIDENTIAL_VIEWERS)
+    email = payload.get("sender_email") or ctx.get("user_email") or ""
+    reply = answer(build_prompt(ctx, q), ctx, question=q, email=email)
 
     # Ghi lại lượt hội thoại để lượt sau có ngữ cảnh
     api("POST", "/v1/self/session/turn",

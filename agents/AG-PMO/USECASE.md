@@ -103,7 +103,7 @@ gán người.
 | Bảng | table_id | Số dòng | Vai trò với agent |
 |---|---|---|---|
 | `TỔNG HỢP DỰ ÁN LSR` | `tblXGSGOetbLTx8o` | 61 dự án, 44 field | **Bảng chiều** — danh tính dự án: `Project ID`, `Project Name`, `Brand` (HAPAS/MATE MADE/LSR), `Market`, `Project Status`, `Project Owner`, `Project Sponsor`, các mốc ngày, `Project Chat Channel` |
-| `BÁO CÁO DỰ ÁN` | `tblIgOwS5IV2pDXK` | 143 báo cáo tuần | **Nguồn sự thật về hiện trạng** — `REPORTING DATE`, `WEEK`, `OVERVIEW`, `RISK`, `ISSUE`, `NEXT ACTION`, `PIC`, `Mức độ BLG` |
+| `BÁO CÁO DỰ ÁN` | `tblIgOwS5IV2pDXK` | 153 báo cáo tuần | **Nguồn sự thật về hiện trạng** — `REPORTING DATE`, `WEEK`, `OVERVIEW`, `RISK`, `ISSUE`, `NEXT ACTION`, `PIC`, `Mức độ BLG` |
 | `THÔNG TIN POD CÁC THÀNH VIÊN DỰ ÁN ON GOING` | `tbl95nPxvXbf2eCK` | 17 | Ai thuộc POD dự án nào |
 | `PRODUCT PLAN LAM SON 2026 (RnD)` | `tblvn3D3mRJ01Wla` | 54 | Kế hoạch sản phẩm |
 
@@ -165,8 +165,10 @@ vào đó xin biên bản đã chốt của LYLY nộp vào tri thức dự án.
 |---|---|---|
 | **Gom nội dung họp của mọi brand và mọi phòng vào một chỗ, một owner** — mức tập trung dữ liệu cao nhất trong các agent hiện có. Họp giá, họp nhân sự, đàm phán nhà cung cấp đều có thể lọt vào. Nghị định 13/2023 về dữ liệu cá nhân áp dụng. | **Cao — chặn golive kênh thật** | Giai đoạn 1 chỉ nhận **2-3 nhóm dự án** được admin gán, chạy `DRY_RUN=true`. Chỉ xử lý bản ghi mà người tổ chức **đã chủ động bật**, không để bot tự join ghi âm. Cần chính sách chính thức của công ty trước khi mở rộng. |
 | **Bịa thông tin dự án** — người ta lên kế hoạch dựa trên deadline bịa, kéo theo cả 4 phòng làm sai | Cao | Bắt buộc tra tri thức trước khi trả lời; không có hit → câu từ chối cố định. Đo bằng tỷ lệ câu trả lời có trích nguồn |
-| **Trả thông tin ĐÚNG nhưng của kỳ CŨ** — dự án thay đổi liên tục, đây là lỗi âm thầm, không ai phát hiện ngay. **Đây KHÔNG phải rủi ro lý thuyết: khảo sát 20/08/2026 cho thấy báo cáo tuần mới nhất là 30/07/2026 — trễ 21 ngày, tức khoảng 3 kỳ báo cáo tuần chưa được cập nhật.** | **Cao — đang xảy ra** | Mọi câu trả lời bắt buộc nêu **ngày báo cáo** đã dùng. Báo cáo cũ hơn 14 ngày → agent phải nói rõ *"số liệu mới nhất em có là tuần ... , đã ... ngày chưa cập nhật"* trước khi trả lời nội dung. Không được trả lời như thể là hiện trạng hôm nay |
-| **Dữ liệu báo cáo điền không đầy đủ** — khảo sát 143 báo cáo: `OVERVIEW` 65%, `NEXT ACTION` 58%, `RISK` 49%, `ISSUE` 35%, `Cần Support` **0%**. Chỉ **39/61 dự án** từng có báo cáo → 22 dự án chưa bao giờ được báo cáo | Cao | Agent phải phân biệt rõ *"dự án này chưa có báo cáo nào"* với *"dự án này không có rủi ro"* — hai câu này khác nhau hoàn toàn. Không được im lặng bỏ qua field rỗng |
+| **Trả thông tin ĐÚNG nhưng của kỳ CŨ** — dự án thay đổi liên tục, đây là lỗi âm thầm, không ai phát hiện ngay. Mức toàn cục hiện **tốt**: báo cáo mới nhất 19/08/2026 (WEEK 3), chỉ trễ 1 ngày. Nhưng **từng dự án lại rất lệch** — ví dụ `PRJ-2026010` (BST Travel Bag, MATE MADE) báo cáo gần nhất cách **71 ngày** | Cao | Mọi câu trả lời bắt buộc nêu **ngày báo cáo của chính dự án đó**, không dùng độ mới toàn cục. Quá 14 ngày (`PMO_STALE_DAYS`) → `trang_thai_du_lieu="cu"`, agent phải nói *"số liệu mới nhất em có là tuần …, đã … ngày chưa cập nhật"* trước khi nêu nội dung |
+| **Dữ liệu báo cáo điền không đầy đủ** — khảo sát 153 báo cáo: `OVERVIEW` 65%, `NEXT ACTION` 59%, `RISK` 49%, `ISSUE` 37%, `Cần Support` **1%** (gần như chưa ai dùng). Chỉ **39/61 dự án** từng có báo cáo → **22 dự án chưa bao giờ được báo cáo** | Cao | Agent phải phân biệt rõ *"dự án này chưa có báo cáo nào"* (`trang_thai_du_lieu="chua_co_bao_cao"`) với *"dự án này không có rủi ro"* — hai câu khác nhau hoàn toàn. Không được im lặng bỏ qua field rỗng |
+| **6/153 báo cáo thiếu `REPORTING DATE`** → không biết thuộc kỳ nào | Trung bình | Agent bỏ qua các bản ghi này khi tính hiện trạng, và nêu ra khi được hỏi về chất lượng dữ liệu — không âm thầm gộp vào |
+| **Đọc thiếu trang khi lấy dữ liệu** — lỗi này đã thực sự xảy ra trong quá trình khảo sát: một lần đọc chỉ ra 143 record và làm ngày mới nhất trông như 30/07 thay vì 19/08, dẫn tới kết luận sai *"báo cáo trễ 21 ngày"* | **Cao** | `lark_read.py` bắt buộc duyệt hết trang, có chặn vòng lặp, và đối chiếu `total` của API. Số liệu thiếu trang nguy hiểm hơn không có số vì nó trông vẫn hợp lý |
 | **Tên dự án trùng giữa các brand** — `BST Travel Bag`, `BST TRANG SỨC`, `BST NƯỚC HOA` đều tồn tại ở cả HAPAS và MATE MADE | Trung bình | Bắt buộc hỏi lại brand khi tên trùng, không tự chọn. Ưu tiên dùng `Project ID` (`PRJ-2026xxx`) làm khoá thật |
 | **Giá trị select có khoảng trắng cuối** (`"ON GOING "`, `"On Track "`) và có bản ghi tự mâu thuẫn (`BST Travel Bag` MATE MADE: `Project Health = At Risk` nhưng `Project Status = DONE`) | Trung bình | Chuẩn hoá (trim) khi sync; gặp bản ghi mâu thuẫn thì nêu rõ mâu thuẫn cho người hỏi thay vì chọn một bên |
 | **Lookup bị vỡ**: `Latest Weekly Status` và `Last Update Date` trỏ tới bảng `tblFi6vWe1KrJPTD` không nằm trong Base này → trả `null` toàn bộ 61 dòng | Trung bình | Agent **không dùng 2 field này**. Tự tính ngày cập nhật từ `max(REPORTING DATE)` trong `BÁO CÁO DỰ ÁN` theo từng `PROJECT ID` |
@@ -184,7 +186,7 @@ vào đó xin biên bản đã chốt của LYLY nộp vào tri thức dự án.
 
 - [x] ~~`app_token` Lark Base danh mục dự án~~ — **đã có**: `WCd8bTo39arpYKsIDAalwiG8gwh`
 - [x] ~~`space_id` Wiki tài liệu dự án~~ — **đã có**: `7638442489078157023` (`LSR - PMO`), đã kiểm tra không trùng space của AG-LEGAL
-- [ ] **Báo cáo tuần được cập nhật lại** — hiện trễ 21 ngày. Đây là phụ thuộc *nghiệp vụ*, không phải kỹ thuật: agent không thể chính xác hơn dữ liệu nó đọc
+- [ ] **22/61 dự án chưa bao giờ có báo cáo** — agent sẽ trả *"chưa có báo cáo"* cho các dự án này. Đây là phụ thuộc *nghiệp vụ*, không phải kỹ thuật: agent không thể chính xác hơn dữ liệu nó đọc
 - [ ] `chat_id` của 2-3 nhóm dự án cho giai đoạn 1, admin gán ở Console → Ingress
 - [ ] Chốt với admin ranh giới nhóm giữa AG-PMO · LYLY · AG-MINH-ANH
 - [ ] Danh sách `PMO_CONFIDENTIAL_VIEWERS`
