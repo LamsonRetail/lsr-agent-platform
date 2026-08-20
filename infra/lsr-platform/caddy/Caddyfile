@@ -96,7 +96,9 @@ collector.34-126-154-135.sslip.io {
 # 3 path đăng nhập PHẢI mở: người trong org tự login bằng Lark và tự duyệt CLI (/device)
 # mà không cần ai đưa mật khẩu dùng chung. Các trang này vẫn tự bảo vệ bằng session:
 # chưa đăng nhập thì /device không duyệt được gì (401) và middleware đá về /login.
-app.34-126-154-135.sslip.io {
+# Cấu hình console dùng CHUNG cho mọi domain trỏ vào nó. Tách thành snippet để hai
+# domain không trôi lệch nhau (sslip.io giữ lại trong lúc chuyển sang domain thật).
+(console) {
 	@openauth path /login /login/* /device /device/* /api/auth/*
 	handle @openauth {
 		reverse_proxy web:3000
@@ -107,4 +109,17 @@ app.34-126-154-135.sslip.io {
 		}
 		reverse_proxy web:3000
 	}
+}
+
+# Domain thật của console. TLS tự động, nhưng CHỈ cấp được sau khi DNS
+# agent.hapas-ai.tech trỏ A về 34.126.154.135 (hiện DNS do Hostinger giữ, apex
+# hapas-ai.tech đang trỏ VPS của Jenny 187.77.135.158 — đừng đụng apex).
+agent.hapas-ai.tech {
+	import console
+}
+
+# Domain cũ: GIỮ LẠI, không redirect. Lark chỉ nhận redirect_uri đã đăng ký trong
+# console app; cắt domain này trước khi đăng ký URI mới là gãy đăng nhập của cả nhà.
+app.34-126-154-135.sslip.io {
+	import console
 }

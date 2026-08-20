@@ -668,3 +668,21 @@ Identity `ann_legal@hapas.vn` (Ann Nguyen, `ou_28c573f0…`) authorize bằng ch
 Lưu ý vận hành: Caddyfile nướng trong image nên đổi route **phải** `docker compose build
 caddy` + `up -d --force-recreate caddy`. Lần này `up -d --build caddy` không dựng lại
 container (giữ config cũ) nên endpoint mới trả 403 của guard — mất một vòng mới phát hiện.
+
+## §23 — Chuyển console sang domain thật `agent.hapas-ai.tech`
+
+`scripts/switch-console-domain.sh` kiểm 3 điều kiện rồi mới đổi `.env`; thiếu một mục là
+dừng, không đổi gì. Lý do phải chặn: đổi `CONSOLE_BASE_URL` là đổi `redirect_uri` của Lark
+OAuth, mà Lark chỉ nhận URI đã đăng ký — sai là **cả nhà mất đăng nhập** cùng luồng
+authorize C8.
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 23.1 | DNS chưa trỏ | ✗ "không có record", exit 1, không đổi `.env` | ✅ |
+| 23.2 | HTTPS chưa có cert | ✗ http 000 | ✅ |
+| 23.3 | redirect_uri chưa đăng ký trong Lark | ✗ `error=invalid_request` + in đúng chỗ cần thêm | ✅ |
+| 23.4 | Caddy nạp site mới khi DNS chưa có | site load được, ACME báo NXDOMAIN và tự thử lại | ✅ |
+| 23.5 | domain cũ trong lúc chuyển | `platform.*` 200, `app.*` 200 — không ảnh hưởng | ✅ |
+| 23.6 | `publicBase()` với host mới | redirect theo host thật, không ghim domain cũ | ✅ (đã có sẵn) |
+
+Chưa nghiệm thu được (chờ DNS + Lark Console): đăng nhập thật trên domain mới.
