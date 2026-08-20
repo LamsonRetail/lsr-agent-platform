@@ -35,6 +35,25 @@ tháng sau = thêm một dòng grant, không phải PR vào core.
 Khoá mã hoá: `LARK_USER_TOKEN_KEY` trong `.env` **trên VM**. Không có khoá thì broker
 **tắt hẳn** (503) — cố ý không fallback sang lưu token dạng rõ.
 
+## Ba chi tiết Lark bắt buộc phải đúng (kiểm live 19/08)
+
+Ba thứ này không suy ra được từ tài liệu, đều phải đo:
+
+| Việc | Sai thì gặp gì | Đúng là |
+|---|---|---|
+| Endpoint trang đồng ý | `/authen/v2/oauth/authorize` → **404** ở cả `open.*` lẫn `accounts.*` | `/open-apis/authen/v1/authorize` |
+| Host | `open.larksuite.com` + v1 → 302 sang `accounts.*`, nhưng v2 thì 404 | `accounts.larksuite.com` |
+| `redirect_uri` | URI chưa đăng ký trong console app → `invalid_request` (**không** phải lỗi scope) | dùng lại URI đã đăng ký |
+| Tên scope | đoán `approval:instance:readonly` → `invalid_scope` | `approval:instance:read` / `:write` |
+
+Tên scope lấy từ **user token đang chạy thật** trong tenant (`lark-cli auth status`), không
+đoán. Thêm domain mới thì đối chiếu lại bằng cách đó.
+
+Vì Lark chỉ nhận `redirect_uri` đã đăng ký, và trong tenant này **chỉ app Admin
+`cli_aaff13891ff85ee6`** có sẵn `/api/auth/lark/callback`, C8 **dùng lại đúng route đó**
+và phân luồng bằng tiền tố `state`: `u...` = C8, số = đăng nhập console. Hai luồng ký HMAC
+khác nhau nên không thể nhận nhầm. Nhờ vậy nối agent mới **không cần vào Lark Console**.
+
 ## Cấp quyền (chỉ admin, bắt buộc có người bấm đồng ý)
 
 ```bash
@@ -84,8 +103,9 @@ không được cấp / grant đã thu hồi.
 - `access_token` (~2h): tự refresh khi còn <120s. Refresh dùng `SELECT ... FOR UPDATE`
   để hai tiến trình không refresh chồng nhau — platform từng mất phiên NotebookLM đúng
   vì lỗi này.
-- `refresh_token` (~30 ngày): hết là **bắt buộc có người authorize lại**. AG-OPS cảnh báo
-  trước `LARK_USER_REFRESH_WARN_DAYS` (mặc định 7), kèm danh sách agent đang dùng.
+- `refresh_token` (**7 ngày** — đo thật trong tenant này, không phải 30; mỗi lần refresh
+  được gia hạn lại 7 ngày nên chỉ chết nếu agent im hơn một tuần): hết là **bắt buộc có người authorize lại**. AG-OPS cảnh báo
+  trước `LARK_USER_REFRESH_WARN_DAYS` (mặc định **2** — đặt 7 thì kêu ngay sau khi vừa cấp), kèm danh sách agent đang dùng.
   Sinh ra cảnh báo này vì AG-LEGAL từng mất refresh token 17/07 mà 19/08 mới phát hiện.
 
 ## Thu hồi

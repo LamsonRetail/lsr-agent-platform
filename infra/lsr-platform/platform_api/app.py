@@ -111,9 +111,15 @@ LARK_DOMAIN = os.environ.get("LARK_DOMAIN", "https://open.larksuite.com").rstrip
 # Không có khoá = broker TẮT HẲN, chứ không lưu token dạng rõ. Thà thiếu tính năng
 # còn hơn để token của một con người nằm trần trong Postgres.
 LARK_USER_TOKEN_KEY = os.environ.get("LARK_USER_TOKEN_KEY", "")
+# Trang đồng ý OAuth v2 nằm ở host accounts.*, KHÔNG phải open.* (open.* trả 404 cho
+# /authen/v2/oauth/authorize; v1 thì có 302 sang accounts nhưng v1 lại không nhận scope).
+LARK_ACCOUNTS_DOMAIN = os.environ.get(
+    "LARK_ACCOUNTS_DOMAIN", LARK_DOMAIN.replace("//open.", "//accounts.")).rstrip("/")
 # Cảnh báo trước khi refresh_token chết (Lark refresh sống ~30 ngày, hết là phải
 # xin người authorize lại — AG-LEGAL từng chết âm thầm 1 tháng vì chuyện này).
-LARK_USER_REFRESH_WARN_DAYS = int(os.environ.get("LARK_USER_REFRESH_WARN_DAYS", "7"))
+# Refresh token Lark ở tenant này sống 7 ngày và được gia hạn mỗi lần refresh.
+# Ngưỡng 2 ngày: đủ sớm để kịp xin authorize lại, không kêu ngay sau khi vừa cấp.
+LARK_USER_REFRESH_WARN_DAYS = int(os.environ.get("LARK_USER_REFRESH_WARN_DAYS", "2"))
 
 
 def _user_token_cipher():
@@ -3047,32 +3053,43 @@ def _lark_send_to(receive_id: str, id_type: str, *, text: str = "",
 
 _LARK_USER_SESSION_TTL = 900          # phiên authorize chờ người bấm đồng ý
 # Scope mặc định theo "domain" nghiệp vụ để người cấp quyền không phải nhớ tên scope.
+# Tên scope KHÔNG được đoán. Bộ dưới đây lấy từ user token đang chạy thật trong tenant
+# (lark-cli auth status). Đoán sai thì Lark trả invalid_scope ở trang đồng ý — người đi
+# authorize mới phát hiện, rất tốn công. Thêm domain mới thì đối chiếu lại bằng cách đó.
 _LARK_USER_SCOPES = {
-    "approval": ["approval:approval:readonly", "approval:instance",
-                 "approval:instance:readonly"],
-    "task": ["task:task", "task:task:read"],
-    "docs": ["docx:document:readonly", "drive:drive:readonly"],
-    "im": ["im:message", "im:chat:readonly"],
+    "approval": ["approval:approval:read", "approval:instance:read",
+                 "approval:instance:write", "approval:task:read", "approval:task:write"],
 }
+# Luôn kèm: offline_access để có refresh token, auth:user.id:read để callback đọc được
+# danh tính người vừa đồng ý (bước kiểm "đúng account" phụ thuộc vào scope này).
+_LARK_USER_BASE_SCOPES = ["offline_access", "auth:user.id:read"]
 
 
 def _lark_user_scope_str(domains: str) -> str:
     """'approval,task' → chuỗi scope Lark + offline_access (bắt buộc để có refresh)."""
-    out: list = ["offline_access"]
+    out: list = list(_LARK_USER_BASE_SCOPES)
     for d in [x.strip().lower() for x in (domains or "").split(",") if x.strip()]:
         if d not in _LARK_USER_SCOPES:
             raise HTTPException(status_code=422,
                                 detail=f"domain '{d}' chưa hỗ trợ — chọn: {sorted(_LARK_USER_SCOPES)}")
         out += _LARK_USER_SCOPES[d]
-    if len(out) == 1:
+    if len(out) == len(_LARK_USER_BASE_SCOPES):
         raise HTTPException(status_code=422, detail="cần ít nhất 1 domain (vd approval)")
     return " ".join(dict.fromkeys(out))
+
+
+# Lark chỉ chấp nhận redirect_uri ĐÃ ĐĂNG KÝ trong console của app; URI lạ bị trả
+# invalid_request ngay ở trang đồng ý (kiểm live 19/08). Trong tenant này chỉ app Admin
+# có sẵn /api/auth/lark/callback, nên C8 DÙNG LẠI đúng route đó và phân luồng bằng tiền
+# tố state ("u..." = C8, số = đăng nhập console). Hai luồng ký HMAC khác nhau nên không
+# thể nhận nhầm nhau. Nhờ vậy thêm agent mới không phải sửa gì trong Lark Console.
+LARK_USER_REDIRECT_PATH = os.environ.get("LARK_USER_REDIRECT_PATH", "/api/auth/lark/callback")
 
 
 def _lark_user_redirect_uri() -> str:
     if not CONSOLE_BASE_URL:
         raise HTTPException(status_code=503, detail="thiếu CONSOLE_BASE_URL")
-    return f"{CONSOLE_BASE_URL}/api/auth/lark-user/callback"
+    return f"{CONSOLE_BASE_URL}{LARK_USER_REDIRECT_PATH}"
 
 
 def _lark_user_store(conn, subject: str, d: dict, *, app_id: str, granted_by: str,
@@ -3094,8 +3111,10 @@ def _lark_user_store(conn, subject: str, d: dict, *, app_id: str, granted_by: st
         "  refresh_token_enc=EXCLUDED.refresh_token_enc, scope=EXCLUDED.scope, "
         "  expires_at=EXCLUDED.expires_at, refresh_expires_at=EXCLUDED.refresh_expires_at, "
         "  granted_by=EXCLUDED.granted_by, updated_at=now()",
+        # 604800 = 7 ngày: refresh token Lark ở tenant này sống đúng 7 ngày (đo thật
+        # 19/08 trên user token đang chạy), chỉ dùng khi Lark không trả expires_in.
         (subject, open_id, name or None, app_id, _enc_token(at), _enc_token(rt), scope,
-         int(d.get("expires_in") or 7200), int(d.get("refresh_token_expires_in") or 2592000),
+         int(d.get("expires_in") or 7200), int(d.get("refresh_token_expires_in") or 604800),
          granted_by))
 
 
@@ -3170,7 +3189,10 @@ def lark_user_authorize_start(body: dict, authorization: str = Header(default=""
         _audit(conn, actor, "lark_user_authorize_start", "lark_user", subject,
                {"scope": scope, "app_id": app_id})
         conn.commit()
-    url = (f"{LARK_DOMAIN}/open-apis/authen/v1/authorize?app_id={app_id}"
+    # Kiểm live 19/08: /authen/v2/oauth/authorize KHÔNG tồn tại (404 ở cả open.* lẫn
+    # accounts.*). Trang đồng ý là /authen/v1/authorize trên host accounts.*, và nó CÓ
+    # nhận scope. Việc đổi code vẫn dùng /authen/v2/oauth/token như phần đăng nhập.
+    url = (f"{LARK_ACCOUNTS_DOMAIN}/open-apis/authen/v1/authorize?app_id={app_id}"
            f"&redirect_uri={quote(_lark_user_redirect_uri(), safe='')}"
            f"&scope={quote(scope, safe='')}&state={state}")
     return {"url": url, "state": state, "subject": subject, "scope": scope,
