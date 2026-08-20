@@ -15,22 +15,16 @@ có thu phí. Ta lưu **text** đã trích + link về trang gốc — đủ cho
 Muốn bản .doc gốc thì đặt `TVPL_COOKIE` (cookie phiên do người dùng tự lấy từ browser,
 KHÔNG phải mật khẩu) — xem `download_original()`.
 
-## Bắt buộc gửi header như browser
+## Header browser + giãn cách: xem `legalkb/web.py`
 
-Gọi bằng header mặc định của urllib → **HTTP 403**. Đủ bộ header browser → 200. Đây là
-lọc theo header, không phải JS challenge/CAPTCHA, nên không có chuyện lách bot-detection.
-
-## Lịch sự với nguồn
-
-`REQUEST_GAP` giây giữa hai lời gọi và `MAX_DOCS` mỗi lần chạy. Chạy tuần một lần nên
-không cần nhanh; làm nguồn quá tải là cách mất quyền truy cập.
+Nguồn này 403 với header mặc định của urllib. Header và giãn cách theo host để ở `web.py`
+vì cả ba adapter cần y như nhau — hai bản copy sẽ trôi lệch nhau.
 """
-import html as html_mod
 import os
 import re
-import time
 import urllib.parse
-import urllib.request
+
+from legalkb import web
 
 BASE = "https://thuvienphapluat.vn"
 # URL tìm kiếm mặc định (owner cung cấp 19/08). `type` = loại văn bản, `area` = lĩnh vực —
@@ -41,19 +35,6 @@ REQUEST_GAP = float(os.environ.get("TVPL_GAP_SECONDS", "2"))
 MAX_DOCS = int(os.environ.get("TVPL_MAX_DOCS", "25"))
 TIMEOUT = int(os.environ.get("TVPL_TIMEOUT", "40"))
 
-# Thiếu bộ header này là 403. Không phải để giả dạng ai — chỉ để vượt lọc header.
-HEADERS = {
-    "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-                   "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "vi-VN,vi;q=0.9,en;q=0.8",
-    "Upgrade-Insecure-Requests": "1",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "same-origin",
-    "Referer": BASE + "/",
-}
-
 # <p class="nqTitle" lawid='720746'> <a ... href="https://.../...-720746.aspx">Tiêu đề</a>
 ROW = re.compile(
     r'<p\s+class="nqTitle"[^>]*lawid=[\'"](\d+)[\'"][^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
@@ -63,29 +44,10 @@ DOC_BODY = re.compile(r'<div[^>]+id="divContentDoc"[^>]*>(.*?)</div>\s*(?:<div[^
                       re.S | re.I)
 DOC_BODY_ALT = re.compile(r'class="cldivContentDocVn"[^>]*>(.*?)$', re.S | re.I)
 
-_last_call = [0.0]
-
-
-def _polite_sleep():
-    gap = REQUEST_GAP - (time.time() - _last_call[0])
-    if gap > 0:
-        time.sleep(gap)
-    _last_call[0] = time.time()
-
 
 def get(url, cookie=None, timeout=None):
-    _polite_sleep()
-    h = dict(HEADERS)
-    cookie = cookie if cookie is not None else os.environ.get("TVPL_COOKIE", "")
-    if cookie:
-        h["Cookie"] = cookie
-    req = urllib.request.Request(url, headers=h)
-    with urllib.request.urlopen(req, timeout=timeout or TIMEOUT) as r:
-        return r.read().decode("utf-8", "replace")
-
-
-def _clean(s):
-    return re.sub(r"\s+", " ", html_mod.unescape(re.sub(r"<[^>]+>", " ", s or ""))).strip()
+    return web.get(url, cookie=cookie if cookie is not None else os.environ.get("TVPL_COOKIE", ""),
+                   timeout=timeout or TIMEOUT, gap=REQUEST_GAP, referer=BASE + "/")
 
 
 def search(url=None, cookie=None, max_docs=None, log=print):
@@ -104,7 +66,7 @@ def search(url=None, cookie=None, max_docs=None, log=print):
         seen.add(lawid)
         out.append({"lawid": lawid,
                     "url": urllib.parse.urljoin(BASE, href.split("?")[0]),
-                    "title": _clean(title)})
+                    "title": web.clean(title)})
         if len(out) >= (max_docs or MAX_DOCS):
             break
     log(f"[tvpl] trang tìm kiếm → {len(out)} văn bản")
@@ -117,11 +79,7 @@ def fetch_text(url, cookie=None):
     m = DOC_BODY.search(html) or DOC_BODY_ALT.search(html)
     if not m:
         return ""
-    body = m.group(1)[:600_000]
-    txt = html_mod.unescape(re.sub(r"<[^>]+>", "\n", body))
-    txt = re.sub(r"[ \t\xa0]+", " ", txt)
-    txt = re.sub(r"\n\s*\n\s*\n+", "\n\n", txt)
-    return txt.strip()
+    return web.to_text(m.group(1)[:600_000])
 
 
 def download_original(url, cookie=None):
@@ -139,8 +97,5 @@ def download_original(url, cookie=None):
     if not m:
         raise RuntimeError("không thấy link tải trong trang (cookie hết hạn hoặc gói không "
                            "cho tải?)")
-    _polite_sleep()
     file_url = urllib.parse.urljoin(BASE, m.group(1))
-    req = urllib.request.Request(file_url, headers={**HEADERS, "Cookie": cookie})
-    with urllib.request.urlopen(req, timeout=TIMEOUT * 3) as r:
-        return r.read(), file_url
+    return web.get_bytes(file_url, cookie=cookie, gap=REQUEST_GAP, referer=url), file_url

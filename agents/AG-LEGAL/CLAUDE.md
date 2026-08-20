@@ -49,8 +49,12 @@ legalkb/
   flows.py         luồng S2–S5 + hệ quả sau khi Pháp chế quyết (dispatch_decision)
   contracts.py     S2: registry mẫu, điền docx, state đa lượt, quy góp ý về field
   review.py        S3: checklist từ KB + đối chiếu + state machine
-  news.py          S4 HẰNG TUẦN (thứ 2 07:00): crawl RSS/HTML theo NƯỚC (VN, TH…),
-                   dedupe theo số hiệu, lưu bản gốc về Drive, digest chờ duyệt
+  news.py          S4 HẰNG TUẦN (thứ 2 07:00): crawl theo NƯỚC (VN, TH…), dedupe theo
+                   số hiệu, lưu bản gốc về Drive, digest chờ duyệt
+  web.py           lấy trang công khai: header browser + giãn cách theo TỪNG HOST
+  chinhphu.py      chinhphu.vn — số hiệu từ cột dữ liệu + PDF KÝ SỐ bản gốc
+  tvpl.py          thuvienphapluat.vn — toàn văn qua HTML, không cần đăng nhập
+  luatvietnam.py   luatvietnam.vn — TRA CỨU THEO TÊN (cách pháp chế đang làm tay)
   signing.py       S5: Bước 3/Bước 5 trình ký (shadow — chờ core C5)
   extract.py       trích text PDF/DOCX (không dùng /v1/extract vì nó đòi admin)
   addressing.py    gọi tên mới trả lời trong nhóm + khoá phiên theo chat (bộ nhớ nhóm)
@@ -73,6 +77,12 @@ legalkb/
 | S4 | **Lưu bản gốc + index TRƯỚC gate**, chỉ digest mới chờ duyệt | Bản gốc là tài liệu nhà nước, không phải nội dung AI — cần tra được ngay khi phát sinh việc |
 | S4 | Nguồn chưa kiểm được → **inactive + `note`** | Để active thì mỗi tuần báo lỗi mà không ai biết là do seed sai (3/4 nguồn seed đầu đã chết) |
 | S4 | Nguồn `html` **bắt buộc** có `link_pattern` | Parse HTML tuỳ ý sẽ ra rác mà vẫn "thành công" |
+| S4 | Số hiệu do **nguồn cấp** > regex dò tiêu đề | Trích yếu "Quy định về định danh địa điểm" (326/2026/NĐ-CP) không có chữ số nào ⇒ regex trượt ⇒ dedupe liên nguồn vỡ |
+| S4 | Bản gốc **tốt hơn tới sau thì đổi** (`file_urls`) | RSS chạy trước chỉ có link trang tin; chinhphu.vn có PDF ký số |
+| S4 | Host nào chưa có bộ trích toàn văn → **báo lỗi**, không lưu HTML cả trang | Lưu 2MB menu/quảng cáo rồi gọi là "văn bản gốc" = báo thành công mà vô dụng |
+| Tra cứu | Khớp theo **CỤM TỪ**, không theo tỉ lệ từ trùng | Live: "Luật Lực lượng dự bị động viên 2019" đạt 3/4 từ với "Bộ luật Lao động 2019" và được index như thể đúng |
+| Tra cứu | Model trả rác (JSON, quá dài) → **không tra cứu** | Đem rác đi tìm thì nguồn vẫn ra kết quả, và agent trích dẫn 3 văn bản không liên quan |
+| Tra cứu | `-d10.html` của luatvietnam là **DỰ THẢO** → loại, hoặc gắn cờ rõ | 72/123 kết quả tìm kiếm là dự thảo; trích dự thảo như đang có hiệu lực là sai nghiêm trọng |
 | S5 | Quá SLA 30' hoặc model lỗi → `auto_passed` | Máy không được làm nghẽn quy trình người |
 | S5 | Tối đa 2 lần quay lại Bước 4, lần 3 escalate | Chống vòng lặp vô hạn |
 | Mọi gate | Quá hạn chỉ **NHẮC**, không tự thông qua (trừ `observe`) | Điểm an toàn cốt lõi |

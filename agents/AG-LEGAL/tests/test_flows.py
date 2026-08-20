@@ -566,8 +566,8 @@ def test_sources_carry_country_and_dead_ones_start_inactive(tmp_path):
         by_cc.setdefault(r["country"], []).append(r)
     assert set(by_cc) == {"VN", "TH"}
     active = [r for r in rows if r["active"]]
-    # 2 nguồn VN đã kiểm chạy được: RSS LuatVietnam + adapter thuvienphapluat
-    assert {r["kind"] for r in active} == {"rss", "tvpl"}
+    # 3 nguồn VN đã kiểm chạy được: RSS LuatVietnam, thuvienphapluat, chinhphu
+    assert {r["kind"] for r in active} == {"rss", "tvpl", "chinhphu"}
     assert all(r["country"] == "VN" for r in active), "TH chưa có nguồn nào lấy được"
     for r in rows:
         if not r["active"]:
@@ -773,7 +773,8 @@ def test_tvpl_archive_reports_when_layout_changed(tmp_path, monkeypatch):
                 "('TVPL','https://x/search','tvpl','VN',1)")
     sid = store.one("SELECT id FROM legal_news_sources")["id"]
     store.write("INSERT INTO legal_news_items (key, source_id, country, title, url, status,"
-                " found_at) VALUES ('k',?,'VN','T','https://x/1.aspx','new',0)", (sid,))
+                " found_at) VALUES ('k',?,'VN','T',"
+                "'https://thuvienphapluat.vn/van-ban/1.aspx','new',0)", (sid,))
     monkeypatch.setattr(tvpl, "fetch_text", lambda url, cookie=None: "")
     logs = []
     assert news.archive(store, b.lark, ["k"], "fld_root", log=logs.append) == 0
@@ -784,3 +785,309 @@ def test_doc_no_handles_five_digit_numbers():
     """20519/CHQ-GSQL — công văn hải quan 5 chữ số. Giới hạn \\d{1,4} cũ bỏ sót thật."""
     assert news.doc_no_of("Công văn 20519/CHQ-GSQL năm 2026") == "20519/CHQ-GSQL"
     assert news.doc_no_of("Nghị định 326/2026/NĐ-CP") == "326/2026/NĐ-CP"
+
+
+# ==================== chinhphu.vn (adapter chinhphu) ====================
+
+# Dòng đầu là dòng TIÊU ĐỀ BẢNG — cũng khớp <tr><td> nhưng không có span.code.
+CP_HTML = """
+<tr><td><b>Số hiệu</b></td><td><b>Ngày</b></td><td><b>Trích yếu</b></td></tr>
+<tr>
+  <td><a href='/?pageid=27160&docid=219221'><span class="code">326/2026/NĐ-CP</span></a></td>
+  <td><span class="issued-date">19/08/2026</span></td>
+  <td><a href='/?pageid=27160&docid=219221'><span class="substract">Quy định về định danh địa điểm
+      </span></a>
+    <div class="bl-doc-files">
+      <div class="bl-doc-file"><a href="https://datafiles.chinhphu.vn/cpp/files/vbpq/2026/8/326_2026_nd-cp-signed.pdf" download>Tài liệu đính kèm</a></div>
+      <div class="bl-doc-file"><a href="https://datafiles.chinhphu.vn/cpp/files/vbpq/2026/8/326_2026_nd-cp_pl.pdf" download>Tài liệu đính kèm</a></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td><a href='/?pageid=27160&docid=219231'><span class="code">1602/QĐ-TTg</span></a></td>
+  <td><span class="issued-date">19/08/2026</span></td>
+  <td><a href='/?pageid=27160&docid=219231'><span class="substract">Về việc giải thể Ban chỉ đạo</span></a>
+    <div class="bl-doc-file"><a href="https://datafiles.chinhphu.vn/cpp/files/vbpq/2026/8/1602_qd-ttg-signed.pdf">Tài liệu đính kèm</a></div>
+  </td>
+</tr>
+"""
+
+
+def test_chinhphu_takes_doc_no_from_source_column(monkeypatch):
+    """Số hiệu là DỮ LIỆU của nguồn, không phải regex dò tiêu đề.
+
+    Trích yếu "Quy định về định danh địa điểm" không có một chữ số nào — dò regex là trượt.
+    """
+    from legalkb import chinhphu
+    monkeypatch.setattr(chinhphu.web, "get", lambda *a, **k: CP_HTML)
+    docs = chinhphu.search(log=lambda m: None)
+    assert [d["doc_no"] for d in docs] == ["326/2026/NĐ-CP", "1602/QĐ-TTg"]
+    assert news.doc_no_of(docs[0]["title"]) is None, "tiêu đề không có số → phải lấy từ cột"
+    assert docs[0]["title"] == "Quy định về định danh địa điểm"
+    assert docs[0]["issued"] == "19/08/2026"
+    assert len(docs[0]["files"]) == 2 and docs[0]["files"][0].endswith("-signed.pdf")
+    assert docs[0]["url"] == "https://chinhphu.vn/?pageid=27160&docid=219221"
+
+
+def test_chinhphu_rejects_error_page_pretending_to_be_pdf(monkeypatch):
+    """Nguồn trả trang lỗi thay vì PDF → phải báo lỗi, không lưu 5KB HTML thành "văn bản"."""
+    from legalkb import chinhphu
+    monkeypatch.setattr(chinhphu.web, "get_bytes", lambda *a, **k: b"<html>404</html>")
+    with pytest.raises(RuntimeError, match="không phải PDF"):
+        chinhphu.download_original("https://chinhphu.vn/?docid=1",
+                                   ["https://datafiles.chinhphu.vn/x.pdf"])
+
+
+def test_chinhphu_no_attachment_is_reported_not_silently_skipped(monkeypatch):
+    from legalkb import chinhphu
+    monkeypatch.setattr(chinhphu.web, "get", lambda *a, **k: "<html>không có file</html>")
+    with pytest.raises(RuntimeError, match="không có file đính kèm"):
+        chinhphu.download_original("https://chinhphu.vn/?docid=1")
+
+
+def test_crawl_chinhphu_keys_by_doc_no_and_archives_signed_pdf(tmp_path, monkeypatch):
+    from legalkb import chinhphu
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    store.write("INSERT INTO legal_news_sources (name,url,kind,country,active) VALUES "
+                "('CP','https://chinhphu.vn/he-thong-van-ban','chinhphu','VN',1)")
+    monkeypatch.setattr(chinhphu.web, "get", lambda *a, **k: CP_HTML)
+    keys = news.crawl(store, log=lambda m: None)
+    assert set(keys) == {"326/2026/NĐ-CP", "1602/QĐ-TTg"}
+
+    monkeypatch.setattr(chinhphu.web, "get_bytes", lambda *a, **k: b"%PDF-1.7 noi dung")
+    assert news.archive(store, b.lark, keys, "fld_root", log=lambda m: None) == 2
+    names = [n for _f, n, _d in b.lark.uploaded]
+    assert all(n.endswith(".pdf") for n in names), names
+    assert all(d.startswith(b"%PDF") for _f, _n, d in b.lark.uploaded)
+    # file_urls lưu lúc crawl → archive không phải đọc lại trang chi tiết
+    it = store.one("SELECT file_urls FROM legal_news_items WHERE key='326/2026/NĐ-CP'")
+    assert len(json.loads(it["file_urls"])) == 2
+
+
+def test_same_document_from_two_sources_stored_once(tmp_path, monkeypatch):
+    """Dedupe LIÊN NGUỒN chỉ chạy được nhờ số hiệu — đây là lý do phải lấy số hiệu thật."""
+    from legalkb import chinhphu
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    store.write("INSERT INTO legal_news_sources (name,url,kind,country,active) VALUES "
+                "('CP','https://chinhphu.vn/he-thong-van-ban','chinhphu','VN',1)")
+    monkeypatch.setattr(chinhphu.web, "get", lambda *a, **k: CP_HTML)
+    assert len(news.crawl(store, log=lambda m: None)) == 2
+
+    store.write("INSERT INTO legal_news_sources (name,url,kind,country,active) VALUES "
+                "('RSS','https://luatvietnam.vn/rss/x.rss','rss','VN',1)")
+    rss = ("<rss><item><title>Nghị định 326/2026/NĐ-CP về định danh địa điểm</title>"
+           "<link>https://luatvietnam.vn/abc-1-d1.html</link></item></rss>")
+    monkeypatch.setattr(news, "fetch", lambda *a, **k: rss)
+    assert news.crawl(store, log=lambda m: None) == [], "cùng số hiệu → không lưu lần hai"
+    assert store.one("SELECT COUNT(*) c FROM legal_news_items")["c"] == 2
+
+
+# ==================== luatvietnam.vn (tra cứu theo tên) ====================
+
+LVN_SEARCH = """
+<a href="https://luatvietnam.vn/lao-dong/bo-luat-lao-dong-2019-so-45-2019-qh14-179015-d1.html">Bộ luật Lao động 2019, số 45/2019/QH14</a>
+<a href="https://luatvietnam.vn/lao-dong/du-thao-bo-luat-lao-dong-sua-doi-176972-d10.html">Dự thảo Bộ luật Lao động sửa đổi</a>
+<a href="https://luatvietnam.vn/tin-phap-luat/diem-tin-van-ban-moi-123.html">Điểm tin văn bản mới</a>
+"""
+LVN_DOC = """<div class="the-document-body">
+<p>Điều 1. Phạm vi điều chỉnh</p><p>Bộ luật Lao động quy định tiêu chuẩn lao động.</p>
+<p>Đang theo dõi</p><p>Điều 2. Đối tượng áp dụng</p><p>Đang theo dõi</p><p>1. Người lao động.</p>
+<footer>chân trang</footer>"""
+
+
+def test_luatvietnam_excludes_drafts_by_default(monkeypatch):
+    """72/123 kết quả trên trang tìm kiếm là DỰ THẢO — trích dự thảo như đang có hiệu lực
+    là sai nghiêm trọng với việc pháp chế."""
+    from legalkb import luatvietnam as lvn
+    monkeypatch.setattr(lvn.web, "get", lambda *a, **k: LVN_SEARCH)
+    docs = lvn.search("bo luat lao dong", log=lambda m: None)
+    assert [d["title"] for d in docs] == ["Bộ luật Lao động 2019, số 45/2019/QH14"]
+    assert docs[0]["is_draft"] is False
+    withdraft = lvn.search("x", include_drafts=True, log=lambda m: None)
+    assert [d["is_draft"] for d in withdraft] == [False, True]
+    assert all("tin-phap-luat" not in d["url"] for d in withdraft), "bài tin không phải văn bản"
+
+
+def test_luatvietnam_strips_ui_buttons_from_text(monkeypatch):
+    """"Đang theo dõi" là nút bấm của giao diện, chèn sau 148/218 điều — không phải nội dung."""
+    from legalkb import luatvietnam as lvn
+    monkeypatch.setattr(lvn.web, "get", lambda *a, **k: LVN_DOC)
+    t = lvn.fetch_text("https://luatvietnam.vn/x-1-d1.html")
+    assert "Đang theo dõi" not in t
+    assert "Điều 1. Phạm vi điều chỉnh" in t and "1. Người lao động." in t
+    assert "chân trang" not in t
+
+
+def test_luatvietnam_layout_change_returns_empty_not_garbage(monkeypatch):
+    from legalkb import luatvietnam as lvn
+    monkeypatch.setattr(lvn.web, "get", lambda *a, **k: "<html><body>đổi layout</body></html>")
+    assert lvn.fetch_text("https://luatvietnam.vn/x-1-d1.html") == ""
+
+
+# ==================== S4 hỏi đáp: tra cứu tức thời ====================
+
+def test_s4_answer_looks_up_the_document_the_question_names(tmp_path, monkeypatch):
+    """Trước đây hàm này bỏ qua câu hỏi và luôn trả 5 văn bản mới nhất."""
+    from legalkb import luatvietnam as lvn
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    news.seed_sources(store)
+    monkeypatch.setattr(flows.brain, "call_claude", lambda *a, **k: "Bộ luật Lao động 2019")
+    monkeypatch.setattr(lvn.web, "get", lambda *a, **k: LVN_SEARCH)
+    monkeypatch.setattr(lvn, "fetch_text", lambda url: "TOÀN VĂN BỘ LUẬT")
+    monkeypatch.setenv(flows.LAW_ARCHIVE_ENV, "fld_law")
+    out = flows.s4_answer(b, "Bộ luật Lao động quy định gì về thử việc?")
+    assert "Bộ luật Lao động 2019" in out and "179015-d1.html" in out
+    assert "bản lưu nội bộ" in out, "phải chỉ được cả bản lưu trong Drive"
+    assert b.lark.uploaded and b.lark.uploaded[0][2] == "TOÀN VĂN BỘ LUẬT".encode()
+
+
+def test_s4_answer_uses_doc_no_in_question_without_calling_model(tmp_path, monkeypatch):
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    news.seed_sources(store)
+
+    def boom(*a, **k):
+        raise AssertionError("câu hỏi đã có số hiệu → không cần tốn lượt model")
+    monkeypatch.setattr(flows.brain, "call_claude", boom)
+    monkeypatch.setattr(flows, "lookup_law", lambda b_, kw, log=print: [])
+    out = flows.s4_answer(b, "Nghị định 98/2020/NĐ-CP xử phạt thế nào?")
+    assert "98/2020/NĐ-CP" in out
+
+
+def test_s4_answer_refuses_to_guess_when_nothing_found(tmp_path, monkeypatch):
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    news.seed_sources(store)
+    monkeypatch.setattr(flows.brain, "call_claude", lambda *a, **k: "Luật Không Tồn Tại")
+    monkeypatch.setattr(flows, "lookup_law", lambda b_, kw, log=print: [])
+    out = flows.s4_answer(b, "Luật Không Tồn Tại nói gì?")
+    assert "không ra văn bản nào" in out and "không\nđoán".replace("\n", " ") in out
+
+
+def test_s4_answer_marks_drafts_loudly(tmp_path):
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    store.write("INSERT INTO legal_news_items (key,country,doc_no,title,url,is_draft,status,"
+                "found_at) VALUES ('k','VN',NULL,'Dự thảo Luật X','https://x/1-d10.html',"
+                "1,'published',1)")
+    out = flows.s4_answer(b, "có gì mới không")
+    assert "DỰ THẢO" in out and "chưa ban hành" in out
+
+
+def test_lookup_law_survives_source_being_down(tmp_path, monkeypatch):
+    """Nguồn ngoài chết thì trả rỗng — không được làm vỡ lượt trả lời."""
+    from legalkb import luatvietnam as lvn
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    news.seed_sources(store)
+
+    def down(*a, **k):
+        raise OSError("timeout")
+    monkeypatch.setattr(lvn.web, "get", down)
+    assert flows.lookup_law(b, "Bộ luật Lao động", log=lambda m: None) == []
+
+
+# ==================== web.py: lịch sự với nguồn ====================
+
+def test_web_gap_is_per_host_not_global(monkeypatch):
+    """Ba nguồn khác nhau không có lý gì phải chờ nhau; hai lời gọi CÙNG nguồn thì phải."""
+    from legalkb import web
+    slept, now = [], [1000.0]
+    monkeypatch.setattr(web.time, "sleep", lambda s: slept.append(round(s, 2)))
+    monkeypatch.setattr(web.time, "time", lambda: now[0])
+    web._last.clear()
+    web._wait("https://a.vn/1", 2)
+    web._wait("https://b.vn/1", 2)
+    assert slept == [], "host khác nhau → không chờ"
+    web._wait("https://a.vn/2", 2)
+    assert slept == [2.0], "cùng host → chờ đủ giãn cách"
+
+
+def test_model_junk_is_not_treated_as_a_document_name(tmp_path, monkeypatch):
+    """Lỗi THẬT do test bắt được: model trả khối JSON, bản trước đem đi tra và trích dẫn
+    3 văn bản không liên quan như thể đã tra đúng."""
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    monkeypatch.setattr(flows.brain, "call_claude",
+                        lambda *a, **k: '{"intent": "s1_qa", "risk": "low"}')
+    monkeypatch.setattr(flows, "lookup_law",
+                        lambda *a, **k: pytest.fail("không được tra bằng rác của model"))
+    assert flows._doc_name_in(b, "có gì mới không") is None
+    assert "chưa có bản tin" in flows.s4_answer(b, "có gì mới không")
+
+
+def test_lookup_rejects_hits_that_do_not_match_the_name(tmp_path, monkeypatch):
+    """luatvietnam trả kết quả cho gần như mọi truy vấn → "có kết quả" không phải bằng
+    chứng đã tra đúng văn bản."""
+    from legalkb import luatvietnam as lvn
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    news.seed_sources(store)
+    off_topic = ('<a href="https://luatvietnam.vn/tieu-chuan/tcvn-iso-31000-2011-quan-ly-'
+                 'rui-ro-185124-d3.html">TCVN ISO 31000:2011 quản lý rủi ro</a>')
+    monkeypatch.setattr(lvn.web, "get", lambda *a, **k: off_topic)
+    logs = []
+    assert flows.lookup_law(b, "Luật Không Tồn Tại", log=logs.append) == []
+    assert any("không khớp tên" in m for m in logs)
+    assert store.one("SELECT COUNT(*) c FROM legal_news_items")["c"] == 0
+
+
+def test_doc_no_keeps_mixed_case_and_numeric_suffixes():
+    """Ba lỗi chạy thật: 55/CĐ-TTg bị cắt còn 55/CĐ (⇒ lưu hai bản), và 45/2019/QH14
+    hỏng luôn cả cụm ⇒ Bộ luật Lao động thành "không có số hiệu"."""
+    assert news.doc_no_of("Công điện 55/CĐ-TTg của Thủ tướng") == "55/CĐ-TTg"
+    assert news.doc_no_of("Bộ luật Lao động 2019, số 45/2019/QH14") == "45/2019/QH14"
+    assert news.doc_no_of("Quyết định 3523/QĐ-BKHCN của Bộ") == "3523/QĐ-BKHCN"
+    assert news.doc_no_of("không có số hiệu nào ở đây") is None
+
+
+def test_better_original_replaces_weaker_one_found_first(tmp_path, monkeypatch):
+    """RSS chạy trước và chỉ có link trang tin; chinhphu.vn tới sau nhưng có PDF ký số.
+    Dedupe giữ bản thấy trước, nhưng bản GỐC phải là bản tốt hơn."""
+    from legalkb import chinhphu
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    store.write("INSERT INTO legal_news_sources (name,url,kind,country,active) VALUES "
+                "('RSS','https://luatvietnam.vn/rss/x.rss','rss','VN',1)")
+    rss = ("<rss><item><title>Nghị định 326/2026/NĐ-CP về định danh địa điểm</title>"
+           "<link>https://luatvietnam.vn/abc-1-d1.html</link></item></rss>")
+    monkeypatch.setattr(news, "fetch", lambda *a, **k: rss)
+    assert news.crawl(store, log=lambda m: None) == ["326/2026/NĐ-CP"]
+    assert store.one("SELECT file_urls FROM legal_news_items")["file_urls"] is None
+
+    store.write("INSERT INTO legal_news_sources (name,url,kind,country,active) VALUES "
+                "('CP','https://chinhphu.vn/he-thong-van-ban','chinhphu','VN',1)")
+    monkeypatch.setattr(chinhphu.web, "get", lambda *a, **k: CP_HTML)
+    logs = []
+    news.crawl(store, log=logs.append)
+    it = store.one("SELECT url, file_urls FROM legal_news_items WHERE key='326/2026/NĐ-CP'")
+    assert "chinhphu.vn" in it["url"] and "signed.pdf" in it["file_urls"]
+    assert any("đổi sang bản gốc" in m for m in logs)
+
+    monkeypatch.setattr(chinhphu.web, "get_bytes", lambda *a, **k: b"%PDF-1.7 x")
+    news.archive(store, b.lark, ["326/2026/NĐ-CP"], "fld", log=lambda m: None)
+    assert b.lark.uploaded[0][1].endswith(".pdf")
+
+
+def test_never_saves_whole_page_html_as_the_original(tmp_path, monkeypatch):
+    """Trang nguồn 2MB toàn menu/quảng cáo — lưu nó rồi gọi là "văn bản gốc" thì người
+    sau mở ra không đọc được gì, mà hệ thống báo đã lưu thành công."""
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    store.write("INSERT INTO legal_news_items (key,country,title,url,status,found_at) "
+                "VALUES ('k','VN','T','https://nguon-la.vn/tin/abc','new',0)")
+    monkeypatch.setattr(news, "fetch_bytes", lambda *a, **k: b"<html>" + b"x" * 5000)
+    logs = []
+    assert news.archive(store, b.lark, ["k"], "fld", log=logs.append) == 0
+    assert not b.lark.uploaded
+    assert any("chưa có bộ trích toàn văn" in m for m in logs)
+
+
+@pytest.mark.parametrize("keyword,title,ok", [
+    ("Bộ luật Lao động 2019", "Bộ luật Lao động 2019 , số 45/ 2019 /QH14", True),
+    # Lỗi THẬT lộ khi chạy live: đếm tỉ lệ từ trùng thì văn bản này đạt 3/4
+    # (luật · động · 2019) và được lưu + index như thể là Bộ luật Lao động.
+    ("Bộ luật Lao động 2019", "Luật Lực lượng dự bị động viên 2019 , số 53/2019/QH14", False),
+    ("luật lao động", "Bộ luật Lao động 2019, số 45/2019/QH14", True),
+    # Bỏ từ ở GIỮA làm cụm mất liền mạch → chỉ bỏ năm ở CUỐI tên
+    ("Luật Bảo vệ quyền lợi người tiêu dùng",
+     "Luật Bảo vệ quyền lợi người tiêu dùng 2023", True),
+    # Hỏi bằng số hiệu: nguồn hay chèn khoảng trắng "98/ 2020 /NĐ-CP"
+    ("98/2020/NĐ-CP", "Nghị định 98/ 2020 /NĐ-CP xử phạt", True),
+    ("98/2020/NĐ-CP", "Nghị định 326/2026/NĐ-CP định danh địa điểm", False),
+    ("Luật Không Tồn Tại", "TCVN ISO 31000:2011 quản lý rủi ro", False),
+])
+def test_lookup_matches_by_phrase_not_by_loose_word_overlap(keyword, title, ok):
+    assert flows._matches(keyword, title) is ok

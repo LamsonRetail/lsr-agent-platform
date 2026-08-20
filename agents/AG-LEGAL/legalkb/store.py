@@ -139,6 +139,8 @@ CREATE TABLE IF NOT EXISTS legal_news_items (
   url        TEXT,                 -- link nguồn gốc (bắt buộc có, không thì loại)
   drive_url  TEXT,                 -- bản lưu trong Lark Drive
   summary    TEXT,
+  file_urls  TEXT,                 -- JSON list: link file gốc kèm theo (chinhphu.vn: PDF ký số)
+  is_draft   INTEGER NOT NULL DEFAULT 0,   -- 1 = DỰ THẢO, chưa ban hành — không được trích như đang có hiệu lực
   status     TEXT NOT NULL DEFAULT 'new',   -- new|archived|in_digest|published|dropped
   found_at   REAL
 );
@@ -189,7 +191,8 @@ class SourceStore:
         "legal_news_sources": [("country", "TEXT NOT NULL DEFAULT 'VN'"),
                                ("link_pattern", "TEXT"), ("note", "TEXT")],
         "legal_news_items": [("country", "TEXT NOT NULL DEFAULT 'VN'"),
-                             ("drive_url", "TEXT")],
+                             ("drive_url", "TEXT"), ("file_urls", "TEXT"),
+                             ("is_draft", "INTEGER NOT NULL DEFAULT 0")],
     }
 
     def _migrate(self):

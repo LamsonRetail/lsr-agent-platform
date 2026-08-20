@@ -36,8 +36,16 @@ DEFAULT_SOURCES = [
      "tvpl", "VN", None, 1,
      "đã kiểm 19/08: adapter tvpl đọc được danh sách + TOÀN VĂN không cần đăng nhập. "
      "Đổi `type`/`area` trong URL để lấy loại văn bản khác; thêm dòng nguồn mới trên console"),
-    ("Cổng TTĐT Chính phủ", "https://chinhphu.vn/rss/van-ban-chi-dao-dieu-hanh.rss",
-     "rss", "VN", None, 0, "19/08: HTTP 404 — cần URL feed hiện hành"),
+    ("LuatVietnam — tra cứu theo tên", "https://luatvietnam.vn/van-ban/tim-kiem.html",
+     "lvn", "VN", None, 0,
+     "đã kiểm 20/08: tra cứu theo từ khoá chạy ẩn danh, lấy được toàn văn. Agent VẪN dùng "
+     "nguồn này để tra cứu tức thời khi có người hỏi — không cần bật. Chỉ bật khi muốn "
+     "THEO DÕI một chủ đề hằng tuần: điền TỪ KHOÁ vào link_pattern (vd 'bán lẻ')"),
+    ("Cổng TTĐT Chính phủ — Hệ thống văn bản", "https://chinhphu.vn/he-thong-van-ban",
+     "chinhphu", "VN", None, 1,
+     "đã kiểm 20/08: 50 văn bản/trang, SỐ HIỆU lấy từ cột dữ liệu (không đoán từ tiêu đề) "
+     "và tải được PDF KÝ SỐ bản gốc. Nguồn tốt nhất để lưu bản gốc. Chỉ lấy trang 1 "
+     "(phân trang là ASP.NET postback)"),
     ("Công báo Chính phủ", "https://congbao.chinhphu.vn/rss",
      "rss", "VN", None, 0, "19/08: 200 nhưng 0 item và 0 link (trang render bằng JS)"),
     # --- Thái Lan --- chưa tìm được nguồn nào lấy được tự động
@@ -51,10 +59,17 @@ DEFAULT_SOURCES = [
      "19/08: 200 nhưng là trang JS, chưa có link_pattern — cần URL trang danh sách + mẫu link"),
 ]
 
-# Số hiệu văn bản VN: 12/2026/NĐ-CP, 05/2026/TT-BTC, 1234/QĐ-TTg, 20519/CHQ-GSQL…
-# \d{1,6}: công văn hải quan có số 5 chữ số (20519/CHQ-GSQL) — giới hạn 4 bỏ sót thật.
-DOC_NO = re.compile(
-    r"\b(\d{1,6}\s*/\s*(?:\d{4}\s*/\s*)?[A-ZĐ]{2,}(?:\s*-\s*[A-ZĐ]{2,})*)\b")
+# Số hiệu văn bản VN: 12/2026/NĐ-CP, 05/2026/TT-BTC, 1234/QĐ-TTg, 45/2019/QH14,
+# 20519/CHQ-GSQL…
+#
+# Ba lần nới, mỗi lần vì một lỗi CHẠY THẬT mới thấy:
+#   \d{1,6}   công văn hải quan 5 chữ số (20519/CHQ-GSQL) — giới hạn 4 bỏ sót thật.
+#   [a-z]*    hậu tố có chữ thường: TTg (Thủ tướng). Không có thì 55/CĐ-TTg bị cắt còn
+#             55/CĐ, mà chinhphu.vn cấp đúng 55/CĐ-TTg ⇒ **một văn bản lưu thành hai bản**.
+#   \d*       hậu tố có số: QH14 (Quốc hội khoá 14). Không có thì "45/2019/QH14" hỏng
+#             luôn cả cụm và trả về None — tức là Bộ luật Lao động không có số hiệu.
+_SEG = r"[A-ZĐ]{2,}[a-zà-ỹ]*\d*"
+DOC_NO = re.compile(rf"\b(\d{{1,6}}\s*/\s*(?:\d{{4}}\s*/\s*)?{_SEG}(?:\s*-\s*{_SEG})*)")
 
 _SUMMARY_PROMPT = """Tóm tắt văn bản pháp luật dưới đây cho bộ phận pháp chế của một công
 ty BÁN LẺ (Lam Son Retail). Trả về DUY NHẤT một JSON:
@@ -71,8 +86,19 @@ Nội dung: {body}
 """
 
 
+# Nguồn đã kiểm là KHÔNG dùng được và đã có nguồn thay thế. Dọn hẳn cho khỏi rối bảng
+# nguồn — nhưng CHỈ khi chưa lấy được văn bản nào từ nó, và KHÔNG chạm vào nguồn do admin
+# tự thêm trên console (xoá việc của người khác thì tệ hơn là để lại một dòng rác).
+RETIRED_SOURCES = [
+    # thay bằng trang "Hệ thống văn bản" — feed RSS này 404 từ 19/08
+    "https://chinhphu.vn/rss/van-ban-chi-dao-dieu-hanh.rss",
+]
+
+
 def seed_sources(store, sources=None):
     """Nạp nguồn. KHÔNG bật lại nguồn admin đã tắt tay: `active` chỉ set lúc tạo mới."""
+    for url in RETIRED_SOURCES:
+        store.write("DELETE FROM legal_news_sources WHERE url=? AND n_items=0", (url,))
     n = 0
     for name, url, kind, country, pattern, active, note in (sources or DEFAULT_SOURCES):
         n += bool(store.write(
@@ -156,25 +182,52 @@ def crawl(store, log=print):
                 from legalkb import tvpl
                 items = [{"title": d["title"], "url": d["url"], "desc": ""}
                          for d in tvpl.search(s["url"], log=log)]
+            elif s["kind"] == "chinhphu":
+                from legalkb import chinhphu
+                items = chinhphu.search(s["url"], log=log)
+            elif s["kind"] == "lvn":
+                # Nguồn "tra cứu theo tên": `link_pattern` giữ TỪ KHOÁ (ví dụ "bán lẻ",
+                # "thương mại điện tử") — theo dõi một chủ đề thay vì cả dòng văn bản mới.
+                from legalkb import luatvietnam
+                kw = (s.get("link_pattern") or "").strip()
+                if not kw:
+                    raise RuntimeError("nguồn lvn cần TỪ KHOÁ ở link_pattern (vd 'bán lẻ')")
+                items = luatvietnam.search(kw, log=log)
             elif s["kind"] == "rss":
                 items = parse_rss(fetch(s["url"]))
             elif s["kind"] == "html":
                 items = parse_html(fetch(s["url"]), s["url"], s.get("link_pattern"))
             else:
-                raise RuntimeError(f"kind '{s['kind']}' chưa hỗ trợ (rss | html | tvpl)")
+                raise RuntimeError(f"kind '{s['kind']}' chưa hỗ trợ "
+                                   f"(rss | html | tvpl | chinhphu | lvn)")
             if not items:
                 raise RuntimeError("lấy được trang nhưng 0 văn bản — kiểm URL/link_pattern")
             new = 0
             for it in items:
-                no = doc_no_of(it["title"]) or doc_no_of(it["desc"])
+                # Số hiệu do NGUỒN cấp (chinhphu.vn có cột riêng) đáng tin hơn regex dò
+                # trên tiêu đề: trích yếu "Quy định về định danh địa điểm" của Nghị định
+                # 326/2026/NĐ-CP không chứa một chữ số nào.
+                no = it.get("doc_no") or doc_no_of(it["title"]) or doc_no_of(it.get("desc"))
                 key = no or it["url"]
-                if store.one("SELECT key FROM legal_news_items WHERE key=?", (key,)):
+                cur = store.one("SELECT key, file_urls, drive_url FROM legal_news_items "
+                                "WHERE key=?", (key,))
+                if cur:
+                    # Dedupe giữ bản THẤY TRƯỚC, nhưng bản gốc TỐT HƠN có thể tới sau:
+                    # RSS chỉ có link trang tin, chinhphu.vn có PDF ký số của cơ quan ban
+                    # hành. Chưa lưu về Drive thì còn kịp đổi sang bản tốt hơn.
+                    if it.get("files") and not cur["file_urls"] and not cur["drive_url"]:
+                        store.write("UPDATE legal_news_items SET file_urls=?, url=?, "
+                                    "source_id=? WHERE key=?",
+                                    (json.dumps(it["files"]), it["url"], s["id"], key))
+                        log(f"[news] {key}: đổi sang bản gốc từ {s['name']}")
                     continue                       # dedupe theo số hiệu, rồi tới URL
                 store.write(
                     "INSERT INTO legal_news_items (key, source_id, country, doc_no, title, "
-                    "url, status, found_at) VALUES (?,?,?,?,?,?,'new',?)",
+                    "url, file_urls, is_draft, status, found_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,'new',?)",
                     (key, s["id"], s.get("country") or "VN", no, it["title"][:500],
-                     it["url"], time.time()))
+                     it["url"], json.dumps(it["files"]) if it.get("files") else None,
+                     int(bool(it.get("is_draft"))), time.time()))
                 found.append(key)
                 new += 1
             store.write("UPDATE legal_news_sources SET last_run=?, last_error=NULL, "
@@ -225,6 +278,39 @@ def _safe_name(s, cap=90):
     return re.sub(r"\s+", " ", s)[:cap] or "van-ban"
 
 
+def _original_for(it, kind):
+    """Bản gốc để lưu về Drive, theo từng loại nguồn → `(bytes, đuôi file)`.
+
+    Thứ tự ưu tiên là có chủ ý: **file ký số của cơ quan ban hành > toàn văn trích được >
+    HTML cả trang**. Bản PDF ký số là bản trích dẫn được; bản gõ lại của trang trung gian
+    thì không, và HTML cả trang thì 90% là menu với quảng cáo.
+    """
+    # `file_urls` là tín hiệu mạnh nhất: đã có link file gốc của cơ quan ban hành thì
+    # dùng nó, bất kể item vào DB qua nguồn nào (bản gốc có thể do nguồn KHÁC cấp — xem
+    # bước "đổi sang bản gốc" trong crawl()).
+    files = json.loads(it.get("file_urls") or "[]")
+    if files or kind == "chinhphu":
+        from legalkb import chinhphu
+        raw, ext, _ = chinhphu.download_original(it["url"], files)
+        return raw, ext
+    # Chọn theo HOST của link, không chỉ theo `kind` của nguồn: link luatvietnam đến từ
+    # RSS cũng phải dùng bộ trích của luatvietnam. Không thì lưu nguyên HTML 2MB toàn
+    # menu/quảng cáo và gọi đó là "văn bản gốc".
+    host = urllib.parse.urlsplit(it.get("url") or "").netloc.lower()
+    for match, module in (("thuvienphapluat.vn", "legalkb.tvpl"),
+                          ("luatvietnam.vn", "legalkb.luatvietnam")):
+        if match in host:
+            text = __import__(module, fromlist=["fetch_text"]).fetch_text(it["url"])
+            if not text:
+                raise RuntimeError("không trích được toàn văn (đổi layout?)")
+            return text.encode("utf-8"), ".txt"
+    raw, ext = fetch_bytes(it["url"]), _ext_of(it["url"])
+    if ext == ".html":
+        raise RuntimeError(f"nguồn {host} chưa có bộ trích toàn văn — chỉ index link, "
+                           "không lưu HTML cả trang làm 'bản gốc'")
+    return raw, ext
+
+
 def archive(store, lark, keys, root_folder, log=print):
     """Tải VĂN BẢN GỐC về Lark Drive, mỗi nước một folder con.
 
@@ -253,17 +339,10 @@ def archive(store, lark, keys, root_folder, log=print):
         try:
             src = store.one("SELECT kind FROM legal_news_sources WHERE id=?",
                             (it.get("source_id"),)) or {}
-            if src.get("kind") == "tvpl":
-                # Lưu TOÀN VĂN đã trích, không lưu HTML cả trang: trang .aspx nặng 400KB
-                # toàn menu/quảng cáo, mà nội dung cần thì đã tách được sạch.
-                from legalkb import tvpl
-                text = tvpl.fetch_text(it["url"])
-                if not text:
-                    raise RuntimeError("không trích được toàn văn (đổi layout?)")
-                raw, ext = text.encode("utf-8"), ".txt"
-            else:
-                raw, ext = fetch_bytes(it["url"]), _ext_of(it["url"])
-            name = f"{_safe_name(it.get('doc_no') or '')} {_safe_name(it['title'])}".strip()
+            raw, ext = _original_for(it, src.get("kind"))
+            prefix = "DU THAO " if it.get("is_draft") else ""
+            name = (f"{prefix}{_safe_name(it.get('doc_no') or '')} "
+                    f"{_safe_name(it['title'])}").strip()
             tok = lark.drive_upload(folders[cc], f"{name}{ext}", raw)
             url = lark.drive_file_url(tok) if tok else None
             store.write("UPDATE legal_news_items SET drive_url=?, status='archived' "

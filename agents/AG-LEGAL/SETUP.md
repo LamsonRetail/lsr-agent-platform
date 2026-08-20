@@ -65,20 +65,20 @@ Shell (`set -a; . ./.env`) tha, nhưng `docker compose env_file` thì lấy nguy
 vào giá trị. Đã gặp thật cả hai lỗi: `LARK_APP_SECRET` bị thêm 1 space đầu (len 33/32) và
 `NLM_NOTEBOOK_KB_ID` + `NLM_AUTH_PATH` bị lẫn comment.
 
-### Quyền GHI trên folder văn bản luật (đang chặn S4)
-
-Đã kiểm 19/08 bằng tenant token của app AG-LEGAL:
+### Quyền GHI trên folder văn bản luật  ✅ XONG 20/08
 
 | Folder Drive | Đọc | Ghi |
 |---|---|---|
-| Văn bản luật `MIx2fFd8rlzWJBd9bQGlcLQegCd` | ✅ | ❌ **403** |
+| **Kho văn bản luật `GUYFfiGeqlnyiOd8rU9lMLDvgwf`** (folder mới) | ✅ | ✅ |
 | Mẫu hợp đồng `T8DzfOysElvbf4dMHB7lomb7grc` | ✅ | ✅ |
 | Bản thảo DRAFT `NHe5fRCSclUMvNdDmhul5njvg7c` | ✅ | ✅ |
+| ~~Văn bản luật `MIx2fFd8rlzWJBd9bQGlcLQegCd`~~ (folder cũ, chỉ Can view) | ✅ | ❌ 403 |
 
-S4 lưu văn bản crawl về folder văn bản luật nên **cần quyền ghi**: mở folder đó trên Lark
-→ **Manage collaborators** → thêm bot app AG-LEGAL với quyền **Can edit** (hiện chỉ có
-Can view). Không có quyền này thì crawl vẫn chạy và vẫn index được link nguồn, nhưng
-không lưu được bản gốc nội bộ.
+Agent tự tạo folder con theo nước (`VN/`, `TH/`) trong kho. Đã chạy thật 20/08: lưu được
+PDF ký số của chinhphu.vn và toàn văn `.txt` của tvpl/luatvietnam.
+
+Nếu sau này đổi folder: mở folder trên Lark → **Manage collaborators** → thêm bot app
+AG-LEGAL với **Can edit** (chỉ Can view thì ghi trả `1061004 forbidden`).
 
 ## 3. Group Pháp chế/Admin (thông báo + phê duyệt)
 

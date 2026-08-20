@@ -89,6 +89,24 @@
 | 19i | Thứ tự | 1 chu kỳ tuần | Lưu bản gốc + index xảy ra **trước** khi mở gate digest |
 | 20 | Nguồn lỗi | 1 nguồn đổi layout/chặn bot | Nguồn đó báo lỗi trong console, các nguồn khác vẫn chạy |
 | 21 | Trùng lặp | Crawl lại văn bản đã có (cùng số hiệu) | Không tạo bản ghi/file trùng |
+| 21a | Số hiệu do nguồn cấp | chinhphu.vn, trích yếu không chứa chữ số | Lấy số hiệu từ **cột dữ liệu**, không phải regex tiêu đề |
+| 21b | Trùng liên nguồn | Cùng nghị định từ RSS và chinhphu.vn | Một bản ghi duy nhất |
+| 21c | Số hiệu hậu tố lạ | `55/CĐ-TTg`, `45/2019/QH14` | Lấy **đủ** hậu tố (chữ thường/số), không cắt còn `55/CĐ` |
+| 21d | Bản gốc tốt hơn tới sau | RSS thấy trước, chinhphu.vn có PDF ký số | Đổi sang PDF ký số (khi **chưa** lưu Drive) |
+| 21e | Host chưa có bộ trích | link ở nguồn lạ, không phải file | **Báo lỗi**, không lưu HTML cả trang làm "bản gốc" |
+| 21f | File gốc không phải PDF | nguồn trả trang lỗi | Báo lỗi, không upload |
+
+### Tra cứu theo tên (khi có người hỏi — không cần duyệt)
+
+| # | Kịch bản | Đầu vào | Kỳ vọng |
+|---|----------|---------|---------|
+| 22a | Hỏi tên văn bản | "Bộ luật Lao động quy định gì về thử việc" | Tra luatvietnam, lưu bản gốc + index, trả link nguồn **và** link bản lưu |
+| 22b | Hỏi bằng số hiệu | "Nghị định 98/2020/NĐ-CP…" | Dùng luôn số hiệu, **không** gọi model |
+| 22c | Kết quả không khớp tên | nguồn trả văn bản khác | Coi như **không thấy**, không lưu, không trích dẫn |
+| 22d | Model trả rác | model trả JSON/chuỗi dài | **Không** tra cứu bằng rác đó |
+| 22e | Dự thảo | luatvietnam trả `-d10.html` | Loại khỏi kết quả; nếu hiển thị thì ghi rõ **DỰ THẢO — chưa ban hành** |
+| 22f | Nguồn chết | luatvietnam timeout | Trả rỗng, **không** làm vỡ lượt trả lời |
+| 22g | Không tìm được | tên không tồn tại | Nói thẳng không thấy, **không đoán** nội dung |
 
 ## S5 — Hỗ trợ trình ký (Phase 6, chạy shadow)
 

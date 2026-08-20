@@ -5,11 +5,12 @@ flow → trả lời). Mọi flow ở đây nhận một `Bundle` nên test đư
 """
 import json
 import os
+import re
 import time
 from dataclasses import dataclass
 
 from legalkb import brain, contracts, news, review as review_mod, signing
-from legalkb.gates import GATE, OBSERVE
+from legalkb.gates import GATE, OBSERVE, plain
 
 DRAFT_FOLDER_ENV = "LEGAL_DRAFT_FOLDER"
 TEMPLATE_FOLDER_ENV = "LEGAL_TEMPLATE_FOLDER"
@@ -184,18 +185,150 @@ def s3_review(b, job, q, sid, uref, chat_id):
 
 # ============================ S4 — hỏi về văn bản luật mới ============================
 
+_DOC_NAME_PROMPT = """Câu hỏi dưới đây của nhân viên một công ty bán lẻ. Nếu câu hỏi
+nhắm tới MỘT văn bản pháp luật cụ thể, trả về DUY NHẤT tên/số hiệu văn bản đó để tra cứu
+(ví dụ: "Bộ luật Lao động 2019", "Nghị định 98/2020/NĐ-CP", "Luật Bảo vệ quyền lợi người
+tiêu dùng"). Nếu câu hỏi không nhắm tới văn bản cụ thể nào, trả về đúng chữ KHONG.
+Không giải thích, không thêm chữ nào khác.
+
+Câu hỏi: {q}
+"""
+
+# Nguồn tra cứu tức thời: đúng cách pháp chế đang làm tay (gõ tên vào thanh tìm kiếm
+# luatvietnam), chỉ là gọi thẳng endpoint của form thay vì đi qua Google.
+LOOKUP_SOURCE_URL = "https://luatvietnam.vn/van-ban/tim-kiem.html"
+
+
+def _doc_name_in(b, q):
+    """Tên văn bản mà câu hỏi nhắm tới, hoặc None.
+
+    Model lỗi → trả None, tức là **không tra cứu**, chứ không phải tra bằng cả câu hỏi:
+    tìm bằng câu hỏi dài sẽ ra một văn bản gần gần rồi trích dẫn nó như thể đúng.
+    """
+    no = news.doc_no_of(q)
+    if no:
+        return no                      # câu hỏi đã nêu số hiệu → khỏi tốn lượt model
+    raw = (brain.call_claude(_DOC_NAME_PROMPT.replace("{q}", q[:1500]),
+                             model=b.model, timeout=60) or "").strip()
+    raw = raw.strip('"\'` \n')
+    # Chỉ nhận thứ TRÔNG NHƯ tên văn bản. Test đã bắt lỗi thật: khi model trả về một
+    # khối JSON, bản trước coi đó là tên văn bản, đem đi tìm, luatvietnam vẫn ra 3 kết
+    # quả — và agent trích dẫn 3 văn bản không liên quan như thể đã tra đúng.
+    if (not raw or raw.upper().startswith("KHONG") or len(raw) > 120
+            or "\n" in raw or any(c in raw for c in '{}"')):
+        return None
+    return raw
+
+
+def _tokens(s):
+    return re.findall(r"[a-z0-9]+", plain(s))
+
+
+def _digits(s):
+    return re.sub(r"[^a-z0-9]", "", plain(s))
+
+
+def _matches(keyword, title):
+    """Tiêu đề tìm được có đúng là văn bản được hỏi không?
+
+    luatvietnam trả kết quả cho gần như mọi truy vấn, nên "có kết quả" không phải bằng
+    chứng đã tra đúng. Thà nói không thấy còn hơn trích dẫn một văn bản gần gần.
+
+    **So theo CỤM, không theo từ lẻ.** Bản trước đếm tỉ lệ từ trùng và đã cho lọt một lỗi
+    thật khi chạy live: tra "Bộ luật Lao động 2019" thì "Luật Lực lượng dự bị động viên
+    2019" đạt 3/4 từ (luật · động · 2019) và được lưu, index như thể là Bộ luật Lao động.
+    Tên văn bản là một CỤM TỪ, nên phải khớp cả cụm.
+    """
+    no = news.doc_no_of(keyword)
+    if no and _digits(no) == _digits(keyword):
+        # Hỏi thẳng bằng số hiệu → chỉ cần số hiệu có trong tiêu đề. Bỏ hết dấu phân cách
+        # vì nguồn hay chèn khoảng trắng: "số 45/ 2019 /QH14".
+        return _digits(no) in _digits(title)
+    core = _tokens(keyword)
+    # Chỉ bỏ năm ở CUỐI tên ("Bộ luật Lao động 2019" → "bo luat lao dong"): nguồn hay
+    # chèn năm ở chỗ khác ("… số 45/2019/QH14"). Bỏ từ ở GIỮA thì cụm không còn liền
+    # mạch — "Luật Bảo vệ quyền lợi…" mà bỏ chữ "vệ" là hỏng.
+    while core and core[-1].isdigit():
+        core.pop()
+    if not core:
+        return False
+    return " ".join(core) in " ".join(_tokens(title))
+
+
+def lookup_law(b, keyword, log=print):
+    """Tra cứu văn bản theo tên trên luatvietnam → lưu bản gốc + index, trả list item.
+
+    **Loại dự thảo** (`include_drafts=False`): trên trang tìm kiếm dự thảo còn nhiều hơn
+    văn bản đã ban hành, mà trích dẫn dự thảo như thể đang có hiệu lực là sai nghiêm trọng.
+
+    Lưu + index luôn, không chờ ai duyệt: đây là văn bản nhà nước, không phải nội dung
+    model sinh ra (cùng lý do như `news_cycle`).
+    """
+    from legalkb import luatvietnam
+    try:
+        hits = luatvietnam.search(keyword, max_docs=3, log=log)
+    except Exception as exc:
+        log(f"[lookup] '{keyword}' lỗi: {exc}")
+        return []
+    hits = [h for h in hits if _matches(keyword, h["title"])]
+    if not hits:
+        log(f"[lookup] '{keyword}': nguồn có trả kết quả nhưng không khớp tên → coi như không thấy")
+        return []
+    src = b.store.one("SELECT id FROM legal_news_sources WHERE url=?",
+                      (LOOKUP_SOURCE_URL,)) or {}
+    keys = []
+    for h in hits:
+        key = news.doc_no_of(h["title"]) or h["url"]
+        if not b.store.one("SELECT key FROM legal_news_items WHERE key=?", (key,)):
+            b.store.write(
+                "INSERT INTO legal_news_items (key, source_id, country, doc_no, title, url, "
+                "is_draft, status, found_at) VALUES (?,?,'VN',?,?,?,?,'new',?)",
+                (key, src.get("id"), news.doc_no_of(h["title"]), h["title"][:500],
+                 h["url"], int(bool(h["is_draft"])), time.time()))
+        keys.append(key)
+    news.archive(b.store, b.lark, keys, os.environ.get(LAW_ARCHIVE_ENV), log=log)
+    index_legal_docs(b, keys, log=log)
+    return [b.store.one("SELECT * FROM legal_news_items WHERE key=?", (k,)) for k in keys]
+
+
+def _cite(r):
+    no = f"`{r['doc_no']}` " if r.get("doc_no") else ""
+    draft = " ⚠️ **DỰ THẢO — chưa ban hành**" if r.get("is_draft") else ""
+    line = f"- {no}[{r['title']}]({r['url']}){draft}"
+    if r.get("drive_url"):
+        line += f" · [bản lưu nội bộ]({r['drive_url']})"
+    return line
+
+
 def s4_answer(b, q):
+    """Hỏi về văn bản luật: tra trong kho trước, không có thì **tra cứu tức thời**.
+
+    Trước đây hàm này bỏ qua hẳn câu hỏi và luôn trả 5 văn bản mới nhất — hỏi "Bộ luật
+    Lao động quy định gì về thử việc" thì nhận về 5 công văn hải quan không liên quan.
+    """
+    name = _doc_name_in(b, q)
+    if name:
+        like = f"%{name.lower()}%"
+        rows = b.store.query(
+            "SELECT * FROM legal_news_items WHERE lower(title) LIKE ? OR lower(doc_no) LIKE ? "
+            "ORDER BY found_at DESC LIMIT 3", (like, like))
+        if not rows:
+            rows = lookup_law(b, name)
+        if rows:
+            head = f"**Tra cứu \"{name}\"** — nguồn luatvietnam.vn:"
+            return "\n".join([head] + [_cite(r) for r in rows if r] +
+                              ["\nCần mình trích điều khoản cụ thể nào thì nhắn tên điều."])
+        return (f"Mình tra \"{name}\" trên luatvietnam.vn nhưng không ra văn bản nào. "
+                "Bạn kiểm lại tên/số hiệu, hoặc nhắn Pháp chế tra bản giấy — mình không "
+                "đoán nội dung văn bản chưa tìm được.")
+
     rows = b.store.query(
         "SELECT * FROM legal_news_items WHERE status='published' ORDER BY found_at DESC "
         "LIMIT 5")
     if not rows:
         return ("Hiện chưa có bản tin văn bản pháp luật nào được Pháp chế phê duyệt để "
-                "công bố. Câu hỏi về quy định cụ thể thì bạn hỏi trực tiếp, mình tra "
-                "trong kho tài liệu.")
-    lines = ["**Văn bản mới nhất đã được Pháp chế duyệt:**"]
-    for r in rows:
-        no = f"`{r['doc_no']}` " if r.get("doc_no") else ""
-        lines.append(f"- {no}[{r['title']}]({r['url']})")
+                "công bố. Bạn nêu tên văn bản cần tra thì mình tra cứu ngay.")
+    lines = ["**Văn bản mới nhất đã được Pháp chế duyệt:**"] + [_cite(r) for r in rows]
     lines.append("\nCần chi tiết văn bản nào thì nhắn mình.")
     return "\n".join(lines)
 
