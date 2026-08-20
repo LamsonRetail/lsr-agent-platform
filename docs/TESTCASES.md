@@ -634,3 +634,22 @@ ca cuối chỉ chạy được sau khi chốt chính sách §5 và có identity
 
 Sự cố 20/08 sinh ra §22.9-22.12: link 30 phút hết hạn trước khi người bấm, callback trả
 400 với thông báo mờ ("không hợp lệ hoặc đã hết hạn") nên không ai biết phải làm gì.
+
+### §22.3 — Nghiệm thu tiêu chí 1: AG-LEGAL gọi Approval thật (20/08)
+
+Identity `ann_legal@hapas.vn` (Ann Nguyen, `ou_28c573f0…`) authorize bằng chính account
+đó; grant `/open-apis/approval/v4/` + GET,POST. Gọi qua domain thật (Caddy), token tạm
+20 phút của AG-LEGAL, **đã xoá sau khi test** (gọi lại → 401).
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 22.15 | `GET approval/v4/tasks?topic=1` bằng user token của Ann | Lark `code: 0` | ✅ |
+| 22.16 | agent có thấy token không | không — chỉ nhận `{http_status, data}` | ✅ |
+| 22.17 | `GET /open-apis/im/v1/messages` (ngoài allowlist) | 403 kèm danh sách path được cấp | ✅ |
+| 22.18 | audit từng lời gọi | 8 dòng `lark_user_call` đủ actor=AG-LEGAL, subject, path, http, lark_code | ✅ |
+| 22.19 | metering | `tool_usage` connector=`lark_user`: 2 ok / 13 lỗi, có latency | ✅ |
+| 22.20 | grant identity có tự cấp connector `lark_user` | có (trước đó phải cấp tay → 403 khó hiểu) | ✅ |
+| 22.21 | `status` phản ánh cả connector grant | có (trước đó trả `connected:true` trong khi `/call` 403) | ✅ |
+| 22.22 | token tạm bị xoá | lời gọi sau đó 401 | ✅ |
+
+**Cả 8 tiêu chí nghiệm thu C8 đã đóng.**

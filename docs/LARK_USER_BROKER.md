@@ -79,6 +79,24 @@ curl -sS -X POST "$P/v1/lark/user/grants" \
        "path_prefixes":["/open-apis/approval/v4/"],"methods":["GET","POST"]}'
 ```
 
+## Approval v4 TRỘN hai loại token — phải thử từng endpoint
+
+Không phải cả nhóm Approval đều dùng user token. Đo thật 20/08 qua broker với identity
+`ann_legal@hapas.vn`:
+
+| Endpoint | Kết quả |
+|---|---|
+| `GET /open-apis/approval/v4/tasks?topic=1\|2&user_id=&user_id_type=open_id` | ✅ `code: 0` |
+| `GET /open-apis/approval/v4/tasks` thiếu `topic` | ❌ `99992402 field validation failed` |
+| `GET /open-apis/approval/v4/instances` | ❌ `99991668 user access token not support` |
+| `POST /open-apis/approval/v4/instances/search` | ❌ `99991668` |
+| `POST /open-apis/approval/v4/tasks/search` | ❌ `99991668` |
+| `POST /open-apis/approval/v4/instances/query` | ❌ `99991668` |
+
+Cách đọc lỗi: `99991668` = endpoint đó **đòi tenant token**, gọi qua `/v1/lark/send`
+hoặc connector `lark` thường. `99992402` = user token ĐÃ được nhận, chỉ sai tham số —
+đây là dấu hiệu tốt, cứ sửa query rồi gọi lại.
+
 ## Agent dùng thế nào
 
 ```python

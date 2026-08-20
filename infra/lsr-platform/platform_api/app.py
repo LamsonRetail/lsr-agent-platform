@@ -3312,6 +3312,11 @@ def lark_user_grant(body: dict, authorization: str = Header(default="")) -> dict
         if not conn.execute("SELECT 1 FROM lark_user_identities WHERE subject_email=%s",
                             (subject,)).fetchone():
             raise HTTPException(status_code=404, detail=f"chưa authorize identity {subject}")
+        # Cấp identity thì cấp luôn connector 'lark_user': đây là CÙNG một quyết định của
+        # admin. Tách làm hai bước chỉ tạo ra 403 "chưa được cấp quyền connector" cho mọi
+        # agent về sau (đã tự vấp 20/08), mà admin thì tưởng đã cấp xong.
+        conn.execute("INSERT INTO connector_grants (agent_id, connector_id, scope, granted_by) "
+                     "VALUES (%s,'lark_user','use',%s) ON CONFLICT DO NOTHING", (agent_id, actor))
         conn.execute(
             "INSERT INTO agent_user_identity_grants (agent_id, subject_email, path_prefixes, "
             "methods, active, granted_by) VALUES (%s,%s,%s,%s,true,%s) "
@@ -3374,6 +3379,14 @@ def lark_user_status(subject: str, authorization: str = Header(default="")) -> d
     _ensure_schema()
     subject = (subject or "").strip().lower()
     with _db() as conn:
+        # Kiểm ĐỦ 3 điều kiện mà /call sẽ kiểm, kể cả connector — trước đây status trả
+        # connected=True trong khi /call vẫn 403 vì thiếu connector grant (20/08).
+        conn_ok = True
+        c = conn.execute("SELECT status, enforce FROM connectors WHERE connector_id='lark_user'").fetchone()
+        if c and c["status"] == "active" and c["enforce"]:
+            conn_ok = bool(conn.execute(
+                "SELECT 1 FROM connector_grants WHERE agent_id=%s AND connector_id='lark_user'",
+                (agent_id,)).fetchone())
         g = conn.execute(
             "SELECT path_prefixes, methods, active FROM agent_user_identity_grants "
             "WHERE agent_id=%s AND subject_email=%s", (agent_id, subject)).fetchone()
@@ -3381,10 +3394,11 @@ def lark_user_status(subject: str, authorization: str = Header(default="")) -> d
             "SELECT scope, expires_at, refresh_expires_at, "
             "  floor(extract(epoch from (refresh_expires_at - now()))/86400)::int AS refresh_days_left "
             "FROM lark_user_identities WHERE subject_email=%s", (subject,)).fetchone()
-    if not (g and g["active"] and i):
+    if not (g and g["active"] and i and conn_ok):
         return {"connected": False, "subject": subject,
                 "reason": "chưa có identity" if not i else
-                          ("grant đã tắt" if g else "agent chưa được grant subject này")}
+                          ("chưa được cấp connector 'lark_user'" if not conn_ok else
+                           ("grant đã tắt" if g else "agent chưa được grant subject này"))}
     return {"connected": True, "subject": subject, "scope": i["scope"],
             "expires_at": i["expires_at"], "refresh_expires_at": i["refresh_expires_at"],
             "refresh_days_left": i["refresh_days_left"],
