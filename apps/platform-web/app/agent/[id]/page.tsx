@@ -1,4 +1,5 @@
-import { agentDetail, agentTraces, conflictsForAgent, auditForTarget, costSummary, healthAgents } from "@/lib/platform";
+import { agentDetail, agentTraces, conflictsForAgent, auditForTarget, costSummary, healthAgents, agentLarkIdentities } from "@/lib/platform";
+import AgentIdentity from "@/components/AgentIdentity";
 import { StatusButton } from "@/components/Actions";
 import { QuotaForm } from "@/components/CostActions";
 import { AgentConflicts } from "@/components/AgentBackend";
@@ -11,9 +12,9 @@ function money(n: number) { return "$" + (n || 0).toLocaleString("en-US", { mini
 
 export default async function AgentPage({ params }: { params: { id: string } }) {
   const id = params.id;
-  const [agent, traces, conflicts, audit, cost, health] = await Promise.all([
+  const [agent, traces, conflicts, audit, cost, health, identities] = await Promise.all([
     agentDetail(id), agentTraces(id, 20), conflictsForAgent(id), auditForTarget(id),
-    costSummary(), healthAgents(),
+    costSummary(), healthAgents(), agentLarkIdentities(id),
   ]);
 
   if (!agent) {
@@ -55,6 +56,8 @@ export default async function AgentPage({ params }: { params: { id: string } }) 
           Đăng ký backend qua <code>enroll</code>/<code>register</code> với trường <code>backend_url</code>.</span>
         </div>
       )}
+
+      <AgentIdentity data={identities} />
 
       {/* ---------------- Dashboard ---------------- */}
       <h3>Dashboard (tháng {cost.period})</h3>

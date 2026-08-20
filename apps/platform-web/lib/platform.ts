@@ -50,6 +50,11 @@ export async function regressionRuns() { return safe(() => jget(`${P}/v1/regress
 export async function agentDetail(id: string) { return safe(() => jget(`${P}/v1/agents/${id}`), null); }
 export async function agentTraces(id: string, limit = 20) { return safe(() => jget(`${C}/v1/traces?agent_id=${id}&limit=${limit}`), []); }
 export async function conflictsForAgent(id: string) { return safe(() => jget(`${P}/v1/knowledge/conflicts?status=open&agent_id=${id}`), []); }
+// C8: danh tính Lark agent được phép hành động dưới danh nghĩa (không có token).
+export async function agentLarkIdentities(id: string) {
+  return safe(() => jget(`${P}/v1/agents/${id}/lark-identities`),
+              { agent_id: id, identities: [], calls_7d: {}, warn_days: 2 });
+}
 export async function auditForTarget(id: string) { return safe(() => jget(`${P}/v1/audit?target_id=${id}&limit=30`), []); }
 export async function brainGraph(qs = "") { return safe(() => jget(`${P}/v1/brain/graph${qs}`), { nodes: [], links: [], counts: {} }); }
 export async function brainItems(qs = "?scope=shared") { return safe(() => jget(`${P}/v1/brain/items${qs}`), []); }

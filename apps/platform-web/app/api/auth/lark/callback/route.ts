@@ -12,6 +12,25 @@ export async function GET(req: Request) {
   const base = publicBase(req);
   const code = u.searchParams.get("code") || "";
   const state = u.searchParams.get("state") || "";
+  // C8 (User Identity Broker) dùng CHUNG redirect URI này vì Lark chỉ nhận URI đã đăng
+  // ký trong console. State của C8 bắt đầu bằng "u", state đăng nhập là timestamp — và
+  // hai luồng ký HMAC khác nhau nên platform vẫn từ chối nếu bị tráo.
+  if (state.startsWith("u")) {
+    try {
+      const r = await fetch(`${P}/v1/lark/user/authorize/callback`, {
+        method: "POST", cache: "no-store",
+        headers: { "Content-Type": "application/json", ...(GATEWAY ? { "X-Gateway-Token": GATEWAY } : {}) },
+        body: JSON.stringify({ code, state }),
+      });
+      const d = await r.json().catch(() => ({}));
+      const qs = r.ok
+        ? `ok=${encodeURIComponent(d.subject || "")}`
+        : `err=${encodeURIComponent(d?.detail || "Lark từ chối")}`;
+      return NextResponse.redirect(`${base}/lark-user?${qs}`);
+    } catch {
+      return NextResponse.redirect(`${base}/lark-user?err=` + encodeURIComponent("không gọi được platform"));
+    }
+  }
   try {
     const r = await fetch(`${P}/v1/auth/lark/callback`, {
       method: "POST", cache: "no-store",

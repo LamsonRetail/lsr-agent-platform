@@ -551,3 +551,150 @@ pipe response vào `python3 - <<EOF` → heredoc chiếm stdin, script luôn cra
 - **Chỉ kiểm bằng mắt trên UI (4):** `P3.7.1`–`P3.7.5` Builder (các API bên dưới đã pass, trang render 200).
 
 Toàn bộ P1–P7 đã triển khai và verify trên VM. Cách chạy lại bộ smoke: script trong lịch sử deploy (P1/P2 smoke chạy trên VM), hoặc yêu cầu chạy lại bất kỳ nhóm nào.
+
+## §20 — Đĩa VM: cảnh báo xin duyệt + tự dọn (AG-OPS + prune_docker)
+
+Ngưỡng mặc định: `OPS_DISK_WARN_PCT=80` (xin duyệt), `OPS_DISK_AUTO_PCT=90` (tự dọn),
+`OPS_PRUNE_AGE_HOURS=168` (không đụng image mới hơn 7 ngày).
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 20.1 | `diagnose` với đĩa 79% | không đề xuất gì | ✅ |
+| 20.2 | đĩa 84% | 1 đề xuất `prune_docker` risk=**high** (chờ duyệt) | ✅ |
+| 20.3 | đĩa 92% | 1 đề xuất `prune_docker` risk=**low** (tự chạy) | ✅ |
+| 20.4 | đĩa 96% | thêm alert "dọn image có thể không đủ" | ✅ |
+| 20.5 | `prune_docker` scope lạ (`"tat ca"`) | trả lỗi, KHÔNG gọi Docker | ✅ |
+| 20.6 | `prune_docker` scope=dangling trên VM thật | xoá 40 lớp mồ côi, trả disk before/after | ✅ |
+| 20.7 | freed_gb = 0 | KHÔNG nhắn admin (chống spam mỗi giờ) | ✅ |
+| 20.8 | propose high 2 lần cùng params | lần 2 trả đúng id cũ + `duplicate:true`, không đẻ phiếu mới | ✅ |
+| 20.9 | `pending_actions.params` là jsonb | so sánh `params = %s::jsonb` chạy được (không lỗi `json =`) | ✅ |
+
+Ghi chú đo thật trên VM 19/08: image dangling chỉ ~0.4GB, còn scope `unused/168h`
+mới gom được ~2.8GB (9 image). Tức là dọn image chỉ cứu được ~6% đĩa — case 20.4
+tồn tại chính vì lý do đó, đừng coi auto-prune là bảo hiểm.
+
+## §21 — Gateway Lark không kết nối (agent active nhưng câm)
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 21.1 | agent active + app riêng, platform chưa có secret | vào `lark_gateway_gaps` | ✅ |
+| 21.2 | app có secret và Lark chấp nhận (Sawadee/Sourcing/Data) | KHÔNG báo | ✅ |
+| 21.3 | agent `registered` (AG-HARRY) | KHÔNG báo — chưa được phép nhận tin | ✅ |
+| 21.4 | tiền tố env lấy từ `LARK_APP_PREFIXES` | lệnh in ra đúng `LYLY` + `event_gateway_lyly` | ✅ |
+| 21.5 | thiếu `LARK_APP_PREFIXES` | fallback quét os.environ, không vỡ | ✅ |
+| 21.6 | AG-OPS chạy thật | tạo `pending_actions #419` đúng nội dung | ✅ |
+| 21.7 | `add-lark-app.sh LEGAL <app của Minh Anh>` | CHẶN, không ghi .env (2 listener/1 app = Lark chia event, mất tin) | ✅ |
+| 21.8 | `add-lark-app.sh LEGAL <app_id mới>` | đi tiếp bình thường tới bước nhập secret | ✅ |
+| 21.9 | `add-lark-app.sh LYLY <app_id của chính LYLY>` | KHÔNG coi là trùng (cập nhật lại secret cũ) | ✅ |
+| 21.10 | `LEGAL_LARK_APP_ID` rỗng | `LARK_EXTRA_APPS`/`LARK_APP_PREFIXES` vẫn parse được, không mất app phụ nào | ✅ |
+
+## §22 — C8 User Identity Broker cho Lark (36/36)
+
+Chạy in-process trong container `platform_api` bằng agent NHÁP `AG-C8TEST` + identity
+giả (`c8test@hapas.vn`) — không chạm agent thật, không gọi Lark thật. Dọn sạch cuối bài.
+
+| Nhóm | Case | KQ |
+|---|---|---|
+| A. Mã hoá | ciphertext khác nhau mỗi lần (nonce), giải mã đúng, plaintext không nằm trong ciphertext | 3/3 ✅ |
+| B. authorize/start | subject không phải email→422; domain ngoài org→403; domain nghiệp vụ lạ→422; app không có secret→503; trả url+state; scope có `offline_access`; url không chứa secret; không phải admin→401 | 8/8 ✅ |
+| C. Phân quyền | chưa grant→403; tạo grant; `path_prefix` không phải `/open-apis/`→422; grant cho identity chưa có→404; path ngoài allowlist→403; method ngoài allowlist→403; path có `..`→422; path không phải `/open-apis/`→422 | 8/8 ✅ |
+| D. status | connected=True khi có grant; response KHÔNG chứa token; subject lạ→connected=False kèm lý do | 3/3 ✅ |
+| E. Tự refresh | trả token MỚI; DB lưu token mới (vẫn mã hoá); expiry gia hạn; audit có `lark_user_refresh` | 4/4 ✅ |
+| F. Refresh hết hạn | →401 nói rõ phải authorize lại | 1/1 ✅ |
+| G. Kill switch | deactivate agent→tắt grant; gọi sau đó→403; revoke→xoá identity; gọi sau revoke→403 | 4/4 ✅ |
+| H. Audit | mọi sự kiện C8 của subject cùng `target_id`; agent_id là actor; audit KHÔNG chứa token dạng rõ; dọn sạch identity + agent nháp | 5/5 ✅ |
+
+### §22.1 — Định tuyến qua Caddy (từ máy dev, không phải localhost:8090)
+
+| Path | Không gateway token | Kỳ vọng | KQ |
+|---|---|---|---|
+| `POST /v1/lark/user/authorize/start` | 403 | chặn ở edge | ✅ |
+| `POST /v1/lark/user/grants` | 403 | chặn ở edge | ✅ |
+| `GET /v1/lark/user/identities` | 403 | chặn ở edge | ✅ |
+| `POST /v1/lark/user/identities/{s}/revoke` | 403 | chặn ở edge | ✅ |
+| `POST /v1/lark/user/call` | 401 `agent token required` | **tới được app** (agent gọi được) | ✅ |
+| `GET /v1/lark/user/status` | 401 `agent token required` | tới được app | ✅ |
+| `GET /v1/lark/user/identities` + gateway + admin token | 200 `[]` | admin dùng được | ✅ |
+| `POST /v1/lark/user/authorize/start` + gateway, thiếu admin | 401 `admin token required` | 2 lớp độc lập | ✅ |
+
+**Chưa nghiệm thu được (cần người bấm đồng ý trên Lark):** lời gọi Approval thật bằng
+user token của một account thật. Toàn bộ đường đi đã test bằng token giả + refresh giả;
+ca cuối chỉ chạy được sau khi chốt chính sách §5 và có identity đầu tiên.
+
+### §22.2 — Link authorize hết hạn + tên bot trên console
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 22.9 | callback với state không tồn tại | 400 nói rõ "state không tồn tại — xin link mới" | ✅ |
+| 22.10 | callback với state đã hết hạn | 400 nói rõ **đã hết hạn + giờ tạo + subject**, đánh dấu session `expired` | ✅ |
+| 22.11 | callback dùng lại link đã done | 400 "mỗi link chỉ dùng một lần" | ✅ |
+| 22.12 | TTL link authorize | 24h (bước có người, link gửi qua chat) | ✅ |
+| 22.13 | `POST /v1/lark/bots/sync` | lấy `app_name` thật từ `bot/v3/info`, sửa `lark_bot_name` lệch, ghi audit | ✅ 3 agent |
+| 22.14 | agent thiếu app_secret khi sync | báo trong `van_de`, không ghi tên rỗng lên DB | ✅ AG-HARRY |
+
+Sự cố 20/08 sinh ra §22.9-22.12: link 30 phút hết hạn trước khi người bấm, callback trả
+400 với thông báo mờ ("không hợp lệ hoặc đã hết hạn") nên không ai biết phải làm gì.
+
+### §22.3 — Nghiệm thu tiêu chí 1: AG-LEGAL gọi Approval thật (20/08)
+
+Identity `ann_legal@hapas.vn` (Ann Nguyen, `ou_28c573f0…`) authorize bằng chính account
+đó; grant `/open-apis/approval/v4/` + GET,POST. Gọi qua domain thật (Caddy), token tạm
+20 phút của AG-LEGAL, **đã xoá sau khi test** (gọi lại → 401).
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 22.15 | `GET approval/v4/tasks?topic=1` bằng user token của Ann | Lark `code: 0` | ✅ |
+| 22.16 | agent có thấy token không | không — chỉ nhận `{http_status, data}` | ✅ |
+| 22.17 | `GET /open-apis/im/v1/messages` (ngoài allowlist) | 403 kèm danh sách path được cấp | ✅ |
+| 22.18 | audit từng lời gọi | 8 dòng `lark_user_call` đủ actor=AG-LEGAL, subject, path, http, lark_code | ✅ |
+| 22.19 | metering | `tool_usage` connector=`lark_user`: 2 ok / 13 lỗi, có latency | ✅ |
+| 22.20 | grant identity có tự cấp connector `lark_user` | có (trước đó phải cấp tay → 403 khó hiểu) | ✅ |
+| 22.21 | `status` phản ánh cả connector grant | có (trước đó trả `connected:true` trong khi `/call` 403) | ✅ |
+| 22.22 | token tạm bị xoá | lời gọi sau đó 401 | ✅ |
+
+**Cả 8 tiêu chí nghiệm thu C8 đã đóng.**
+
+### §22.4 — Panel danh tính trên trang agent
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 22.23 | `GET /v1/agents/AG-LEGAL/lark-identities` | trả subject/name/open_id/scope/path_prefixes/methods/refresh_days_left + `calls_7d` | ✅ |
+| 22.24 | response có token không | **không** — không trường nào chứa token | ✅ |
+| 22.25 | agent chưa có identity (AG-SOURCING) | `identities: []`, `calls_7d` toàn 0 | ✅ |
+| 22.26 | qua Caddy, không token | 401 `cần đăng nhập console` (đã vào app, không phải 403 của guard) | ✅ |
+| 22.27 | route cũ `golive-checklist` sau khi sửa regex | vẫn 401 như trước, không hỏng | ✅ |
+| 22.28 | panel có trong bản build của web | có trong `.next/server/app/agent/[id]/page.js` | ✅ |
+
+Lưu ý vận hành: Caddyfile nướng trong image nên đổi route **phải** `docker compose build
+caddy` + `up -d --force-recreate caddy`. Lần này `up -d --build caddy` không dựng lại
+container (giữ config cũ) nên endpoint mới trả 403 của guard — mất một vòng mới phát hiện.
+
+## §23 — Chuyển console sang domain thật `agent.hapas-ai.tech`
+
+`scripts/switch-console-domain.sh` kiểm 3 điều kiện rồi mới đổi `.env`; thiếu một mục là
+dừng, không đổi gì. Lý do phải chặn: đổi `CONSOLE_BASE_URL` là đổi `redirect_uri` của Lark
+OAuth, mà Lark chỉ nhận URI đã đăng ký — sai là **cả nhà mất đăng nhập** cùng luồng
+authorize C8.
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 23.1 | DNS chưa trỏ | ✗ "không có record", exit 1, không đổi `.env` | ✅ |
+| 23.2 | HTTPS chưa có cert | ✗ http 000 | ✅ |
+| 23.3 | redirect_uri chưa đăng ký trong Lark | ✗ `error=invalid_request` + in đúng chỗ cần thêm | ✅ |
+| 23.4 | Caddy nạp site mới khi DNS chưa có | site load được, ACME báo NXDOMAIN và tự thử lại | ✅ |
+| 23.5 | domain cũ trong lúc chuyển | `platform.*` 200, `app.*` 200 — không ảnh hưởng | ✅ |
+| 23.6 | `publicBase()` với host mới | redirect theo host thật, không ghim domain cũ | ✅ (đã có sẵn) |
+
+### §23.1 — Đã chuyển xong (20/08)
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 23.7 | DNS + Lark redirect_uri đã xong → chạy script thật | đổi `.env`, dựng lại `platform_api`+`web` | ✅ |
+| 23.8 | Caddy cấp cert cho domain mới | `certificate obtained successfully` (phải restart caddy để thoát backoff sau các lần NXDOMAIN) | ✅ |
+| 23.9 | `redirect_uri` của luồng đăng nhập console | `https://agent.hapas-ai.tech/api/auth/lark/callback` | ✅ |
+| 23.10 | URL đăng nhập đó có ra trang Lark thật | http 200, không `invalid_request` | ✅ |
+| 23.11 | `redirect_uri` của luồng authorize C8 | cùng domain mới, ra trang Lark thật | ✅ |
+| 23.12 | domain cũ sau khi đổi | `app.*` vẫn 200 (không cắt) | ✅ |
+| 23.13 | identity của Ann sau khi đổi domain | còn nguyên, refresh còn 6 ngày | ✅ |
+| 23.14 | xin 4 link authorize liên tiếp trong 1 giây | 4× http 200, state khác nhau | ✅ (trước: lần 3 → **500** trùng khoá) |
+| 23.15 | dùng lại link đã bị thay | 400 "đã bị thay bằng link mới hơn" | ✅ |
