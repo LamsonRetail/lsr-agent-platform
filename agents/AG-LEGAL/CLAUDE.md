@@ -49,7 +49,8 @@ legalkb/
   flows.py         luồng S2–S5 + hệ quả sau khi Pháp chế quyết (dispatch_decision)
   contracts.py     S2: registry mẫu, điền docx, state đa lượt, quy góp ý về field
   review.py        S3: checklist từ KB + đối chiếu + state machine
-  news.py          S4: crawl RSS, dedupe theo số hiệu, digest, phát hành sau khi duyệt
+  news.py          S4 HẰNG TUẦN (thứ 2 07:00): crawl RSS/HTML theo NƯỚC (VN, TH…),
+                   dedupe theo số hiệu, lưu bản gốc về Drive, digest chờ duyệt
   signing.py       S5: Bước 3/Bước 5 trình ký (shadow — chờ core C5)
   extract.py       trích text PDF/DOCX (không dùng /v1/extract vì nó đòi admin)
   addressing.py    gọi tên mới trả lời trong nhóm + khoá phiên theo chat (bộ nhớ nhóm)
@@ -69,6 +70,9 @@ legalkb/
 | S3 | Model lỗi → `clean=False` | Không bao giờ được kết luận "hợp đồng sạch" khi chưa rà được |
 | S4 | Mục thiếu link nguồn → **loại** khỏi digest | Review §B, chống bịa nguồn |
 | S4 | Chưa duyệt = **không gửi, không nạp KB** | Review §B |
+| S4 | **Lưu bản gốc + index TRƯỚC gate**, chỉ digest mới chờ duyệt | Bản gốc là tài liệu nhà nước, không phải nội dung AI — cần tra được ngay khi phát sinh việc |
+| S4 | Nguồn chưa kiểm được → **inactive + `note`** | Để active thì mỗi tuần báo lỗi mà không ai biết là do seed sai (3/4 nguồn seed đầu đã chết) |
+| S4 | Nguồn `html` **bắt buộc** có `link_pattern` | Parse HTML tuỳ ý sẽ ra rác mà vẫn "thành công" |
 | S5 | Quá SLA 30' hoặc model lỗi → `auto_passed` | Máy không được làm nghẽn quy trình người |
 | S5 | Tối đa 2 lần quay lại Bước 4, lần 3 escalate | Chống vòng lặp vô hạn |
 | Mọi gate | Quá hạn chỉ **NHẮC**, không tự thông qua (trừ `observe`) | Điểm an toàn cốt lõi |

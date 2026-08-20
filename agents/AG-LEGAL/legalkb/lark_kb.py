@@ -173,6 +173,19 @@ class LarkKB:
                                    ensure_ascii=False)})
         return data.get("message_id")
 
+    def ensure_folder(self, parent_token, name):
+        """Trả token folder con tên `name` trong `parent_token`, tạo nếu chưa có.
+
+        Dùng cho kho văn bản luật tách theo nước (VN/, TH/…). Tìm trước rồi mới tạo, để
+        chạy lại hằng tuần không sinh ra một rừng folder trùng tên.
+        """
+        for f in self.drive_files(parent_token):
+            if f.get("name") == name and f.get("type") == "folder":
+                return f.get("token")
+        data = self._request("POST", "/open-apis/drive/v1/files/create_folder",
+                             {"name": name, "folder_token": parent_token})
+        return data.get("token")
+
     def drive_upload(self, folder_token, file_name, data):
         """Upload file vào Drive folder → trả file_token.
 

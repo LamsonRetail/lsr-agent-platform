@@ -528,3 +528,163 @@ def test_template_content_indexed_not_just_name(tmp_path, monkeypatch):
     items.clear()
     assert flows.index_templates(b, log=lambda m: None) == 0
     assert items == []
+
+
+# ==================== S4 hằng tuần: nguồn theo nước + lưu Drive + index ====================
+
+class FakeDrive(FakeLarkKB):
+    """Drive giả có ensure_folder — kiểm việc tách folder theo nước."""
+
+    def __init__(self):
+        super().__init__(b"")
+        self.folders, self.existing = {}, []
+
+    def drive_files(self, folder):
+        return self.existing
+
+    def ensure_folder(self, parent, name):
+        tok = self.folders.get(name)
+        if not tok:
+            tok = self.folders[name] = f"fld_{name}"
+        return tok
+
+
+def _add_item(store, key, country, url, doc_no=None, title="Văn bản"):
+    store.write("INSERT INTO legal_news_items (key, country, doc_no, title, url, status, "
+                "found_at) VALUES (?,?,?,?,?,'new',0)", (key, country, doc_no, title, url))
+
+
+def test_sources_carry_country_and_dead_ones_start_inactive(tmp_path):
+    """Seed phải phản ánh trạng thái ĐÃ KIỂM: nguồn chết để inactive kèm note, không
+    để active rồi mỗi tuần báo lỗi mà không ai biết vì sao."""
+    store, pf, eng, g, b = make(tmp_path)
+    news.seed_sources(store)
+    rows = news.sources(store, only_active=False)
+    by_cc = {}
+    for r in rows:
+        by_cc.setdefault(r["country"], []).append(r)
+    assert set(by_cc) == {"VN", "TH"}
+    active = [r for r in rows if r["active"]]
+    assert [r["name"] for r in active] == ["LuatVietnam — văn bản mới"]
+    for r in rows:
+        if not r["active"]:
+            assert r["note"], f"{r['name']} tắt mà không nói vì sao"
+
+
+def test_seed_does_not_reactivate_source_admin_turned_off(tmp_path):
+    store, pf, eng, g, b = make(tmp_path)
+    news.seed_sources(store)
+    store.write("UPDATE legal_news_sources SET active=0 WHERE name LIKE 'LuatVietnam%'")
+    news.seed_sources(store)
+    assert not news.sources(store)      # vẫn tắt — seed không bật lại sau lưng admin
+
+
+def test_html_source_without_pattern_reports_instead_of_silently_empty(tmp_path, monkeypatch):
+    store, pf, eng, g, b = make(tmp_path)
+    store.write("INSERT INTO legal_news_sources (name,url,kind,country,active) "
+                "VALUES ('TH x','https://th.example/law','html','TH',1)")
+    monkeypatch.setattr(news, "fetch", lambda *a, **k: "<a href='/law/1'>Thông tư</a>")
+    assert news.crawl(store, log=lambda m: None) == []
+    err = store.one("SELECT last_error FROM legal_news_sources WHERE name='TH x'")
+    assert "link_pattern" in err["last_error"]
+
+
+def test_html_source_with_pattern_extracts_docs(tmp_path, monkeypatch):
+    store, pf, eng, g, b = make(tmp_path)
+    store.write("INSERT INTO legal_news_sources (name,url,kind,country,link_pattern,active)"
+                " VALUES ('TH gazette','https://th.example/list','html','TH','/law/',1)")
+    monkeypatch.setattr(news, "fetch", lambda *a, **k: (
+        '<a href="/law/123">ประกาศ 12/2569</a>'
+        '<a href="/about">Về chúng tôi</a>'          # không khớp pattern → bỏ
+        '<a href="/law/124">ประกาศ 13/2569</a>'))
+    keys = news.crawl(store, log=lambda m: None)
+    assert len(keys) == 2
+    rows = store.query("SELECT * FROM legal_news_items")
+    assert all(r["country"] == "TH" for r in rows)
+    assert all(r["url"].startswith("https://th.example/law/") for r in rows)
+
+
+def test_archive_saves_original_into_per_country_folder(tmp_path, monkeypatch):
+    """Bản gốc về Drive, tách folder theo nước — không cần ai duyệt vì đó là tài liệu
+    nhà nước, không phải nội dung AI sinh ra."""
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    _add_item(store, "k-vn", "VN", "https://x.vn/nd-15.pdf", "15/2026/NĐ-CP")
+    _add_item(store, "k-th", "TH", "https://x.th/notice.pdf", None, "ประกาศ")
+    monkeypatch.setattr(news, "fetch_bytes", lambda *a, **k: b"%PDF-1.4 noi dung")
+    assert news.archive(store, b.lark, ["k-vn", "k-th"], "fld_root",
+                        log=lambda m: None) == 2
+    assert set(b.lark.folders) == {"VN", "TH"}
+    assert [f for f, _n, _d in b.lark.uploaded] == ["fld_VN", "fld_TH"]
+    vn = store.one("SELECT * FROM legal_news_items WHERE key='k-vn'")
+    assert vn["drive_url"].startswith("https://tenant/file/") and vn["status"] == "archived"
+
+
+def test_archive_is_idempotent_and_survives_one_bad_download(tmp_path, monkeypatch):
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    _add_item(store, "ok", "VN", "https://x.vn/a.pdf")
+    _add_item(store, "bad", "VN", "https://x.vn/b.pdf")
+
+    def fetch_bytes(url, timeout=60):
+        if "b.pdf" in url:
+            raise RuntimeError("404")
+        return b"data"
+
+    monkeypatch.setattr(news, "fetch_bytes", fetch_bytes)
+    assert news.archive(store, b.lark, ["ok", "bad"], "fld_root", log=lambda m: None) == 1
+    # chạy lại: mục đã có drive_url thì không tải/upload lần nữa
+    assert news.archive(store, b.lark, ["ok", "bad"], "fld_root", log=lambda m: None) == 0
+
+
+def test_archive_without_folder_config_is_skipped_not_crash(tmp_path):
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    _add_item(store, "k", "VN", "https://x.vn/a.pdf")
+    assert news.archive(store, b.lark, ["k"], None, log=lambda m: None) == 0
+
+
+def test_index_points_to_where_to_retrieve(tmp_path):
+    """Mục index phải nói rõ: nước, số hiệu, link nguồn gốc VÀ link bản lưu nội bộ."""
+    store, pf, eng, g, b = make(tmp_path)
+    _add_item(store, "k1", "TH", "https://th.example/law/1", "12/2569", "ประกาศ นาฬิกา")
+    store.write("UPDATE legal_news_items SET drive_url='https://tenant/file/tok1' "
+                "WHERE key='k1'")
+    assert flows.index_legal_docs(b, ["k1"], log=lambda m: None) == 1
+    title, content, url = pf.brain_items[0]
+    assert "[Văn bản pháp luật · TH]" in title and "12/2569" in title
+    assert "Nguồn gốc: https://th.example/law/1" in content
+    assert "Lark Drive): https://tenant/file/tok1" in content
+    assert url == "https://tenant/file/tok1"
+
+
+def test_index_says_when_no_internal_copy(tmp_path):
+    store, pf, eng, g, b = make(tmp_path)
+    _add_item(store, "k2", "VN", "https://x.vn/a")
+    flows.index_legal_docs(b, ["k2"], log=lambda m: None)
+    _t, content, url = pf.brain_items[0]
+    assert "CHƯA có" in content and url == "https://x.vn/a"
+
+
+def test_index_skips_item_without_source_url(tmp_path):
+    store, pf, eng, g, b = make(tmp_path)
+    store.write("INSERT INTO legal_news_items (key, country, title, url, status, found_at) "
+                "VALUES ('k3','VN','Không link','','new',0)")
+    assert flows.index_legal_docs(b, ["k3"], log=lambda m: None) == 0
+    assert pf.brain_items == []
+
+
+def test_weekly_cycle_archives_and_indexes_before_gate(tmp_path, monkeypatch):
+    """Lưu + index xảy ra TRƯỚC gate: dữ kiện có ngay, chỉ phần model diễn giải mới chờ duyệt."""
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    store.write("INSERT INTO legal_news_sources (name,url,kind,country,active) "
+                "VALUES ('LVN','https://x.vn/rss','rss','VN',1)")
+    monkeypatch.setattr(news, "fetch", lambda *a, **k:
+                        "<rss><channel><item><title>Nghị định 21/2026/NĐ-CP</title>"
+                        "<link>https://x.vn/nd21.pdf</link></item></channel></rss>")
+    monkeypatch.setattr(news, "fetch_bytes", lambda *a, **k: b"pdf")
+    monkeypatch.setattr(flows.brain, "call_claude", lambda *a, **k: json.dumps(
+        {"scope": "s", "effective": "e", "impact": "i"}))
+    monkeypatch.setenv("LEGAL_DRIVE_FOLDER", "fld_root")
+    gid = flows.news_cycle(b, GROUP, log=lambda m: None)
+    it = store.one("SELECT * FROM legal_news_items WHERE doc_no='21/2026/NĐ-CP'")
+    assert it["drive_url"], "phải lưu bản gốc trước khi mở gate"
+    assert pf.brain_items, "phải index trước khi mở gate"
+    assert b.gates.get(gid)["status"] == "open"      # digest vẫn chờ Pháp chế duyệt

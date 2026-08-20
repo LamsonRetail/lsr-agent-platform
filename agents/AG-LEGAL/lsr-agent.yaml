@@ -56,4 +56,4 @@ tests:
 
 schedule:
   - {name: kb-sync,    cron: "0 */3 * * *", job: sync_loop}    # thread trong consumer
-  - {name: news-crawl, cron: "30 6 * * *",  job: news_loop}    # Phase 5
+  - {name: news-crawl, cron: "0 7 * * 1",   job: news_loop}    # thứ 2 07:00 — hằng TUẦN

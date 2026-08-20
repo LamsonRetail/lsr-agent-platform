@@ -38,6 +38,7 @@ class FakePlatform:
         self.ctx = ctx or {}
         self.turns, self.summaries, self.facts_added = [], [], []
         self.sent, self.replies, self.events = [], [], []
+        self.brain_items = []
         self.token = "t"
 
     # bộ nhớ
@@ -53,6 +54,10 @@ class FakePlatform:
 
     def add_fact(self, user_ref, fact, source=None):
         self.facts_added.append((user_ref, fact))
+
+    def add_brain_item(self, title, content, status="approved", source_url=None):
+        self.brain_items.append((title, content, source_url))
+        return {"ok": True}
 
     # job
     def reply(self, job_id, text):

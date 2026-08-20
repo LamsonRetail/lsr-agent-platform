@@ -52,18 +52,27 @@ def main():
     store = SourceStore(os.environ.get("LEGALKB_DB"))
 
     if args.list:
-        print("— Nguồn luật —")
+        print("— Nguồn luật (hằng tuần, thứ 2 07:00) —")
         for s in news.sources(store, only_active=False):
-            flag = "on " if s["active"] else "off"
-            err = f"  lỗi: {s['last_error']}" if s.get("last_error") else ""
-            print(f"[{flag}] {s['name']:44} {s['url']}{err}")
+            flag = "ON " if s["active"] else "off"
+            print(f"[{flag}] {s['country']:2} {s['kind']:4} {s['name'][:38]:38} {s['url']}")
+            if s.get("last_error"):
+                print(f"          ↳ lỗi lần chạy gần nhất: {s['last_error'][:90]}")
+            if not s["active"] and s.get("note"):
+                print(f"          ↳ cần gì để bật: {s['note'][:90]}")
         print("\n— Checklist đầu mục hồ sơ —")
         for r in store.query("SELECT * FROM dossier_checklists ORDER BY contract_type"):
             print(f"{r['contract_type']}: {len(json.loads(r['items']))} mục")
         return 0
 
-    n = news.seed_sources(store)
-    print(f"✓ nguồn luật: {len(news.DEFAULT_SOURCES)} nguồn (ghi {n})")
+    news.seed_sources(store)
+    rows = news.sources(store, only_active=False)
+    on = [r for r in rows if r["active"]]
+    print(f"✓ nguồn luật: {len(rows)} nguồn ({len(on)} đang BẬT)")
+    for r in rows:
+        print(f"   [{'ON ' if r['active'] else 'off'}] {r['country']} · {r['name']}")
+    print("\n⚠️ Chỉ nguồn đã KIỂM THẬT mới để bật. Nguồn tắt kèm ghi chú cần gì để bật "
+          "(chạy `--list` để xem). Thêm/bật nguồn sẽ làm trên console agent sau.")
     for ctype, items in CHECKLISTS.items():
         signing.set_checklist(store, ctype, items)
         print(f"✓ checklist '{ctype}': {len(items)} mục")

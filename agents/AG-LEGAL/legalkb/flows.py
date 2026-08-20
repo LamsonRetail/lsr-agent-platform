@@ -13,6 +13,8 @@ from legalkb.gates import GATE, OBSERVE
 
 DRAFT_FOLDER_ENV = "LEGAL_DRAFT_FOLDER"
 TEMPLATE_FOLDER_ENV = "LEGAL_TEMPLATE_FOLDER"
+# Folder gốc kho văn bản luật; bên dưới tách folder con theo nước (VN/, TH/…).
+LAW_ARCHIVE_ENV = "LEGAL_DRIVE_FOLDER"
 OK_WORDS = ("ok", "oke", "đúng", "dung", "xác nhận", "xac nhan", "đồng ý", "dong y", "yes")
 
 
@@ -198,12 +200,52 @@ def s4_answer(b, q):
     return "\n".join(lines)
 
 
+def index_legal_docs(b, keys, log=print):
+    """Đưa văn bản đã lưu vào **index bộ nhớ** — để sau này biết truy xuất từ đâu.
+
+    Mỗi mục ghi: nước, số hiệu, tiêu đề, link nguồn gốc, link bản lưu trong Drive. Vào
+    brain của platform nên `/v1/self/context` tra được bằng RAG mỗi lượt: hỏi "quy định
+    nhãn hàng hoá Thái Lan có gì mới" thì agent thấy ngay mục này và chỉ đúng chỗ lấy.
+
+    Chỉ index **dữ kiện + con trỏ**, không index phần model diễn giải — phần đó còn phải
+    qua gate Pháp chế (review §B).
+    """
+    n = 0
+    for key in keys:
+        it = b.store.one("SELECT * FROM legal_news_items WHERE key=?", (key,))
+        if not it or not it.get("url"):
+            continue
+        cc = it.get("country") or "VN"
+        lines = [f"Nước: {cc}",
+                 f"Số hiệu: {it.get('doc_no') or '(không có số hiệu trong tiêu đề)'}",
+                 f"Tiêu đề: {it.get('title')}",
+                 f"Nguồn gốc: {it['url']}"]
+        if it.get("drive_url"):
+            lines.append(f"Bản lưu nội bộ (Lark Drive): {it['drive_url']}")
+        else:
+            lines.append("Bản lưu nội bộ: CHƯA có — chỉ còn link nguồn gốc")
+        index_brain(b, f"[Văn bản pháp luật · {cc}] "
+                       f"{it.get('doc_no') or ''} {it.get('title')}".strip(),
+                    "\n".join(lines), it.get("drive_url") or it["url"])
+        n += 1
+    if n:
+        log(f"[news] đã index {n} văn bản vào bộ nhớ")
+    return n
+
+
 def news_cycle(b, group_chat_id, log=print):
-    """Crawl → tóm tắt → **mở gate**. Không gửi, không nạp KB khi chưa được duyệt."""
+    """Crawl → lưu bản gốc về Drive → index → tóm tắt → **mở gate** cho digest.
+
+    Thứ tự có chủ ý: **lưu + index trước, gate sau**. Bản gốc và con trỏ truy xuất là dữ
+    kiện, không cần ai duyệt và cần có ngay để tra khi phát sinh việc. Chỉ phần model
+    diễn giải (digest) mới phải chờ Pháp chế (review §B).
+    """
     keys = news.crawl(b.store, log=log)
     if not keys:
         log("[news] không có văn bản mới")
         return None
+    news.archive(b.store, b.lark, keys, os.environ.get(LAW_ARCHIVE_ENV), log=log)
+    index_legal_docs(b, keys, log=log)
     kept = news.summarise(b.store, brain, keys, model=b.model, log=log)
     digest, n = news.render_digest(b.store, kept)
     if not n:

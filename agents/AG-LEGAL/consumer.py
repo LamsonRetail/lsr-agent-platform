@@ -449,18 +449,29 @@ def sync_loop(b):
 
 
 def news_loop(b):
-    """S4 hằng ngày: crawl → tóm tắt → MỞ GATE. Không gửi, không nạp KB khi chưa duyệt.
+    """S4 **hằng tuần, thứ 2 07:00**: crawl nguồn pháp luật (VN, TH, thêm nước sau)
+    → lưu bản gốc về Lark Drive theo nước → index vào bộ nhớ → tóm tắt → MỞ GATE.
+
+    Chốt tuần thay vì ngày: văn bản pháp luật không ra theo giờ, quét mỗi ngày chỉ làm ồn
+    và tốn quota model. Đổi được qua env mà không sửa code.
+
+    Khoá theo TUẦN (`%G-W%V`) chứ không theo ngày: nếu khoá theo ngày mà container restart
+    trong cùng thứ 2 thì chạy lại lần nữa.
 
     Thread trong cùng tiến trình vì dùng chung phiên NotebookLM (xem sync_loop).
     """
-    hour = int(os.environ.get("NEWS_HOUR", "6"))
+    weekday = int(os.environ.get("NEWS_WEEKDAY", "0"))     # 0 = thứ 2
+    hour = int(os.environ.get("NEWS_HOUR", "7"))
     while True:
         now = time.localtime()
-        if now.tm_hour == hour and b.store.get_meta("news_day") != time.strftime("%Y-%m-%d"):
-            b.store.set_meta("news_day", time.strftime("%Y-%m-%d"))
+        week = time.strftime("%G-W%V")
+        due = (now.tm_wday == weekday and now.tm_hour >= hour
+               and b.store.get_meta("news_week") != week)
+        if due:
+            b.store.set_meta("news_week", week)
+            print(f"[news] chu kỳ tuần {week} bắt đầu", flush=True)
             try:
-                flows.news_cycle(b, GROUP_CHAT_ID,
-                                 log=lambda m: print(m, flush=True))
+                flows.news_cycle(b, GROUP_CHAT_ID, log=lambda m: print(m, flush=True))
             except Exception as exc:
                 print(f"[news] chu kỳ lỗi: {exc}", file=sys.stderr, flush=True)
         time.sleep(600)
@@ -502,7 +513,9 @@ def main():
         print("kb-sync chạy nền (chung tiến trình)")
     if os.environ.get("NEWS_CRAWL", "1") == "1":
         threading.Thread(target=news_loop, args=(b,), daemon=True, name="news").start()
-        print(f"news-crawl chạy nền (mỗi ngày {os.environ.get('NEWS_HOUR', '6')}h)")
+        print(f"news-crawl chạy nền (hằng tuần, thứ "
+              f"{int(os.environ.get('NEWS_WEEKDAY', '0')) + 2}, "
+              f"{os.environ.get('NEWS_HOUR', '7')}h)")
     threading.Thread(target=gate_loop, args=(b,), daemon=True, name="gate").start()
 
     jobs_q = queue.Queue()

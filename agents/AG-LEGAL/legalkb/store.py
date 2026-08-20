@@ -118,23 +118,28 @@ CREATE TABLE IF NOT EXISTS contract_reviews (
 
 -- ===== S4: tổng hợp văn bản luật (Phase 5) =====
 CREATE TABLE IF NOT EXISTS legal_news_sources (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  name       TEXT NOT NULL,
-  url        TEXT NOT NULL UNIQUE,
-  kind       TEXT NOT NULL DEFAULT 'rss',   -- rss | html
-  active     INTEGER NOT NULL DEFAULT 1,
-  last_run   REAL,
-  last_error TEXT,
-  n_items    INTEGER NOT NULL DEFAULT 0
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  name         TEXT NOT NULL,
+  url          TEXT NOT NULL UNIQUE,
+  kind         TEXT NOT NULL DEFAULT 'rss',   -- rss | html
+  country      TEXT NOT NULL DEFAULT 'VN',    -- VN | TH | ... (thêm nước sau)
+  link_pattern TEXT,                          -- regex lấy link khi kind=html
+  note         TEXT,                          -- vì sao tắt / cần gì để bật
+  active       INTEGER NOT NULL DEFAULT 1,
+  last_run     REAL,
+  last_error   TEXT,
+  n_items      INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS legal_news_items (
   key        TEXT PRIMARY KEY,     -- số hiệu văn bản, hoặc url khi không có số hiệu
   source_id  INTEGER,
+  country    TEXT NOT NULL DEFAULT 'VN',
   doc_no     TEXT,
   title      TEXT,
-  url        TEXT,
+  url        TEXT,                 -- link nguồn gốc (bắt buộc có, không thì loại)
+  drive_url  TEXT,                 -- bản lưu trong Lark Drive
   summary    TEXT,
-  status     TEXT NOT NULL DEFAULT 'new',   -- new|in_digest|published|dropped
+  status     TEXT NOT NULL DEFAULT 'new',   -- new|archived|in_digest|published|dropped
   found_at   REAL
 );
 
@@ -175,6 +180,26 @@ class SourceStore:
         self._lock = threading.Lock()
         with self._lock:
             self.db.executescript(SCHEMA)
+        self._migrate()
+
+    # Cột thêm sau khi DB đã tồn tại: `CREATE TABLE IF NOT EXISTS` không bổ sung cột, mà
+    # SQLite không có `ADD COLUMN IF NOT EXISTS`. Nên phải tự so với PRAGMA rồi ALTER —
+    # nếu không thì DB đang chạy trên VM sẽ vỡ khi code mới đọc cột mới.
+    _ADDED_COLUMNS = {
+        "legal_news_sources": [("country", "TEXT NOT NULL DEFAULT 'VN'"),
+                               ("link_pattern", "TEXT"), ("note", "TEXT")],
+        "legal_news_items": [("country", "TEXT NOT NULL DEFAULT 'VN'"),
+                             ("drive_url", "TEXT")],
+    }
+
+    def _migrate(self):
+        with self._lock:
+            for table, cols in self._ADDED_COLUMNS.items():
+                have = {r[1] for r in self.db.execute(f"PRAGMA table_info({table})")}
+                for name, decl in cols:
+                    if name not in have:
+                        self.db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+            self.db.commit()
 
     def get(self, key):
         with self._lock:

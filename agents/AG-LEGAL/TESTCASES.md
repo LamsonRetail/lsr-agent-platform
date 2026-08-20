@@ -73,11 +73,20 @@
 | 17 | HĐ sạch sau 2 vòng | Nộp lại bản đã sửa hết | Chuyển người có thẩm quyền (đúng người theo loại HĐ) kèm tóm tắt; người nộp được báo |
 | 18 | Người duyệt từ chối | Approver bấm ❌ kèm lý do | Người nộp nhận lý do; trạng thái rejected trong console |
 
-## S4 — Tổng hợp văn bản luật (Phase 5)
+## S4 — Tổng hợp văn bản luật (Phase 5) — **hằng tuần, thứ 2 07:00**
 
 | # | Kịch bản | Đầu vào | Kỳ vọng |
 |---|----------|---------|---------|
-| 19 | Văn bản mới | Nguồn có nghị định mới | File lưu về Drive folder văn bản luật, digest gửi Lark group, xuất hiện trong KB sau sync |
+| 19 | Văn bản mới | Nguồn có nghị định mới | Bản gốc lưu vào Drive **folder con theo nước** (VN/, TH/), **index vào bộ nhớ ngay** (nước + số hiệu + link gốc + link Drive), digest chờ Pháp chế duyệt mới gửi |
+| 19a | Nguồn theo nước | Seed | Có cả VN và TH; nguồn **chưa kiểm được để tắt kèm `note`** nói cần gì để bật |
+| 19b | Nguồn HTML thiếu `link_pattern` | kind=html, không pattern | Báo lỗi nguồn đó, **không** im lặng trả 0 văn bản |
+| 19c | Nguồn HTML có `link_pattern` | trang có link khớp/không khớp | Chỉ lấy link khớp, url tuyệt đối, gán đúng `country` |
+| 19d | Lưu Drive chạy lại | Chạy archive 2 lần | Lần 2 không tải/upload lại (đã có `drive_url`) |
+| 19e | 1 văn bản tải lỗi | 404 giữa lô | Các văn bản khác vẫn lưu được |
+| 19f | Chưa cấu hình folder | thiếu `LEGAL_DRIVE_FOLDER` | Bỏ qua bước lưu, **không** crash |
+| 19g | Index chỉ chỗ truy xuất | 1 văn bản đã lưu | Mục index có nước, số hiệu, link gốc **và** link bản lưu nội bộ |
+| 19h | Seed không bật lại nguồn admin đã tắt | tắt tay rồi seed lại | Vẫn tắt |
+| 19i | Thứ tự | 1 chu kỳ tuần | Lưu bản gốc + index xảy ra **trước** khi mở gate digest |
 | 20 | Nguồn lỗi | 1 nguồn đổi layout/chặn bot | Nguồn đó báo lỗi trong console, các nguồn khác vẫn chạy |
 | 21 | Trùng lặp | Crawl lại văn bản đã có (cùng số hiệu) | Không tạo bản ghi/file trùng |
 

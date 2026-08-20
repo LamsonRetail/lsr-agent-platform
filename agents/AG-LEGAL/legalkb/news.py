@@ -10,21 +10,43 @@ Hai luật cứng theo góp ý review §B:
 Chạy như thread trong consumer, không phải container riêng: NotebookLM chỉ cho một phiên
 mỗi tài khoản (xem CLAUDE.md).
 """
-import html
+import html as html_mod
 import json
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
-UA = "Mozilla/5.0 (compatible; LSR-Legal-Agent/1.0)"
+UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/120 Safari/537.36")
 
-# Nguồn khởi tạo. Legal team thêm/bớt bằng seed_news.py — không sửa code.
+# Nguồn khởi tạo — TRẠNG THÁI ĐÃ KIỂM THẬT ngày 19/08/2026, không phải phỏng đoán.
+# (name, url, kind, country, link_pattern, active, note)
+#
+# Bài học: bản seed trước liệt kê 4 nguồn VN "uy tín" theo suy đoán, kiểm lại thì 3/4
+# chết. Nguồn chết mà để active thì crawler báo lỗi mỗi tuần và không ai biết là do seed
+# sai. Nên nguồn chưa kiểm được **để inactive kèm `note` nói rõ cần gì để bật**.
 DEFAULT_SOURCES = [
-    ("Thư viện pháp luật — văn bản mới", "https://thuvienphapluat.vn/rss/vanban.rss", "rss"),
-    ("LuatVietnam — văn bản mới", "https://luatvietnam.vn/rss/van-ban-moi.rss", "rss"),
-    ("Cổng TTĐT Chính phủ", "https://chinhphu.vn/rss/van-ban-chi-dao-dieu-hanh.rss", "rss"),
-    ("Công báo Chính phủ", "https://congbao.chinhphu.vn/rss", "rss"),
+    # --- Việt Nam ---
+    ("LuatVietnam — văn bản mới", "https://luatvietnam.vn/rss/van-ban-moi.rss",
+     "rss", "VN", None, 1, "đã kiểm 19/08: RSS trả 50 item, dùng được"),
+    ("Thư viện pháp luật", "https://thuvienphapluat.vn/rss/vanban.rss",
+     "rss", "VN", None, 0,
+     "19/08: URL trả HTML, 0 item — cần đường RSS đúng hoặc chuyển sang kind=html + link_pattern"),
+    ("Cổng TTĐT Chính phủ", "https://chinhphu.vn/rss/van-ban-chi-dao-dieu-hanh.rss",
+     "rss", "VN", None, 0, "19/08: HTTP 404 — cần URL feed hiện hành"),
+    ("Công báo Chính phủ", "https://congbao.chinhphu.vn/rss",
+     "rss", "VN", None, 0, "19/08: 200 nhưng 0 item và 0 link (trang render bằng JS)"),
+    # --- Thái Lan --- chưa tìm được nguồn nào lấy được tự động
+    ("ราชกิจจานุเบกษา — Royal Gazette", "https://ratchakitcha.soc.go.th/",
+     "html", "TH", None, 0,
+     "19/08: HTTP 403 kể cả với UA browser (WAF chặn bot) — cần nguồn khác hoặc thoả thuận truy cập"),
+    ("Krisdika — Council of State", "https://www.krisdika.go.th/web/guest/law",
+     "html", "TH", None, 0, "19/08: HTTP 404 — cần URL trang danh sách văn bản hiện hành"),
+    ("Thai Revenue Department", "https://www.rd.go.th/",
+     "html", "TH", None, 0,
+     "19/08: 200 nhưng là trang JS, chưa có link_pattern — cần URL trang danh sách + mẫu link"),
 ]
 
 # Số hiệu văn bản VN: 12/2026/NĐ-CP, 05/2026/TT-BTC, 1234/QĐ-TTg…
@@ -46,12 +68,15 @@ Nội dung: {body}
 
 
 def seed_sources(store, sources=None):
+    """Nạp nguồn. KHÔNG bật lại nguồn admin đã tắt tay: `active` chỉ set lúc tạo mới."""
     n = 0
-    for name, url, kind in (sources or DEFAULT_SOURCES):
+    for name, url, kind, country, pattern, active, note in (sources or DEFAULT_SOURCES):
         n += bool(store.write(
-            "INSERT INTO legal_news_sources (name, url, kind, active) VALUES (?,?,?,1) "
-            "ON CONFLICT(url) DO UPDATE SET name=excluded.name, active=1",
-            (name, url, kind)))
+            "INSERT INTO legal_news_sources (name, url, kind, country, link_pattern, "
+            "note, active) VALUES (?,?,?,?,?,?,?) ON CONFLICT(url) DO UPDATE SET "
+            "name=excluded.name, kind=excluded.kind, country=excluded.country, "
+            "link_pattern=excluded.link_pattern, note=excluded.note",
+            (name, url, kind, country, pattern, note, active)))
     return n
 
 
@@ -81,7 +106,7 @@ def parse_rss(xml):
             if not m:
                 return ""
             v = re.sub(r"<!\[CDATA\[(.*?)\]\]>", r"\1", m.group(1), flags=re.S)
-            return html.unescape(re.sub(r"<[^>]+>", "", v)).strip()
+            return html_mod.unescape(re.sub(r"<[^>]+>", "", v)).strip()
         title, link = tag("title"), tag("link")
         if title and link:
             items.append({"title": title, "url": link, "desc": tag("description")[:2000]})
@@ -93,14 +118,43 @@ def doc_no_of(text):
     return re.sub(r"\s+", "", m.group(1)) if m else None
 
 
+def parse_html(html, base_url, link_pattern):
+    """Lấy danh sách văn bản từ trang HTML theo regex cấu hình riêng của nguồn.
+
+    Cố tình KHÔNG parse HTML tuỳ ý: mỗi cổng pháp luật một layout, đoán chung sẽ ra rác mà
+    vẫn "thành công". Có `link_pattern` thì lấy đúng link khớp; không có thì báo lỗi để
+    admin biết nguồn này còn thiếu cấu hình, thay vì im lặng trả 0 item.
+    """
+    if not link_pattern:
+        raise RuntimeError("nguồn html thiếu link_pattern — thêm ở console rồi bật lại")
+    out, seen = [], set()
+    for m in re.finditer(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', html, re.S | re.I):
+        href, label = m.group(1), re.sub(r"<[^>]+>", "", m.group(2))
+        if not re.search(link_pattern, href):
+            continue
+        url = urllib.parse.urljoin(base_url, href)
+        title = html_mod.unescape(re.sub(r"\s+", " ", label)).strip()
+        if not title or url in seen:
+            continue
+        seen.add(url)
+        out.append({"title": title, "url": url, "desc": ""})
+    return out
+
+
 def crawl(store, log=print):
     """Quét mọi nguồn active. Lỗi một nguồn KHÔNG làm chết cả pipeline."""
     found = []
     for s in sources(store):
         try:
-            if s["kind"] != "rss":
-                raise RuntimeError(f"kind '{s['kind']}' chưa hỗ trợ — cấu hình nguồn RSS")
-            items = parse_rss(fetch(s["url"]))
+            body = fetch(s["url"])
+            if s["kind"] == "rss":
+                items = parse_rss(body)
+            elif s["kind"] == "html":
+                items = parse_html(body, s["url"], s.get("link_pattern"))
+            else:
+                raise RuntimeError(f"kind '{s['kind']}' chưa hỗ trợ (rss | html)")
+            if not items:
+                raise RuntimeError("lấy được trang nhưng 0 văn bản — kiểm URL/link_pattern")
             new = 0
             for it in items:
                 no = doc_no_of(it["title"]) or doc_no_of(it["desc"])
@@ -108,9 +162,10 @@ def crawl(store, log=print):
                 if store.one("SELECT key FROM legal_news_items WHERE key=?", (key,)):
                     continue                       # dedupe theo số hiệu, rồi tới URL
                 store.write(
-                    "INSERT INTO legal_news_items (key, source_id, doc_no, title, url, "
-                    "status, found_at) VALUES (?,?,?,?,?,'new',?)",
-                    (key, s["id"], no, it["title"][:500], it["url"], time.time()))
+                    "INSERT INTO legal_news_items (key, source_id, country, doc_no, title, "
+                    "url, status, found_at) VALUES (?,?,?,?,?,?,'new',?)",
+                    (key, s["id"], s.get("country") or "VN", no, it["title"][:500],
+                     it["url"], time.time()))
                 found.append(key)
                 new += 1
             store.write("UPDATE legal_news_sources SET last_run=?, last_error=NULL, "
@@ -154,6 +209,61 @@ def summarise(store, brain, keys, model=None, log=print):
                     (text, key))
         kept.append(key)
     return kept
+
+
+def _safe_name(s, cap=90):
+    s = re.sub(r"[\\/:*?\"<>|\r\n\t]+", " ", s or "").strip()
+    return re.sub(r"\s+", " ", s)[:cap] or "van-ban"
+
+
+def archive(store, lark, keys, root_folder, log=print):
+    """Tải VĂN BẢN GỐC về Lark Drive, mỗi nước một folder con.
+
+    Đây là phần trả lời câu "khi có vấn đề phát sinh thì biết truy xuất từ đâu": bản gốc
+    nằm trong Drive của công ty, không phụ thuộc nguồn ngoài còn sống hay không (cổng
+    pháp luật đổi URL/xoá bài là chuyện thường).
+
+    Lưu bản gốc KHÔNG cần ai duyệt — nó là tài liệu nhà nước, không phải nội dung AI sinh
+    ra. Phần tóm tắt của model thì vẫn phải qua gate Pháp chế (review §B).
+    """
+    if not (lark and root_folder):
+        log("[news] chưa cấu hình Drive folder → bỏ qua bước lưu bản gốc")
+        return 0
+    folders, n = {}, 0
+    for key in keys:
+        it = store.one("SELECT * FROM legal_news_items WHERE key=?", (key,))
+        if not it or it.get("drive_url"):
+            continue
+        cc = it.get("country") or "VN"
+        if cc not in folders:
+            try:
+                folders[cc] = lark.ensure_folder(root_folder, cc)
+            except Exception as exc:
+                log(f"[news] không tạo được folder {cc}: {exc}")
+                continue
+        try:
+            raw = fetch_bytes(it["url"])
+            name = f"{_safe_name(it.get('doc_no') or '')} {_safe_name(it['title'])}".strip()
+            tok = lark.drive_upload(folders[cc], f"{name}{_ext_of(it['url'])}", raw)
+            url = lark.drive_file_url(tok) if tok else None
+            store.write("UPDATE legal_news_items SET drive_url=?, status='archived' "
+                        "WHERE key=?", (url, key))
+            n += 1
+            log(f"[news] lưu {cc}/{name[:50]} → Drive")
+        except Exception as exc:
+            log(f"[news] lưu {key} lỗi: {exc}")
+    return n
+
+
+def _ext_of(url):
+    m = re.search(r"\.(pdf|docx?|xlsx?)(?:\?|$)", (url or "").lower())
+    return "." + m.group(1) if m else ".html"
+
+
+def fetch_bytes(url, timeout=60):
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
 
 
 def render_digest(store, keys):
