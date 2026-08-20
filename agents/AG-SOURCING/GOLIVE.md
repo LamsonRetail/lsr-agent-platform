@@ -1,13 +1,59 @@
 # AG-SOURCING — runbook golive
 
+> ## ⛔ CHẶN TỪ 15/08: token agent không còn xác thực được
+>
+> Kiểm lại ngày **15/08**, token trong `.env` (`lsr_tel_…`, 48 ký tự, còn nguyên vẹn — đã soi
+> `od -c`, không thừa khoảng trắng/CRLF) bị **401 ở TẤT CẢ** endpoint `/v1/self*`:
+>
+> ```
+> GET /v1/self                  → HTTP 401 {"detail":"agent token required (LSR_AGENT_TOKEN)"}
+> GET /v1/self/context?env=dev  → HTTP 401  (y hệt)
+> GET /v1/self/deploy/status    → HTTP 401  (y hệt)
+> GET /v1/self/version          → HTTP 401  (y hệt)
+> ```
+>
+> Không phải platform chết: `GET /health` của **cả** platform lẫn collector đều `200 {"status":"ok"}`.
+> Không phải lỗi đọc `.env`: truyền token thẳng trên dòng lệnh vẫn 401. Token thật và một token
+> **bịa** cho ra **đúng cùng một** phản hồi.
+>
+> **Vì sao không tự chẩn đoán sâu hơn được.** `_agent_from_token` (`app.py:1889`) bọc toàn bộ
+> truy vấn DB trong `except Exception: return None`. Nên "token bị thu hồi" và "DB không truy cập
+> được" **trả về y hệt nhau** — không phân biệt được từ bên ngoài. Đã thử mọi cửa allowlist
+> (`/v1/lark/*`, `/v1/chat/*`): tất cả đều đi qua đúng hàm này nên không cửa nào cho thêm tin.
+>
+> **Giả thuyết mạnh nhất — key đã bị cấp lại ngày 14/08.** `POST /v1/agents/register`
+> (`app.py:2093`) có `ON CONFLICT (agent_id) DO UPDATE SET telemetry_key_hash=EXCLUDED...`:
+> chạy lại `register` cho agent đã tồn tại sẽ **ghi đè key hash, vô hiệu hoá token cũ trong im
+> lặng** (`status` được giữ, vì không nằm trong danh sách DO UPDATE). Khớp với ba dữ kiện: 5 commit
+> platform lên `main` ngày 14/08, `golive_at` tự nhiên được set `2026-08-14T07:45:37Z` (không do
+> chủ agent — token agent không set được field này), và `.env` không đổi từ 12/08.
+> Vẫn là **giả thuyết**, chưa xác nhận được vì lý do ở đoạn trên.
+>
+> **Chỉ admin gỡ được — và tự enroll lại KHÔNG phải cách.** `POST /v1/agents/enroll` trả
+> `409 "agent_id đã tồn tại — nhờ admin cấp lại key (không enroll đè)"` (`app.py:2159`).
+> `/v1/agents/register` thì vừa cần admin token vừa **nằm ngoài** allowlist Caddy (cần thêm
+> `X-Gateway-Token`). Việc cần nhờ, nói gọn một câu:
+>
+> > *"AG-SOURCING đang 401 ở `/v1/self`. Nhờ anh/chị cấp lại telemetry key (hoặc đọc key hiện hành
+> > trên VM `/opt/lsr-platform/secrets/agents/AG-SOURCING.env`) rồi gửi riêng cho em — đừng dán
+> > vào issue/PR."*
+>
+> **Ảnh hưởng tới runbook:** việc 2 bên dưới ghi *"token agent là đủ, không cần admin"* — điều đó
+> **không còn đúng** khi token đã chết. `POST /v1/self/deploy` dùng `_require_self`, tức cũng đi qua
+> đúng cái gate đang 401. Phải có key sống trước, rồi mới tới `claude setup-token`.
+>
+> Mặt tích cực: chặn này **không làm hỏng gì thêm**. Chưa có runtime nào chạy, agent vẫn chưa trả
+> lời ai, và bước 0 (kiểm regex offline) vẫn chạy được — đã chạy lại 15/08, **4/4 pass**.
+
 Trạng thái lúc viết (đã kiểm live, không suy đoán):
 
 | Thứ | Trạng thái |
 |---|---|
-| Agent enroll | ✅ `GET /v1/self` → `status: registered` |
-| Core Lark đa-app | ✅ `/v1/lark/chats?app_id=cli_aaf6ce7c8d38deed` → 200 + 3 nhóm |
-| Brain riêng | ✅ 12 item `approved` từ 2 Lark Doc (`brain_seed.py --list`) |
-| Golden set | ✅ 4 case active trong `golden-cases.json` (chưa upload lên platform) |
+| **Token agent** | ⛔ **15/08: 401 ở mọi `/v1/self*`** — chặn mọi bước cần API (xem khung trên) |
+| Agent enroll | ✅ `GET /v1/self` → `status: registered` *(kiểm 12–14/08; 15/08 không kiểm lại được)* |
+| Core Lark đa-app | ✅ `/v1/lark/chats?app_id=cli_aaf6ce7c8d38deed` → 200 + 3 nhóm *(nt)* |
+| Brain riêng | ✅ 12 item `approved` từ 2 Lark Doc (`brain_seed.py --list`) *(nt)* |
+| Golden set | ✅ 4 case active trong `golden-cases.json` — **kiểm lại offline 15/08: 4/4 pass** |
 | **Instruction** | ❌ `GET /v1/self/context` → `instruction_block: null`, `version: null` |
 | **`golive_at`** | ⚠️ đã set `2026-08-14T07:45:37Z` (trước đó `null`) — xem ghi chú dưới |
 
@@ -51,10 +97,12 @@ Bốn việc dưới đây không nhờ ai được, làm sớm được thì l�
       commit), hoặc đổi `git config user.email` sang email đã verify.
       *Tác dụng:* dọn sạch nhiễu đỏ trên mọi PR sau này, để lần nào đỏ là đỏ thật.
 
-- [ ] **2. `claude setup-token` → deploy runtime.**
-      `GET /v1/self/deploy/status` đang `not_deployed`, nên bước 3 của runbook chưa chạy được.
+- [ ] **2. `claude setup-token` → deploy runtime.** ⛔ *Đang bị chặn — xem khung đầu file.*
       `POST /v1/self/deploy` dùng `_require_self` (`app.py:1667`) → **token agent là đủ, không cần
-      admin**; thứ duy nhất thiếu là `oauth_token`, mà chỉ chủ subscription tạo được:
+      admin**. Nhưng từ 15/08 chính token agent đang 401, nên câu đó tạm thời **không còn đúng**:
+      phải xin admin cấp lại key trước, rồi mới làm bước này. `GET /v1/self/deploy/status` giờ trả
+      401 chứ không còn trả `not_deployed` như lúc viết.
+      Khi đã có key sống: thứ duy nhất còn thiếu là `oauth_token`, mà chỉ chủ subscription tạo được:
       ```bash
       claude setup-token          # in ra token — KHÔNG dán vào issue/PR/chat/log
       ```
