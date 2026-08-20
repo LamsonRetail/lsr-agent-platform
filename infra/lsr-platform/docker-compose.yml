@@ -134,6 +134,23 @@ services:
       LARK_DOMAIN_CONST: LARK
     restart: unless-stopped
 
+  # Long-connection cho app Lark "Bạch Băng" (đang dùng bởi AG-ASSISTANT-CHAN).
+  # Tiền tố env đặt theo TÊN APP, không theo agent: agent đổi ID là chuyện thường
+  # (AG-PMO -> AG-ASSISTANT-CHAN chỉ sau 25 phút) còn app thì không đổi.
+  # Idle tới khi .env có BACHBANG_LARK_APP_ID/SECRET. Nạp bằng:
+  #   bash scripts/add-lark-app.sh BACHBANG cli_aaf6cb7a0df8dee7 event_gateway_bachbang
+  event_gateway_bachbang:
+    build: ./event_gateway
+    depends_on: [platform_api]
+    environment:
+      PLATFORM_URL: http://platform_api:8090
+      PLATFORM_ADMIN_TOKEN: ${PLATFORM_ADMIN_TOKEN}
+      GATEWAY_INGEST_TOKEN: ${GATEWAY_INGEST_TOKEN:-}
+      LARK_APP_ID: ${BACHBANG_LARK_APP_ID:-}
+      LARK_APP_SECRET: ${BACHBANG_LARK_APP_SECRET:-}
+      LARK_DOMAIN_CONST: LARK
+    restart: unless-stopped
+
   event_gateway_data:
     build: ./event_gateway
     depends_on: [platform_api]
@@ -235,7 +252,8 @@ services:
                          "${DATA_LARK_APP_ID:-}": "${DATA_LARK_APP_SECRET:-}",
                          "${HARRY_LARK_APP_ID:-}": "${HARRY_LARK_APP_SECRET:-}",
                          "${LYLY_LARK_APP_ID:-}": "${LYLY_LARK_APP_SECRET:-}",
-                         "${LEGAL_LARK_APP_ID:-}": "${LEGAL_LARK_APP_SECRET:-}"}'
+                         "${LEGAL_LARK_APP_ID:-}": "${LEGAL_LARK_APP_SECRET:-}",
+                         "${BACHBANG_LARK_APP_ID:-}": "${BACHBANG_LARK_APP_SECRET:-}"}'
       # Bản đồ app_id -> tiền tố env (KHÔNG có secret). Để AG-OPS in đúng lệnh
       # add-lark-app.sh khi phát hiện app thiếu/sai secret — sai tiền tố là ghi
       # secret vào block không ai đọc (đúng lỗi đã gặp với Sawadee).
@@ -244,7 +262,8 @@ services:
                            "${DATA_LARK_APP_ID:-}": "DATA",
                            "${HARRY_LARK_APP_ID:-}": "HARRY",
                            "${LYLY_LARK_APP_ID:-}": "LYLY",
-                           "${LEGAL_LARK_APP_ID:-}": "LEGAL"}'
+                           "${LEGAL_LARK_APP_ID:-}": "LEGAL",
+                           "${BACHBANG_LARK_APP_ID:-}": "BACHBANG"}'
       # C8: khoá mã hoá user token (at-rest). Rỗng = broker user token TẮT HẲN,
       # tuyệt đối không fallback sang lưu token dạng rõ.
       LARK_USER_TOKEN_KEY: ${LARK_USER_TOKEN_KEY:-}
