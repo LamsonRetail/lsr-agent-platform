@@ -1,0 +1,35 @@
+apiVersion: lsr/v1
+agent:
+  id: AG-ASSISTANT-CHAN
+  name: Assistant Chan
+  version: 0.1.0
+  owner: trangdq@hapas.vn
+  squad: RETAIL
+  is_squad_agent: false
+  connect_mode: bot
+  description: >
+    Agent có sẵn, được adopt vào platform (giữ nguyên cấu hình & nơi chạy).
+
+deployment:
+  mode: external            # platform KHÔNG host; team tự vận hành
+  repo_url: https://github.com/LamsonRetail/lsr-agent-platform.git
+  host_note: "team tự host"
+
+lark:
+  connect_mode: bot
+
+runtime:
+  sdk: claude-agent-sdk
+  auth: subscription        # auth của OWNER (claude setup-token) — không dùng khoá chung
+  model: claude-sonnet-5
+
+skills:                     # MCP đang dùng (dò tự động, chỉ khai báo)
+  - {name: none, type: mcp}
+
+telemetry:
+  enabled: true             # bắt buộc: platform nắm qua trace
+  collector: https://collector.34-126-154-135.sslip.io
+
+tests:
+  suite: tests/agent_tests.yaml
+schedule: []

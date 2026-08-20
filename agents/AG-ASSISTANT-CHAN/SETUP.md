@@ -1,4 +1,4 @@
-# AG-PMO Setup & Testing
+# AG-ASSISTANT-CHAN Setup & Testing
 
 ## Test Trực Tiếp (Không cần Platform)
 
@@ -7,7 +7,7 @@
 Copy Lark app config vào `.env.local` (file này đã `gitignore`):
 
 ```bash
-# File: agents/AG-PMO/.env.local
+# File: agents/AG-ASSISTANT-CHAN/.env.local
 LARK_APP_ID=<your-app-id>
 LARK_APP_SECRET=<your-app-secret>
 LARK_DOMAIN=https://open.larksuite.com
@@ -20,7 +20,7 @@ Lấy `LARK_APP_ID` và `LARK_APP_SECRET` từ Lark MCP config hoặc Lark app s
 ### 2. Chạy Test
 
 ```bash
-cd agents/AG-PMO
+cd agents/AG-ASSISTANT-CHAN
 ./run_test.sh
 ```
 

@@ -1,4 +1,4 @@
-"""lark_read — lớp đọc Lark tối giản cho AG-PMO. CHỈ ĐỌC, không có hàm ghi.
+"""lark_read — lớp đọc Lark tối giản cho AG-ASSISTANT-CHAN. CHỈ ĐỌC, không có hàm ghi.
 
 Viết riêng cho agent này, chỉ gồm đúng phần đang dùng:
   • ``bitable_records()`` — đọc hết record một bảng Base, có phân trang

@@ -1,4 +1,4 @@
-# Use case — Trợ lý PMO, quản lý dự án LamsonRetail (AG-PMO)
+# Use case — Trợ lý PMO, quản lý dự án LamsonRetail (AG-ASSISTANT-CHAN)
 
 Owner: trangdq@hapas.vn — Đặng Quỳnh Trang, PMO (Quản lý dự án công ty)
 Squad: PMO · `is_squad_agent: true`
@@ -153,10 +153,10 @@ cùng nhóm sẽ ra nhiều biên bản khác nhau cho cùng cuộc họp và kh
 |---|---|
 | **AG-KD-MATE-MADE (LYLY)** | nhóm của team MATE MADE |
 | **AG-MINH-ANH** | agent demo/tham chiếu của platform |
-| **AG-PMO** | **chỉ các nhóm dự án được admin gán** — không phải mọi cuộc họp trong công ty |
+| **AG-ASSISTANT-CHAN** | **chỉ các nhóm dự án được admin gán** — không phải mọi cuộc họp trong công ty |
 
 Bot **không tự add vào nhóm được**: admin gán kênh vào ở Console → Ingress. Nếu một cuộc họp
-dự án diễn ra trong nhóm của MATE MADE thì LYLY làm biên bản, AG-PMO **không** chen vào — thay
+dự án diễn ra trong nhóm của MATE MADE thì LYLY làm biên bản, AG-ASSISTANT-CHAN **không** chen vào — thay
 vào đó xin biên bản đã chốt của LYLY nộp vào tri thức dự án.
 
 ## Rủi ro & giới hạn
@@ -188,12 +188,12 @@ vào đó xin biên bản đã chốt của LYLY nộp vào tri thức dự án.
 - [x] ~~`space_id` Wiki tài liệu dự án~~ — **đã có**: `7638442489078157023` (`LSR - PMO`), đã kiểm tra không trùng space của AG-LEGAL
 - [ ] **22/61 dự án chưa bao giờ có báo cáo** — agent sẽ trả *"chưa có báo cáo"* cho các dự án này. Đây là phụ thuộc *nghiệp vụ*, không phải kỹ thuật: agent không thể chính xác hơn dữ liệu nó đọc
 - [ ] `chat_id` của 2-3 nhóm dự án cho giai đoạn 1, admin gán ở Console → Ingress
-- [ ] Chốt với admin ranh giới nhóm giữa AG-PMO · LYLY · AG-MINH-ANH
+- [ ] Chốt với admin ranh giới nhóm giữa AG-ASSISTANT-CHAN · LYLY · AG-MINH-ANH
 - [ ] Danh sách `PMO_CONFIDENTIAL_VIEWERS`
 - [ ] Chính sách công ty về ghi âm/xử lý nội dung họp — **chặn việc mở rộng ngoài 2-3 nhóm thử**
 - [ ] App Lark cho agent: dùng `platform-shared` hay app riêng. Nếu app riêng thì cần App ID chính xác — lưu ý App ID được cung cấp lúc đầu (`cli_aaf6cb7a0df8dee7`) **khác** app LYLY đang dùng (`cli_aaf6ca84c5389ed4`), cần xác nhận lại
 - [ ] URL transcript server ổn định
-- [ ] Xác nhận `squad: PMO` được tạo trên platform và AG-PMO là squad agent chính
+- [ ] Xác nhận `squad: PMO` được tạo trên platform và AG-ASSISTANT-CHAN là squad agent chính
 
 ## Giai đoạn sau (không làm ở giai đoạn 1)
 

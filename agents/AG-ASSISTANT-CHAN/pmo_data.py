@@ -1,4 +1,4 @@
-"""pmo_data — đọc danh mục dự án LSR và dựng câu trả lời có kiểm chứng cho AG-PMO.
+"""pmo_data — đọc danh mục dự án LSR và dựng câu trả lời có kiểm chứng cho AG-ASSISTANT-CHAN.
 
 Nguồn: Lark Base ``CÁC DỰ ÁN LAMSON RETAIL 2026`` trong wiki space ``LSR - PMO``.
   • ``TỔNG HỢP DỰ ÁN LSR``  (bảng chiều)  — danh tính dự án, mốc ngày, owner

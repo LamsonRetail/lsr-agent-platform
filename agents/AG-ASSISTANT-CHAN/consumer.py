@@ -109,7 +109,9 @@ def main():
                 api("POST", f"/v1/self/jobs/{jid}/complete", {"result": {"ok": True}})
                 print(f"✓ job#{jid}")
             except Exception as exc:
+                import traceback
                 print(f"✗ job#{jid}: {exc}")
+                traceback.print_exc()
                 try: api("POST", f"/v1/self/jobs/{jid}/fail", {"error": str(exc)[:400]})
                 except Exception: pass
 

@@ -1,4 +1,4 @@
-# Trợ lý PMO — Quản lý dự án LamsonRetail (AG-PMO)
+# Trợ lý PMO — Quản lý dự án LamsonRetail (AG-ASSISTANT-CHAN)
 
 Thứ tự làm việc (gate tự nhắc nếu bỏ qua):
 1. Điền **USECASE.md** → 2. Điền **TESTCASES.md** (+ tests.jsonl) → 3. Code (consumer.py / Claude Code)
@@ -6,21 +6,21 @@ Thứ tự làm việc (gate tự nhắc nếu bỏ qua):
 Chạy nhanh:
 ```bash
 # đăng ký agent (1 lần) — nhận LSR_AGENT_TOKEN, lưu vào .env.lsr (gitignored)
-python3 scripts/lsr_adopt.py --enroll-token <hỏi admin> --id AG-PMO --name "Trợ lý PMO — Quản lý dự án LamsonRetail" --owner <email>
+python3 scripts/lsr_adopt.py --enroll-token <hỏi admin> --id AG-ASSISTANT-CHAN --name "Trợ lý PMO — Quản lý dự án LamsonRetail" --owner <email>
 
 # chạy agent (Docker — giống môi trường thật)
-cd agents/AG-PMO && cp .env.example .env && vi .env && docker compose up
+cd agents/AG-ASSISTANT-CHAN && cp .env.example .env && vi .env && docker compose up
 # hoặc chạy trực tiếp: LSR_AGENT_TOKEN=... python3 consumer.py
 
 # test tự động theo tests.jsonl (terminal khác)
-bash scripts/agent-test.sh AG-PMO
+bash scripts/agent-test.sh AG-ASSISTANT-CHAN
 
 # chat tay 1 câu
-bash scripts/agent-chat.sh AG-PMO "câu hỏi thử"
+bash scripts/agent-chat.sh AG-ASSISTANT-CHAN "câu hỏi thử"
 ```
 
 ## Console của agent
-**https://app.34-126-154-135.sslip.io/agent/AG-PMO** — chat thử, jobs, traces, chi phí,
+**https://app.34-126-154-135.sslip.io/agent/AG-ASSISTANT-CHAN** — chat thử, jobs, traces, chi phí,
 brain riêng, version. KHÔNG cần tài khoản Vercel/Supabase: console nằm sẵn trong platform.
 
 ## Kênh vào (admin gán 1 dòng ở Console → Ingress)

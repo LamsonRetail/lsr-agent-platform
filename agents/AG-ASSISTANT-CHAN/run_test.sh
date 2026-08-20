@@ -1,5 +1,5 @@
 #!/bin/bash
-# AG-PMO — chạy test trực tiếp mà không cần platform
+# AG-ASSISTANT-CHAN — chạy test trực tiếp mà không cần platform
 
 set -e
 
@@ -15,14 +15,14 @@ fi
 export LSR_AGENT_TOKEN
 export LSR_PLATFORM_URL
 
-echo "AG-PMO — Test trực tiếp"
+echo "AG-ASSISTANT-CHAN — Test trực tiếp"
 echo "======================="
 echo
 
 # Các test case mẫu
 python3 << 'PYEOF'
 import sys
-sys.path.insert(0, '/Users/quynhtrang/Desktop/lsr-agent-platform/agents/AG-PMO')
+sys.path.insert(0, '/Users/quynhtrang/Desktop/lsr-agent-platform/agents/AG-ASSISTANT-CHAN')
 
 from consumer import answer
 import os

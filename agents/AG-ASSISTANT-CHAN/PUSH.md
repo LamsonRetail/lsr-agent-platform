@@ -1,6 +1,6 @@
 # Hướng Dẫn Push Lên GitHub
 
-5 commits đã sẵn sàng trên nhánh `agent/pmo-AG-PMO`. Để push:
+5 commits đã sẵn sàng trên nhánh `agent/pmo-AG-ASSISTANT-CHAN`. Để push:
 
 ## Cách 1: SSH Key (Recommended)
 
@@ -13,7 +13,7 @@ cat ~/.ssh/id_ed25519_lsr-agent-platform.pub
 
 # 2. Rồi push
 cd ~/Desktop/lsr-agent-platform
-git push -u origin agent/pmo-AG-PMO
+git push -u origin agent/pmo-AG-ASSISTANT-CHAN
 ```
 
 ## Cách 2: HTTPS với Personal Token
@@ -29,7 +29,7 @@ git remote set-url origin https://github.com/LamsonRetail/lsr-agent-platform.git
 # Lấy token tại: https://github.com/settings/tokens
 # Scope cần: repo (read+write)
 
-git push -u origin agent/pmo-AG-PMO
+git push -u origin agent/pmo-AG-ASSISTANT-CHAN
 ```
 
 ## Cách 3: Tạo Pull Request Từ Web
@@ -39,7 +39,7 @@ git push -u origin agent/pmo-AG-PMO
 # Click "Compare & pull request" (GitHub tự phát hiện branch mới)
 # Hoặc tạo PR thủ công:
 #   Base: main
-#   Compare: agent/pmo-AG-PMO
+#   Compare: agent/pmo-AG-ASSISTANT-CHAN
 ```
 
 ## Sau Khi Push
@@ -47,7 +47,7 @@ git push -u origin agent/pmo-AG-PMO
 Tạo PR và yêu cầu review trước merge vào `main`:
 
 ```markdown
-**Tiêu đề:** AG-PMO: Agent trợ lý PMO cho LamsonRetail
+**Tiêu đề:** AG-ASSISTANT-CHAN: Agent trợ lý PMO cho LamsonRetail
 
 **Mô tả:**
 - Giai đoạn 0 (GĐ0): Tra dữ liệu dự án từ Lark Base
@@ -64,7 +64,7 @@ Tạo PR và yêu cầu review trước merge vào `main`:
 
 **Test:**
 ```bash
-cd agents/AG-PMO
+cd agents/AG-ASSISTANT-CHAN
 export $(cat .env.local | xargs)  # Điền LARK credentials
 ./run_test.sh                      # 12/12 pass
 ```

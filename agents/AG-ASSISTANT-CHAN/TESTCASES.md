@@ -1,7 +1,7 @@
-# Test cases — Trợ lý PMO (AG-PMO)
+# Test cases — Trợ lý PMO (AG-ASSISTANT-CHAN)
 
 Mỗi luồng ở [USECASE.md](USECASE.md) có ít nhất 1 case. Case chạy tự động khai ở
-[tests.jsonl](tests.jsonl) — chạy bằng `bash scripts/agent-test.sh AG-PMO`.
+[tests.jsonl](tests.jsonl) — chạy bằng `bash scripts/agent-test.sh AG-ASSISTANT-CHAN`.
 
 Nguyên tắc chấm: **thà từ chối còn hơn trả lời sai**. Mọi case ở nhóm "không được bịa" mà agent
 trả lời trôi chảy nhưng không có nguồn đều tính **fail**.
