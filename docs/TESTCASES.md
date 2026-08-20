@@ -653,3 +653,18 @@ Identity `ann_legal@hapas.vn` (Ann Nguyen, `ou_28c573f0…`) authorize bằng ch
 | 22.22 | token tạm bị xoá | lời gọi sau đó 401 | ✅ |
 
 **Cả 8 tiêu chí nghiệm thu C8 đã đóng.**
+
+### §22.4 — Panel danh tính trên trang agent
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 22.23 | `GET /v1/agents/AG-LEGAL/lark-identities` | trả subject/name/open_id/scope/path_prefixes/methods/refresh_days_left + `calls_7d` | ✅ |
+| 22.24 | response có token không | **không** — không trường nào chứa token | ✅ |
+| 22.25 | agent chưa có identity (AG-SOURCING) | `identities: []`, `calls_7d` toàn 0 | ✅ |
+| 22.26 | qua Caddy, không token | 401 `cần đăng nhập console` (đã vào app, không phải 403 của guard) | ✅ |
+| 22.27 | route cũ `golive-checklist` sau khi sửa regex | vẫn 401 như trước, không hỏng | ✅ |
+| 22.28 | panel có trong bản build của web | có trong `.next/server/app/agent/[id]/page.js` | ✅ |
+
+Lưu ý vận hành: Caddyfile nướng trong image nên đổi route **phải** `docker compose build
+caddy` + `up -d --force-recreate caddy`. Lần này `up -d --build caddy` không dựng lại
+container (giữ config cũ) nên endpoint mới trả 403 của guard — mất một vòng mới phát hiện.

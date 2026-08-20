@@ -3291,6 +3291,34 @@ def lark_user_authorize_poll(state: str, authorization: str = Header(default="")
             "error": r["error"]}
 
 
+@app.get("/v1/agents/{agent_id}/lark-identities")
+def agent_lark_identities(agent_id: str, authorization: str = Header(default="")) -> dict:
+    """Danh tính Lark mà agent này được phép hành động dưới danh nghĩa (cho trang agent).
+
+    Quyền 'user' trên agent là đủ: chính sách C8 §5 đòi MINH BẠCH — người trong nhóm phải
+    thấy được có một account máy tham gia quy trình, và nó là account nào. Không trả token.
+    """
+    _require_role(authorization, "user", agent_id)
+    _ensure_schema()
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT g.subject_email, i.name, i.open_id, i.app_id, i.scope, g.path_prefixes, "
+            "  g.methods, g.active, g.granted_by, g.created_at AS granted_at, "
+            "  i.expires_at, i.refresh_expires_at, i.last_used_at, "
+            "  floor(extract(epoch from (i.refresh_expires_at - now()))/86400)::int AS refresh_days_left "
+            "FROM agent_user_identity_grants g "
+            "JOIN lark_user_identities i ON i.subject_email = g.subject_email "
+            "WHERE g.agent_id=%s ORDER BY g.subject_email", (agent_id,)).fetchall()
+        st = conn.execute(
+            "SELECT count(*) FILTER (WHERE ok) AS ok_7d, count(*) FILTER (WHERE NOT ok) AS fail_7d, "
+            "  max(created_at) AS last_call FROM tool_usage "
+            "WHERE agent_id=%s AND connector_id='lark_user' "
+            "  AND created_at > now() - interval '7 days'", (agent_id,)).fetchone()
+    return {"agent_id": agent_id, "identities": [dict(r) for r in rows],
+            "calls_7d": dict(st or {}),
+            "warn_days": LARK_USER_REFRESH_WARN_DAYS}
+
+
 @app.post("/v1/lark/user/grants")
 def lark_user_grant(body: dict, authorization: str = Header(default="")) -> dict:
     """(admin) Cho agent quyền hành động dưới danh nghĩa subject, GIỚI HẠN theo path."""
