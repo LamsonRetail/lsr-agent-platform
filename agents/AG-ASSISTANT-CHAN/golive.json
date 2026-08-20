@@ -1,0 +1,79 @@
+{
+  "_ghi_chu": "Điền bằng dữ kiện thật đã kiểm chứng ngày 20/08/2026. Mục nào chưa có bằng chứng thì khai rõ 'chưa', KHÔNG bịa cho đủ.",
+
+  "owner_email": "trangdq@hapas.vn",
+  "backup_owner": "trangdq@hapas.vn",
+  "team_id": "PMO",
+  "team_members": [
+    {"full_name": "Đặng Quỳnh Trang (B)", "role": "owner", "lark_user_id": "ou_eb5d42aa701145cd24cb6cd54c8050b0", "expertise": "PMO — quản lý dự án cross-brand LamsonRetail; nạp và duyệt tri thức cho agent"}
+  ],
+  "approver": "trangdq@hapas.vn",
+  "collaboration_rules": [
+    "Chan chỉ trả lời khi được hỏi; tra dữ liệu dự án để người quyết, KHÔNG quyết thay",
+    "Mọi việc xin duyệt (lùi deadline, tăng ngân sách, đổi phạm vi) đều bị từ chối và đẩy về người có thẩm quyền",
+    "Không tự gửi tin ra nhóm khác đã trao đổi (tránh lộ thông tin sai nhóm)",
+    "Không tự tạo task từ cam kết (GĐ0 chỉ đọc); tính năng đó để giai đoạn biên bản họp sau"
+  ],
+  "work_channels": [
+    "web chat console /agent/AG-ASSISTANT-CHAN (đã test thật 20/08/2026)",
+    "Lark: mọi nơi bot Bạch Băng được add (DM + nhóm bất kỳ) — owner CHỦ ĐỘNG chọn phạm vi rộng. Rủi ro kèm theo khai ở mục risks + team_notified"
+  ],
+
+  "kpis": [
+    {"kpi_name": "số câu hỏi dự án được Chan trả lời/tuần", "unit": "câu", "target": 20, "period": "weekly",
+     "data_source": "platform /v1/self/traces", "formula": "count(job complete)"},
+    {"kpi_name": "tỷ lệ câu trả lời có nêu NGÀY BÁO CÁO + độ cũ dữ liệu", "unit": "%", "target": 100, "period": "weekly",
+     "data_source": "review tay tuần đầu", "formula": "câu nêu ngày báo cáo / tổng câu trả lời dự án"}
+  ],
+  "agent_kpi": "OFR (bịa số/suy diễn dự án không có trong danh mục) = 0 — một lần bịa là fail; 100% câu trả lời dự án nêu NGÀY BÁO CÁO + cảnh báo nếu >14 ngày; 100% câu xin-quyết-định (duyệt/lùi deadline/tăng ngân sách) bị từ chối đúng; 100% câu chạm dữ liệu tài chính mật bị chặn khi người hỏi ngoài danh sách; phân biệt đúng 'chưa có báo cáo' vs 'không có rủi ro'",
+  "alert_thresholds": [
+    "DLQ > 5 job",
+    "im lặng > 24h trong giờ làm việc",
+    "tỷ lệ lỗi > 10%/ngày",
+    "consumer chết (không poll job) > 30 phút"
+  ],
+
+  "data_sources_allowed": [
+    "Lark Base 'CÁC DỰ ÁN LAMSON RETAIL 2026' (app_token WCd8bTo39arpYKsIDAalwiG8gwh): bảng TỔNG HỢP DỰ ÁN LSR (tblXGSGOetbLTx8o, 61 dự án) và BÁO CÁO DỰ ÁN (tblIgOwS5IV2pDXK, 153 báo cáo)",
+    "Lark Wiki 'LSR - PMO' (space 7638442489078157023) — sẽ nạp vào brain khi GĐ0 ổn định, hiện CHƯA nạp",
+    "Chỉ ĐỌC. Nguồn hiện trạng thật lấy từ bảng BÁO CÁO DỰ ÁN (bảng tổng hợp trống 61/61 các cột hiện trạng)"
+  ],
+  "data_forbidden": [
+    "Ngân sách (Budget), lợi nhuận gộp thực (Actual GM), chênh lệch biên (Margin Gap) — chặn TRƯỚC khi tra, chỉ người trong PMO_CONFIDENTIAL_VIEWERS mới được trả lời; mặc định danh sách RỖNG (fail-closed)",
+    "Lương thưởng, hợp đồng lao động — ngoài phạm vi, chỉ sang phòng Nhân sự",
+    "Dữ liệu cá nhân khách hàng (số điện thoại, địa chỉ)",
+    "Token/secret của chính agent — từ chối tuyệt đối"
+  ],
+  "skills": ["không dùng MCP — đọc Lark Base bằng urllib chuẩn trong lark_read.py (chỉ đọc, có phân trang an toàn)"],
+  "writes": ["KHÔNG ghi gì — GĐ0 là read-only. Không tạo task, không sửa Base, không gửi tin thay người. Ghi (task/biên bản) để giai đoạn biên bản họp sau"],
+
+  "auth_mode": "subscription của owner (claude setup-token) — KHÔNG dùng API key chung. Hiện trạng: answer() chạy bằng LUẬT (tất định từ dữ liệu Lark), chưa gọi model, nên token = 0",
+  "lark_connect": "app riêng cli_aaf6cb7a0df8dee7 (Bạch Băng). Event im.message.receive_v1 + Long Connection đã publish trên Developer Console (owner cấu hình 20/08/2026). Routing binding Bạch Băng → AG-ASSISTANT-CHAN do admin (anh Nguyễn Trần Thi) tạo 20/08/2026",
+  "telemetry_verified": "đã thấy run trên platform ngày 20/08/2026 qua web chat: session web-434bc16d3e135252 và web-f81ae3cf89d705e5 (trả lời đúng dữ liệu PRJ-2026056). total_tokens = 0 vì answer() chạy bằng luật, chưa gọi model — KHÔNG phải telemetry hỏng",
+  "deployment": "self_hosted: chạy python3 consumer.py trên máy Mac của owner (trangdq). docker-compose.yml đã có sẵn trong agents/AG-ASSISTANT-CHAN/ để chuyển sang chạy 24/7 khi cần",
+
+  "tests_passed": "bash scripts/agent-test.sh AG-ASSISTANT-CHAN → 11/12 pass ngày 20/08/2026. 1 case fail (case 8) do API read timeout của hạ tầng khi chạy liên tục, KHÔNG phải lỗi logic. Ngoài ra run_test.sh (12 case chạy trực tiếp) → 12/12 pass. Toàn bộ case hàng rào an toàn đều PASS: chặn xin-quyết-định (lùi deadline/tăng ngân sách/chốt hộ), chặn dữ liệu tài chính mật, chặn tạo task, chặn gửi sang nhóm khác, chặn lộ token",
+  "escalation_rules": [
+    "Không tìm thấy dự án trong danh mục → nói 'chưa có trong danh mục, anh/chị hỏi lại PMO', KHÔNG suy từ dự án khác, KHÔNG đoán",
+    "Dự án có mâu thuẫn dữ liệu (vd Status=DONE nhưng Health=At Risk) → nêu rõ mâu thuẫn, KHÔNG tự chọn bên nào, để người xác nhận",
+    "Ai xin duyệt/lùi deadline/tăng ngân sách/đổi phạm vi → từ chối, đẩy về người có thẩm quyền, kể cả khi nói gấp",
+    "Câu chạm dữ liệu tài chính mật mà người hỏi ngoài danh sách → từ chối, không hé lộ một phần",
+    "Lỗi kỹ thuật 2 lần liên tiếp → job vào DLQ, owner nhận cảnh báo"
+  ],
+  "risks": [
+    "Trả số ĐÚNG nhưng của kỳ CŨ — lỗi âm thầm. Giảm thiểu: mọi câu trả lời nêu NGÀY BÁO CÁO; báo cáo > 14 ngày thì cảnh báo trước nội dung; tính độ cũ theo TỪNG dự án",
+    "Nhầm 'chưa có báo cáo' thành 'không có rủi ro'. Giảm thiểu: tách rõ 2 trạng thái này trong câu trả lời",
+    "Lộ dữ liệu tài chính (Budget/GM/Margin Gap). Giảm thiểu: chặn bằng whitelist trước khi tra; danh sách người xem mặc định RỖNG (fail-closed)",
+    "Tự quyết việc cần thẩm quyền. Giảm thiểu: chặn bằng luật trong pmo_answer.py trước mọi nhánh, không phụ thuộc prompt (không bị lời lẽ thuyết phục làm lung lay)",
+    "Bot được nhắn ở MỌI nơi (owner chọn phạm vi rộng) → có thể bị kéo vào nhóm không liên quan hoặc người ngoài team hỏi. Giảm thiểu: chặn dữ liệu mật theo người hỏi; owner phải thông báo minh bạch trước khi để bot vào nhóm có người khác (xem team_notified)",
+    "Trùng tên dự án giữa các brand (HAPAS vs MATE MADE). Giảm thiểu: khi trùng tên, hỏi lại brand nào thay vì đoán"
+  ],
+  "reviewer_first_week": "trangdq@hapas.vn (owner) — đọc lại toàn bộ câu trả lời của Chan trong tuần đầu, đối chiếu với báo cáo gốc trong Lark Base. Ghi chú: owner kiêm reviewer và không có backup là điểm rủi ro tập trung, đã khai thật",
+
+  "schedule": ["không có job định kỳ (GĐ0 chỉ trả lời khi được hỏi)"],
+  "retrain_process": "Dữ liệu sai → sửa thẳng trong Lark Base gốc (bảng BÁO CÁO DỰ ÁN) rồi agent đọc lại tự có ngay. Luật/cách trả lời sai → sửa trong pmo_answer.py + tạo version prompt mới trên console, rollback được. Không phải đập đi làm lại",
+  "feedback_channel": "Nơi bot được dùng (DM/nhóm Lark); owner tổng hợp phản hồi hằng tuần",
+  "review_cadence": "weekly — owner xem Console (số run, token, lỗi, DLQ) mỗi thứ Hai; đối chiếu vài câu trả lời với báo cáo gốc",
+  "team_notified": "CHƯA thông báo rộng — hiện giai đoạn thử, chủ yếu owner dùng qua web chat + DM. TRƯỚC KHI để bot vào nhóm có người khác: owner CAM KẾT thông báo minh bạch rằng Chan đọc dữ liệu dự án và ghi log hội thoại phục vụ vận hành",
+  "scope_confirmed": "Owner xác nhận Chan chỉ làm đúng phạm vi USECASE.md: tra dữ liệu dự án (hiện trạng, rủi ro, vướng mắc, việc kế tiếp) từ Lark Base, chỉ ĐỌC. KHÔNG quyết thay người, KHÔNG tạo task, KHÔNG gửi tin sang nhóm khác, KHÔNG trả lời dữ liệu tài chính mật cho người ngoài danh sách"
+}
