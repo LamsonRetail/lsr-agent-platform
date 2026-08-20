@@ -3184,11 +3184,17 @@ def lark_user_authorize_start(body: dict, authorization: str = Header(default=""
     if not (app_id and _LARK_APPS.get(app_id)):
         raise HTTPException(status_code=503, detail=f"platform không có app_secret của app {app_id or '(rỗng)'}")
     from urllib.parse import quote
+    # State phải DUY NHẤT: trước đây ghép timestamp giây + chữ ký tất định, nên xin hai
+    # link cho cùng subject trong cùng một giây là trùng khoá chính -> 500 (gặp 20/08).
     ts = str(int(time.time()))
-    state = f"u{ts}.{_oauth_sign('user:' + ts + subject)}"
+    state = f"u{ts}.{secrets.token_urlsafe(12)}"
     actor = _actor_of(authorization)
     with _db() as conn:
         conn.execute("DELETE FROM lark_user_authorize_sessions WHERE expires_at < now()")
+        # Mỗi subject chỉ nên có MỘT link sống: xin link mới thì link cũ hết giá trị,
+        # để không có hai link cùng mở mà không ai biết cái nào đang dùng.
+        conn.execute("UPDATE lark_user_authorize_sessions SET status='superseded' "
+                     "WHERE subject_email=%s AND status='pending'", (subject,))
         conn.execute(
             "INSERT INTO lark_user_authorize_sessions (state, subject_email, scope, app_id, "
             "requested_by, expires_at) VALUES (%s,%s,%s,%s,%s, now() + make_interval(secs => %s))",
@@ -3234,6 +3240,10 @@ def lark_user_authorize_callback(body: dict) -> dict:
                                 detail=f"link authorize đã hết hạn (tạo lúc "
                                        f"{ses['created_at']:%d/%m %H:%M} UTC) — "
                                        f"xin admin tạo link mới cho {ses['subject_email']}")
+        if ses["status"] == "superseded":
+            raise HTTPException(status_code=400,
+                                detail=f"link này đã bị thay bằng link mới hơn cho "
+                                       f"{ses['subject_email']} — dùng link mới nhất")
         if ses["status"] == "done":
             raise HTTPException(status_code=400,
                                 detail=f"link này đã dùng xong cho {ses['subject_email']} — "

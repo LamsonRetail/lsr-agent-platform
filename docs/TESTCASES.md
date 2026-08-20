@@ -685,4 +685,16 @@ authorize C8.
 | 23.5 | domain cũ trong lúc chuyển | `platform.*` 200, `app.*` 200 — không ảnh hưởng | ✅ |
 | 23.6 | `publicBase()` với host mới | redirect theo host thật, không ghim domain cũ | ✅ (đã có sẵn) |
 
-Chưa nghiệm thu được (chờ DNS + Lark Console): đăng nhập thật trên domain mới.
+### §23.1 — Đã chuyển xong (20/08)
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 23.7 | DNS + Lark redirect_uri đã xong → chạy script thật | đổi `.env`, dựng lại `platform_api`+`web` | ✅ |
+| 23.8 | Caddy cấp cert cho domain mới | `certificate obtained successfully` (phải restart caddy để thoát backoff sau các lần NXDOMAIN) | ✅ |
+| 23.9 | `redirect_uri` của luồng đăng nhập console | `https://agent.hapas-ai.tech/api/auth/lark/callback` | ✅ |
+| 23.10 | URL đăng nhập đó có ra trang Lark thật | http 200, không `invalid_request` | ✅ |
+| 23.11 | `redirect_uri` của luồng authorize C8 | cùng domain mới, ra trang Lark thật | ✅ |
+| 23.12 | domain cũ sau khi đổi | `app.*` vẫn 200 (không cắt) | ✅ |
+| 23.13 | identity của Ann sau khi đổi domain | còn nguyên, refresh còn 6 ngày | ✅ |
+| 23.14 | xin 4 link authorize liên tiếp trong 1 giây | 4× http 200, state khác nhau | ✅ (trước: lần 3 → **500** trùng khoá) |
+| 23.15 | dùng lại link đã bị thay | 400 "đã bị thay bằng link mới hơn" | ✅ |
