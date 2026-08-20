@@ -52,6 +52,8 @@ legalkb/
   news.py          S4: crawl RSS, dedupe theo số hiệu, digest, phát hành sau khi duyệt
   signing.py       S5: Bước 3/Bước 5 trình ký (shadow — chờ core C5)
   extract.py       trích text PDF/DOCX (không dùng /v1/extract vì nó đòi admin)
+  addressing.py    gọi tên mới trả lời trong nhóm + khoá phiên theo chat (bộ nhớ nhóm)
+  voice.py         nghe tin thoại; chưa có transcriber thì NÓI THẬT, không im lặng
   engine.py        NotebookLM (AnswerEngine — có thể swap sang Gemini File Search)
   lark_kb.py       đọc/ghi Wiki-Drive (ngoại lệ C1)
   sync.py store.py đồng bộ KB + SQLite (13 bảng)
@@ -70,6 +72,10 @@ legalkb/
 | S5 | Quá SLA 30' hoặc model lỗi → `auto_passed` | Máy không được làm nghẽn quy trình người |
 | S5 | Tối đa 2 lần quay lại Bước 4, lần 3 escalate | Chống vòng lặp vô hạn |
 | Mọi gate | Quá hạn chỉ **NHẮC**, không tự thông qua (trừ `observe`) | Điểm an toàn cốt lõi |
+| Nhóm | Chỉ trả lời khi **được gọi tên/@mention**; tin khác vẫn **ghi lượt** | Nhảy vào mọi câu là cách nhanh nhất để bị đá khỏi nhóm; nhưng vẫn cần ngữ cảnh khi được gọi |
+| Phiên | Khoá theo **chat_id**, KHÔNG theo job id | Gateway không set `session_id`; khoá theo job = mỗi tin một phiên = không có bộ nhớ |
+| Nhóm/riêng | Phân biệt bằng `chat_type` nếu có, không thì `AGENT_GROUP_CHAT_IDS` | Lark dùng `oc_` cho **cả** p2p lẫn group — đoán theo tiền tố là sai |
+| Thoại | Tin thoại có `file_key` nhưng **không** tính là file đính kèm | Nếu tính thì router đẩy sang S3 "rà soát hợp đồng" |
 
 ## Pháp chế in the loop
 

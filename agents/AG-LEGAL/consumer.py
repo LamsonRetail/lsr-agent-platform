@@ -26,7 +26,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from legalkb import brain, contracts, flows, gates as gates_mod, news
+from legalkb import addressing, brain, contracts, flows, gates as gates_mod, news, voice
 from legalkb.engine import NotebookLMEngine
 from legalkb.flows import Bundle
 from legalkb.gates import GATE, OBSERVE, Gates
@@ -271,7 +271,9 @@ def handle(job, b):
     pf, store, engine, g = b.pf, b.store, b.engine, b.gates
     payload = job.get("payload") or {}
     q = payload.get("text", "")
-    sid = job.get("session_id") or f"job-{job['id']}"
+    # Khoá phiên theo chat/nhóm — KHÔNG theo job id. Gateway không set session_id nên nếu
+    # rơi về job id thì mỗi tin là một phiên mới và agent không nhớ gì (xem addressing.py).
+    sid = addressing.session_for(job, payload)
     uref = payload.get("sender_open_id") or payload.get("user_ref") or ""
     chat_id = payload.get("chat_id") or (job.get("reply_to") or {}).get("chat_id")
 
@@ -288,6 +290,29 @@ def handle(job, b):
         # Trong group mà không phải lệnh → handle_group trả None = im lặng (chủ ý).
         return handle_group(job, b)
 
+    # Nhóm thường: chỉ lên tiếng khi được gọi tên. Nhảy vào mọi câu là cách nhanh nhất
+    # để bị đá khỏi nhóm — trong nhóm người ta bàn việc với nhau, không phải hỏi agent.
+    ok, why = addressing.should_answer(payload, job, admin_group=GROUP_CHAT_ID)
+    if not ok:
+        # Vẫn GHI lượt của nhóm vào phiên: nhờ vậy khi có ai gọi tên, agent đã có ngữ cảnh
+        # cuộc trao đổi trước đó chứ không hỏi lại từ đầu.
+        if q:
+            pf.add_turn(sid, "user", q, user_ref=uref, channel=job.get("channel"))
+        print(f"↷ job#{job['id']}: không trả lời ({why}) — đã ghi lượt vào {sid}",
+              flush=True)
+        return None
+
+    # Tin thoại: nghe trước, rồi xử lý như câu hỏi bằng chữ.
+    if voice.is_voice(payload):
+        heard, err = voice.hear(pf, job, payload,
+                               log=lambda m: print(m, file=sys.stderr, flush=True))
+        if err:
+            pf.add_turn(sid, "user", "(tin nhắn thoại)", user_ref=uref,
+                        channel=job.get("channel"))
+            return err + "\n\n" + DISCLAIMER
+        q = heard
+        print(f"[voice] job#{job['id']}: nghe được {len(q)} ký tự", flush=True)
+
     # Đang có người Pháp chế tham gia → Agent im, nhưng vẫn ghi lượt để không mất lịch sử.
     if g.mode(sid) == "joined":
         pf.add_turn(sid, "user", q, user_ref=uref, channel=job.get("channel"))
@@ -299,7 +324,10 @@ def handle(job, b):
     # 0 nghĩa là đây là lượt đầu của hội thoại → chào + nói rõ việc giám sát.
     first_turn = int(ctx.get("n_turns") or 0) == 0
     b.model = ctx.get("model")
-    has_file = bool(payload.get("file_key"))
+    # Tin thoại CŨNG có file_key, nhưng sau khi nghe xong nó là CÂU HỎI, không phải tài
+    # liệu đính kèm — nếu tính là file thì router (`brain.route`) sẽ đẩy sang S3 "rà soát
+    # hợp đồng" và trả về lỗi không đọc được định dạng.
+    has_file = bool(payload.get("file_key")) and not voice.is_voice(payload)
 
     # Đang dở luồng tạo hợp đồng thì lượt này thuộc luồng đó — không cho router
     # phân lại, nếu không "Công ty ABC" sẽ bị hiểu thành câu hỏi mới.
