@@ -65,6 +65,21 @@ Shell (`set -a; . ./.env`) tha, nhưng `docker compose env_file` thì lấy nguy
 vào giá trị. Đã gặp thật cả hai lỗi: `LARK_APP_SECRET` bị thêm 1 space đầu (len 33/32) và
 `NLM_NOTEBOOK_KB_ID` + `NLM_AUTH_PATH` bị lẫn comment.
 
+### Quyền GHI trên folder văn bản luật (đang chặn S4)
+
+Đã kiểm 19/08 bằng tenant token của app AG-LEGAL:
+
+| Folder Drive | Đọc | Ghi |
+|---|---|---|
+| Văn bản luật `MIx2fFd8rlzWJBd9bQGlcLQegCd` | ✅ | ❌ **403** |
+| Mẫu hợp đồng `T8DzfOysElvbf4dMHB7lomb7grc` | ✅ | ✅ |
+| Bản thảo DRAFT `NHe5fRCSclUMvNdDmhul5njvg7c` | ✅ | ✅ |
+
+S4 lưu văn bản crawl về folder văn bản luật nên **cần quyền ghi**: mở folder đó trên Lark
+→ **Manage collaborators** → thêm bot app AG-LEGAL với quyền **Can edit** (hiện chỉ có
+Can view). Không có quyền này thì crawl vẫn chạy và vẫn index được link nguồn, nhưng
+không lưu được bản gốc nội bộ.
+
 ## 3. Group Pháp chế/Admin (thông báo + phê duyệt)
 
 Chốt 17/08/2026: dùng **một group Lark** cho cả thông báo và phê duyệt —

@@ -1,6 +1,7 @@
 """Test S2–S5 + hệ quả sau khi Pháp chế quyết định (PLAN Phase 3–6) — offline."""
 import io
 import json
+import pathlib
 import os
 import sys
 
@@ -565,7 +566,9 @@ def test_sources_carry_country_and_dead_ones_start_inactive(tmp_path):
         by_cc.setdefault(r["country"], []).append(r)
     assert set(by_cc) == {"VN", "TH"}
     active = [r for r in rows if r["active"]]
-    assert [r["name"] for r in active] == ["LuatVietnam — văn bản mới"]
+    # 2 nguồn VN đã kiểm chạy được: RSS LuatVietnam + adapter thuvienphapluat
+    assert {r["kind"] for r in active} == {"rss", "tvpl"}
+    assert all(r["country"] == "VN" for r in active), "TH chưa có nguồn nào lấy được"
     for r in rows:
         if not r["active"]:
             assert r["note"], f"{r['name']} tắt mà không nói vì sao"
@@ -574,7 +577,7 @@ def test_sources_carry_country_and_dead_ones_start_inactive(tmp_path):
 def test_seed_does_not_reactivate_source_admin_turned_off(tmp_path):
     store, pf, eng, g, b = make(tmp_path)
     news.seed_sources(store)
-    store.write("UPDATE legal_news_sources SET active=0 WHERE name LIKE 'LuatVietnam%'")
+    store.write("UPDATE legal_news_sources SET active=0")
     news.seed_sources(store)
     assert not news.sources(store)      # vẫn tắt — seed không bật lại sau lưng admin
 
@@ -688,3 +691,96 @@ def test_weekly_cycle_archives_and_indexes_before_gate(tmp_path, monkeypatch):
     assert it["drive_url"], "phải lưu bản gốc trước khi mở gate"
     assert pf.brain_items, "phải index trước khi mở gate"
     assert b.gates.get(gid)["status"] == "open"      # digest vẫn chờ Pháp chế duyệt
+
+
+# ==================== thuvienphapluat.vn (adapter tvpl) ====================
+
+SEARCH_HTML = """
+<div class="number"> 1</div><div class="nq">
+  <p class="nqTitle" lawid='720746'>
+    <a onclick="Doc_CT(MemberGA)" href="https://thuvienphapluat.vn/cong-van/Thu-tuc/Cong-van-529-TANDTC-PC-2026-huong-dan-720746.aspx">Công văn 529/TANDTC-PC năm 2026 hướng dẫn</a>
+  </p></div>
+<div class="nq"><p class="nqTitle" lawid='720558'>
+    <a href="/cong-van/Doanh-nghiep/Cong-van-20519-CHQ-GSQL-2026-thu-tuc-720558.aspx">Công văn 20519/CHQ-GSQL năm 2026 thủ tục</a>
+  </p></div>
+<p class="nqTitle" lawid='999'>
+  <a href="https://thuvienphapluat.vn/van-ban/X/Nghi-quyet-148-NQ-CP-579993.aspx?v=tvpl-hdsd-firsr&step=step6">Theo dõi hiệu lực văn bản;</a>
+</p>
+"""
+
+DOC_HTML = ('<html><body><div id="divContentDoc"><p>CHÍNH PHỦ</p>'
+            '<p>Số: 326/2026/NĐ-CP</p><p>NGHỊ ĐỊNH QUY ĐỊNH VỀ ĐỊNH DANH</p>'
+            '</div><script>x</script></body></html>')
+
+
+def test_tvpl_search_skips_help_links(monkeypatch):
+    """Link hướng dẫn (v=tvpl-hdsd…&step=) cũng nằm dưới /van-ban/ — lọc theo đường dẫn
+    thì lẫn vào và thành "tìm được văn bản" mà thực chất là trang trợ giúp."""
+    from legalkb import tvpl
+    monkeypatch.setattr(tvpl, "get", lambda *a, **k: SEARCH_HTML)
+    docs = tvpl.search(log=lambda m: None)
+    assert [d["lawid"] for d in docs] == ["720746", "720558"]
+    assert all("hdsd" not in d["url"] for d in docs)
+    assert docs[1]["url"].startswith("https://thuvienphapluat.vn/cong-van/")  # url tuyệt đối
+
+
+def test_tvpl_extracts_full_text(monkeypatch):
+    from legalkb import tvpl
+    monkeypatch.setattr(tvpl, "get", lambda *a, **k: DOC_HTML)
+    t = tvpl.fetch_text("https://x/1.aspx")
+    assert "Số: 326/2026/NĐ-CP" in t and "ĐỊNH DANH" in t
+    assert "<p>" not in t and "script" not in t
+
+
+def test_tvpl_download_original_needs_cookie_not_password(monkeypatch):
+    """Agent KHÔNG giữ mật khẩu của ai: tải file gốc chỉ chạy khi có cookie phiên do
+    người dùng tự lấy. Toàn văn đã lấy được nên đây chỉ là tuỳ chọn."""
+    from legalkb import tvpl
+    monkeypatch.delenv("TVPL_COOKIE", raising=False)
+    try:
+        tvpl.download_original("https://x/1.aspx")
+    except RuntimeError as e:
+        assert "TVPL_COOKIE" in str(e) and "fetch_text" in str(e)
+    else:
+        raise AssertionError("thiếu cookie thì phải báo lỗi rõ")
+    src = (pathlib.Path(__file__).resolve().parent.parent / "legalkb" / "tvpl.py").read_text()
+    assert "TVPL_PASSWORD" not in src and "password" not in src.lower().replace(
+        "mật khẩu", ""), "không được nhận mật khẩu"
+
+
+def test_tvpl_crawl_and_archive_saves_extracted_text(tmp_path, monkeypatch):
+    """Nguồn tvpl: lưu TOÀN VĂN .txt, không lưu HTML 400KB toàn menu/quảng cáo."""
+    from legalkb import tvpl
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    store.write("INSERT INTO legal_news_sources (name,url,kind,country,active) VALUES "
+                "('TVPL','https://thuvienphapluat.vn/page/tim-van-ban.aspx','tvpl','VN',1)")
+    monkeypatch.setattr(tvpl, "get", lambda *a, **k: SEARCH_HTML)
+    keys = news.crawl(store, log=lambda m: None)
+    assert set(keys) == {"529/TANDTC-PC", "20519/CHQ-GSQL"}   # dedupe theo số hiệu
+
+    monkeypatch.setattr(tvpl, "fetch_text", lambda url, cookie=None: "TOÀN VĂN NGHỊ ĐỊNH")
+    assert news.archive(store, b.lark, keys, "fld_root", log=lambda m: None) == 2
+    names = [n for _f, n, _d in b.lark.uploaded]
+    assert all(n.endswith(".txt") for n in names), names
+    assert any("529/TANDTC-PC".replace("/", " ") in n or "529" in n for n in names)
+    assert all(d == "TOÀN VĂN NGHỊ ĐỊNH".encode() for _f, _n, d in b.lark.uploaded)
+
+
+def test_tvpl_archive_reports_when_layout_changed(tmp_path, monkeypatch):
+    from legalkb import tvpl
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDrive())
+    store.write("INSERT INTO legal_news_sources (name,url,kind,country,active) VALUES "
+                "('TVPL','https://x/search','tvpl','VN',1)")
+    sid = store.one("SELECT id FROM legal_news_sources")["id"]
+    store.write("INSERT INTO legal_news_items (key, source_id, country, title, url, status,"
+                " found_at) VALUES ('k',?,'VN','T','https://x/1.aspx','new',0)", (sid,))
+    monkeypatch.setattr(tvpl, "fetch_text", lambda url, cookie=None: "")
+    logs = []
+    assert news.archive(store, b.lark, ["k"], "fld_root", log=logs.append) == 0
+    assert any("không trích được toàn văn" in m for m in logs)
+
+
+def test_doc_no_handles_five_digit_numbers():
+    """20519/CHQ-GSQL — công văn hải quan 5 chữ số. Giới hạn \\d{1,4} cũ bỏ sót thật."""
+    assert news.doc_no_of("Công văn 20519/CHQ-GSQL năm 2026") == "20519/CHQ-GSQL"
+    assert news.doc_no_of("Nghị định 326/2026/NĐ-CP") == "326/2026/NĐ-CP"

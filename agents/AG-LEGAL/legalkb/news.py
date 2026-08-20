@@ -31,9 +31,11 @@ DEFAULT_SOURCES = [
     # --- Việt Nam ---
     ("LuatVietnam — văn bản mới", "https://luatvietnam.vn/rss/van-ban-moi.rss",
      "rss", "VN", None, 1, "đã kiểm 19/08: RSS trả 50 item, dùng được"),
-    ("Thư viện pháp luật", "https://thuvienphapluat.vn/rss/vanban.rss",
-     "rss", "VN", None, 0,
-     "19/08: URL trả HTML, 0 item — cần đường RSS đúng hoặc chuyển sang kind=html + link_pattern"),
+    ("Thư viện pháp luật — tìm văn bản",
+     "https://thuvienphapluat.vn/page/tim-van-ban.aspx?keyword=&type=3&match=True&area=0",
+     "tvpl", "VN", None, 1,
+     "đã kiểm 19/08: adapter tvpl đọc được danh sách + TOÀN VĂN không cần đăng nhập. "
+     "Đổi `type`/`area` trong URL để lấy loại văn bản khác; thêm dòng nguồn mới trên console"),
     ("Cổng TTĐT Chính phủ", "https://chinhphu.vn/rss/van-ban-chi-dao-dieu-hanh.rss",
      "rss", "VN", None, 0, "19/08: HTTP 404 — cần URL feed hiện hành"),
     ("Công báo Chính phủ", "https://congbao.chinhphu.vn/rss",
@@ -49,8 +51,10 @@ DEFAULT_SOURCES = [
      "19/08: 200 nhưng là trang JS, chưa có link_pattern — cần URL trang danh sách + mẫu link"),
 ]
 
-# Số hiệu văn bản VN: 12/2026/NĐ-CP, 05/2026/TT-BTC, 1234/QĐ-TTg…
-DOC_NO = re.compile(r"\b(\d{1,4}\s*/\s*(?:\d{4}\s*/\s*)?[A-ZĐ]{2,}(?:\s*-\s*[A-ZĐ]{2,})?)\b")
+# Số hiệu văn bản VN: 12/2026/NĐ-CP, 05/2026/TT-BTC, 1234/QĐ-TTg, 20519/CHQ-GSQL…
+# \d{1,6}: công văn hải quan có số 5 chữ số (20519/CHQ-GSQL) — giới hạn 4 bỏ sót thật.
+DOC_NO = re.compile(
+    r"\b(\d{1,6}\s*/\s*(?:\d{4}\s*/\s*)?[A-ZĐ]{2,}(?:\s*-\s*[A-ZĐ]{2,})*)\b")
 
 _SUMMARY_PROMPT = """Tóm tắt văn bản pháp luật dưới đây cho bộ phận pháp chế của một công
 ty BÁN LẺ (Lam Son Retail). Trả về DUY NHẤT một JSON:
@@ -146,13 +150,18 @@ def crawl(store, log=print):
     found = []
     for s in sources(store):
         try:
-            body = fetch(s["url"])
-            if s["kind"] == "rss":
-                items = parse_rss(body)
+            if s["kind"] == "tvpl":
+                # thuvienphapluat.vn: trang tìm kiếm có cấu trúc riêng (p.nqTitle[lawid])
+                # nên dùng adapter thay vì link_pattern chung.
+                from legalkb import tvpl
+                items = [{"title": d["title"], "url": d["url"], "desc": ""}
+                         for d in tvpl.search(s["url"], log=log)]
+            elif s["kind"] == "rss":
+                items = parse_rss(fetch(s["url"]))
             elif s["kind"] == "html":
-                items = parse_html(body, s["url"], s.get("link_pattern"))
+                items = parse_html(fetch(s["url"]), s["url"], s.get("link_pattern"))
             else:
-                raise RuntimeError(f"kind '{s['kind']}' chưa hỗ trợ (rss | html)")
+                raise RuntimeError(f"kind '{s['kind']}' chưa hỗ trợ (rss | html | tvpl)")
             if not items:
                 raise RuntimeError("lấy được trang nhưng 0 văn bản — kiểm URL/link_pattern")
             new = 0
@@ -242,9 +251,20 @@ def archive(store, lark, keys, root_folder, log=print):
                 log(f"[news] không tạo được folder {cc}: {exc}")
                 continue
         try:
-            raw = fetch_bytes(it["url"])
+            src = store.one("SELECT kind FROM legal_news_sources WHERE id=?",
+                            (it.get("source_id"),)) or {}
+            if src.get("kind") == "tvpl":
+                # Lưu TOÀN VĂN đã trích, không lưu HTML cả trang: trang .aspx nặng 400KB
+                # toàn menu/quảng cáo, mà nội dung cần thì đã tách được sạch.
+                from legalkb import tvpl
+                text = tvpl.fetch_text(it["url"])
+                if not text:
+                    raise RuntimeError("không trích được toàn văn (đổi layout?)")
+                raw, ext = text.encode("utf-8"), ".txt"
+            else:
+                raw, ext = fetch_bytes(it["url"]), _ext_of(it["url"])
             name = f"{_safe_name(it.get('doc_no') or '')} {_safe_name(it['title'])}".strip()
-            tok = lark.drive_upload(folders[cc], f"{name}{_ext_of(it['url'])}", raw)
+            tok = lark.drive_upload(folders[cc], f"{name}{ext}", raw)
             url = lark.drive_file_url(tok) if tok else None
             store.write("UPDATE legal_news_items SET drive_url=?, status='archived' "
                         "WHERE key=?", (url, key))
