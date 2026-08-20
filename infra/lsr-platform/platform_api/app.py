@@ -106,6 +106,8 @@ try:
 except Exception:
     pass
 LARK_DOMAIN = os.environ.get("LARK_DOMAIN", "https://open.larksuite.com").rstrip("/")
+# Cache tên bot theo app_id (đổi rất ít; process restart là nạp lại).
+_LARK_BOT_NAME: dict = {}
 
 # --- C8: khoá mã hoá token người dùng (at-rest). Chỉ nằm trong .env trên VM. ---
 # Không có khoá = broker TẮT HẲN, chứ không lưu token dạng rõ. Thà thiếu tính năng
@@ -3051,7 +3053,12 @@ def _lark_send_to(receive_id: str, id_type: str, *, text: str = "",
 # nhóm API. Thêm Approval hôm nay, Task/Docs tháng sau = thêm một dòng grant, không
 # phải PR vào core.
 
-_LARK_USER_SESSION_TTL = 900          # phiên authorize chờ người bấm đồng ý
+# Phiên authorize chờ người bấm đồng ý. 24 giờ, không phải 15-30 phút: đây là bước CÓ
+# NGƯỜI — link được gửi qua chat, người ta còn phải tìm mật khẩu account của agent rồi
+# mới đăng nhập; bấm sau 2 giờ là chuyện thường (đã gặp 20/08). Hết hạn KHÔNG phải lớp
+# bảo vệ chính: state vô dụng nếu không có code hợp lệ của Lark cho đúng redirect_uri,
+# và callback vẫn kiểm email người vừa đồng ý phải đúng subject.
+_LARK_USER_SESSION_TTL = int(os.environ.get("LARK_USER_AUTHORIZE_TTL", "86400"))
 # Scope mặc định theo "domain" nghiệp vụ để người cấp quyền không phải nhớ tên scope.
 # Tên scope KHÔNG được đoán. Bộ dưới đây lấy từ user token đang chạy thật trong tenant
 # (lark-cli auth status). Đoán sai thì Lark trả invalid_scope ở trang đồng ý — người đi
@@ -3210,11 +3217,27 @@ def lark_user_authorize_callback(body: dict) -> dict:
     if not (code and state):
         raise HTTPException(status_code=400, detail="thiếu code/state")
     with _db() as conn:
+        # Tra KHÔNG kèm điều kiện hết hạn, để phân biệt được "hết hạn" với "không tồn
+        # tại". Gộp hai ca thành một thông báo mờ thì người bấm link không biết phải làm gì.
         ses = conn.execute(
-            "SELECT * FROM lark_user_authorize_sessions WHERE state=%s AND expires_at > now()",
-            (state,)).fetchone()
+            "SELECT *, expires_at <= now() AS het_han FROM lark_user_authorize_sessions "
+            "WHERE state=%s", (state,)).fetchone()
         if not ses:
-            raise HTTPException(status_code=400, detail="phiên authorize không hợp lệ hoặc đã hết hạn")
+            raise HTTPException(status_code=400,
+                                detail="link authorize không hợp lệ (state không tồn tại) — "
+                                       "xin admin tạo link mới")
+        if ses["het_han"]:
+            conn.execute("UPDATE lark_user_authorize_sessions SET status='expired' "
+                         "WHERE state=%s", (state,))
+            conn.commit()
+            raise HTTPException(status_code=400,
+                                detail=f"link authorize đã hết hạn (tạo lúc "
+                                       f"{ses['created_at']:%d/%m %H:%M} UTC) — "
+                                       f"xin admin tạo link mới cho {ses['subject_email']}")
+        if ses["status"] == "done":
+            raise HTTPException(status_code=400,
+                                detail=f"link này đã dùng xong cho {ses['subject_email']} — "
+                                       f"mỗi link chỉ dùng một lần")
         secret = _LARK_APPS.get(ses["app_id"], "")
         r = requests.post(f"{LARK_DOMAIN}/open-apis/authen/v2/oauth/token", json={
             "grant_type": "authorization_code", "client_id": ses["app_id"],
@@ -3437,6 +3460,57 @@ def lark_user_call(body: dict, authorization: str = Header(default="")) -> dict:
                latency_ms=int((time.time() - _t0) * 1000), error=err)
         conn.commit()
     return {"http_status": status, "data": payload}
+
+
+def _lark_bot_name(app_id: str) -> str:
+    """Tên bot THẬT của một app Lark (bot/v3/info), cache trong process.
+
+    Console và trang xin quyền hiển thị `agents.lark_bot_name`. Trường đó trước đây điền
+    tay nên đổi app Lark là nó nói sai ngay (20/08: AG-LEGAL đã chuyển sang app riêng mà
+    console vẫn ghi "Minh Anh (bot chung)"). Lấy từ Lark thì không lệch được.
+    """
+    if not app_id:
+        return ""
+    hit = _LARK_BOT_NAME.get(app_id)
+    if hit is not None:
+        return hit
+    name = ""
+    try:
+        tok = _lark_token(app_id)
+        if tok:
+            d = requests.get(f"{LARK_DOMAIN}/open-apis/bot/v3/info",
+                             headers={"Authorization": f"Bearer {tok}"}, timeout=10).json()
+            name = ((d.get("bot") or {}).get("app_name") or "").strip()
+    except Exception:
+        name = ""
+    if name:
+        _LARK_BOT_NAME[app_id] = name
+    return name
+
+
+@app.post("/v1/lark/bots/sync")
+def lark_bots_sync(authorization: str = Header(default="")) -> dict:
+    """(admin) Đồng bộ lark_bot_name của mọi agent từ Lark. Chạy sau khi đổi app của agent."""
+    _require_admin(authorization)
+    _ensure_schema()
+    out, actor = [], _actor_of(authorization)
+    with _db() as conn:
+        rows = conn.execute("SELECT agent_id, lark_app_id, lark_bot_name FROM agents "
+                            "WHERE coalesce(lark_app_id,'') <> '' ORDER BY agent_id").fetchall()
+        for r in rows:
+            real = _lark_bot_name(r["lark_app_id"])
+            if not real:
+                out.append({"agent_id": r["agent_id"], "app_id": r["lark_app_id"],
+                            "ket_qua": "khong lay duoc ten (thieu app_secret?)"})
+                continue
+            if real != (r["lark_bot_name"] or ""):
+                conn.execute("UPDATE agents SET lark_bot_name=%s WHERE agent_id=%s",
+                             (real, r["agent_id"]))
+                _audit(conn, actor, "lark_bot_name_sync", "agent", r["agent_id"],
+                       {"cu": r["lark_bot_name"], "moi": real, "app_id": r["lark_app_id"]})
+                out.append({"agent_id": r["agent_id"], "cu": r["lark_bot_name"], "moi": real})
+        conn.commit()
+    return {"da_sua": [o for o in out if o.get("moi")], "van_de": [o for o in out if o.get("ket_qua")]}
 
 
 @app.post("/v1/lark/resolve")

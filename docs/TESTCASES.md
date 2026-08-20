@@ -620,3 +620,17 @@ giả (`c8test@hapas.vn`) — không chạm agent thật, không gọi Lark th�
 **Chưa nghiệm thu được (cần người bấm đồng ý trên Lark):** lời gọi Approval thật bằng
 user token của một account thật. Toàn bộ đường đi đã test bằng token giả + refresh giả;
 ca cuối chỉ chạy được sau khi chốt chính sách §5 và có identity đầu tiên.
+
+### §22.2 — Link authorize hết hạn + tên bot trên console
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 22.9 | callback với state không tồn tại | 400 nói rõ "state không tồn tại — xin link mới" | ✅ |
+| 22.10 | callback với state đã hết hạn | 400 nói rõ **đã hết hạn + giờ tạo + subject**, đánh dấu session `expired` | ✅ |
+| 22.11 | callback dùng lại link đã done | 400 "mỗi link chỉ dùng một lần" | ✅ |
+| 22.12 | TTL link authorize | 24h (bước có người, link gửi qua chat) | ✅ |
+| 22.13 | `POST /v1/lark/bots/sync` | lấy `app_name` thật từ `bot/v3/info`, sửa `lark_bot_name` lệch, ghi audit | ✅ 3 agent |
+| 22.14 | agent thiếu app_secret khi sync | báo trong `van_de`, không ghi tên rỗng lên DB | ✅ AG-HARRY |
+
+Sự cố 20/08 sinh ra §22.9-22.12: link 30 phút hết hạn trước khi người bấm, callback trả
+400 với thông báo mờ ("không hợp lệ hoặc đã hết hạn") nên không ai biết phải làm gì.
