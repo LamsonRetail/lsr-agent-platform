@@ -698,3 +698,22 @@ authorize C8.
 | 23.13 | identity của Ann sau khi đổi domain | còn nguyên, refresh còn 6 ngày | ✅ |
 | 23.14 | xin 4 link authorize liên tiếp trong 1 giây | 4× http 200, state khác nhau | ✅ (trước: lần 3 → **500** trùng khoá) |
 | 23.15 | dùng lại link đã bị thay | 400 "đã bị thay bằng link mới hơn" | ✅ |
+
+## §24 — Báo đã nhận trên Lark (thả emoji trước khi trả lời)
+
+Lark không có "typing indicator" cho bot, nên dấu hiệu duy nhất người dùng thấy được là
+một reaction. Làm ở **event_gateway** (không phải trong từng agent) để mọi agent có ngay
+và phản hồi tức thì thay vì chờ agent nghĩ xong.
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 24.1 | ingest trả `status=queued` | thả emoji `OK` lên tin của người hỏi | ⏳ chờ 1 tin thật |
+| 24.2 | ingest trả `unrouted` / `rejected` | **không** thả — hứa suông rồi im là tệ hơn không hứa | ✅ (theo code path) |
+| 24.3 | ingest trả `duplicate` | không thả lại | ✅ |
+| 24.4 | token + scope + endpoint reactions | Lark chỉ báo sai `message_id` (99992354), không báo thiếu quyền | ✅ |
+| 24.5 | Lark từ chối (thiếu scope / emoji lạ) | tự **tắt** báo-đã-nhận, log đúng 1 lần kèm cách sửa | ✅ (code) |
+| 24.6 | lỗi mạng khi thả emoji | bỏ qua, KHÔNG chặn luồng trả lời | ✅ |
+| 24.7 | dựng lại cả 8 gateway | 6 app có secret đều `connected to wss` lại; DATA/HARRY vẫn idle như trước | ✅ |
+
+Tắt cho một app cụ thể: đặt `LARK_ACK_EMOJI=` (rỗng) cho đúng container gateway đó —
+hữu ích với app nằm trong nhóm đông, mỗi tin một emoji sẽ thành ồn.
