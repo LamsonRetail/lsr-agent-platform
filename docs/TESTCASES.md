@@ -717,3 +717,41 @@ và phản hồi tức thì thay vì chờ agent nghĩ xong.
 
 Tắt cho một app cụ thể: đặt `LARK_ACK_EMOJI=` (rỗng) cho đúng container gateway đó —
 hữu ích với app nằm trong nhóm đông, mỗi tin một emoji sẽ thành ồn.
+
+## §25 — A2A mở qua Caddy + tài liệu cho project vibe code (17/17)
+
+Chạy **đúng đoạn code trong `docs/A2A.md`** bằng 2 agent nháp (`AG-A2A-CALLER-TEST`,
+`AG-A2A-TARGET-TEST`), dọn sạch trước và sau. Mục đích: tài liệu sai thì phải fail ở đây,
+không phải fail trên máy người đọc.
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 25.1 | `/v1/self/directory` | caller thấy chính mình `is_self=true` | ✅ |
+| 25.2 | chưa grant | `can_call=false` | ✅ |
+| 25.3 | gọi khi chưa grant | 403 + audit `a2a_denied` | ✅ |
+| 25.4 | gọi sau khi có grant | trả `req_id` + `status=queued` ngay, không chờ | ✅ |
+| 25.5 | poll khi chưa xong | `job_status=queued` | ✅ |
+| 25.6 | target lease job | thấy job `channel=a2a` trong `/v1/self/jobs` | ✅ |
+| 25.7 | `payload.text` | đúng `task` bên gọi gửi | ✅ |
+| 25.8 | `payload.from_agent` + `hop` | có, để chuyển tiếp hop | ✅ |
+| 25.9 | target `reply` + `complete` | caller đọc được `result.text` | ✅ |
+| 25.10 | `X-A2A-Hop: 9` | 429 vượt `A2A_MAX_HOP=3` | ✅ |
+| 25.11 | tự gọi chính mình | 400 | ✅ |
+| 25.12 | target không tồn tại | 404 | ✅ |
+| 25.13 | agent khác đọc `req_id` của mình | 404 (không rò kết quả sang agent khác) | ✅ |
+| 25.14 | audit 2 chiều | `a2a_call` bên gọi + `a2a_serve` bên phục vụ, cùng `req_id` | ✅ |
+| 25.15 | dọn sạch | không còn agent/grant/req/job test | ✅ |
+
+### §25.1 — Định tuyến + rate limit
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 25.16 | `/v1/self/a2a/*`, `/v1/self/directory` qua Caddy, không gateway token | 401 của app (mở sẵn cho agent) | ✅ |
+| 25.17 | `POST /v1/a2a/grant` không gateway token | 403 của guard (admin-only) | ✅ |
+| 25.18 | 90 request liên tiếp vào zone A2A | **0** lần 429 (zone riêng 600/phút) | ✅ |
+| 25.19 | 80 request vào zone chung | 20 lần 429 — vẫn giữ 60/phút, không bị nới theo | ✅ |
+
+**Hai lỗi bộ test này bắt được, không phải lỗi platform mà là lỗi tài liệu/quy trình:**
+`GET /v1/self/jobs` trả về **list**, tài liệu bản đầu viết `["jobs"]` → `TypeError` ngay
+dòng đầu người đọc copy. Và lần chạy đầu crash giữa bài để lại `a2a_grants`, làm case
+"chưa grant → bị chặn" pass sai ở lần sau — test phải tự dọn **trước** khi chạy.

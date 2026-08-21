@@ -43,6 +43,21 @@ platform.34-126-154-135.sslip.io {
 	# C8: /v1/lark/* mở cho agent (resolve/send/resource...), nhưng authorize/grants/
 	# revoke của broker user token là việc của ADMIN — kéo về sau lớp guard để không
 	# ai ngoài mạng gọi tới được, kể cả khi lỡ lộ admin token.
+	# A2A: agent gọi agent. Đã nằm trong /v1/self/* nên vốn đã mở, NHƯNG phải tách zone
+	# rate-limit riêng: A2A là máy-gọi-máy và bên gọi phải POLL kết quả, trong khi zone
+	# chung chỉ 60 req/phút TÍNH THEO IP — nhiều agent sau cùng một IP công ty là chạm
+	# ngưỡng, và lúc đó lỗi hiện ra dưới dạng "A2A treo" rất khó lần.
+	@a2a path /v1/self/a2a /v1/self/a2a/* /v1/self/directory
+	handle @a2a {
+		rate_limit {
+			zone za2a {
+				key {remote_host}
+				events 600
+				window 1m
+			}
+		}
+		reverse_proxy platform_api:8090
+	}
 	@larkuseradmin path /v1/lark/user/authorize/* /v1/lark/user/grants /v1/lark/user/identities /v1/lark/user/identities/*
 	handle @larkuseradmin {
 		import guard platform_api:8090 zlarkuser

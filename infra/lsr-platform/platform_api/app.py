@@ -3066,6 +3066,10 @@ _LARK_USER_SESSION_TTL = int(os.environ.get("LARK_USER_AUTHORIZE_TTL", "86400"))
 _LARK_USER_SCOPES = {
     "approval": ["approval:approval:read", "approval:instance:read",
                  "approval:instance:write", "approval:task:read", "approval:task:write"],
+    # C14: đọc hội thoại/tin nhắn dưới danh nghĩa account (userchat). Tên scope do owner
+    # đối chiếu trên tenant, KHÔNG đoán — thêm domain mới thì lấy tên thật từ một user
+    # token đang chạy (`lark-cli auth status`) rồi probe URL authorize trước khi ship.
+    "im": ["im:chat:readonly", "im:message", "im:message:readonly", "im:resource"],
 }
 # Luôn kèm: offline_access để có refresh token, auth:user.id:read để callback đọc được
 # danh tính người vừa đồng ý (bước kiểm "đúng account" phụ thuộc vào scope này).

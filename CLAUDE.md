@@ -45,6 +45,23 @@ Sau đó **đọc `agents/<ID>/CLAUDE.md`** — đó là hướng dẫn chính c
    `templates/golive.example.json`) → `bash scripts/submit-golive.sh <ID>` → đủ 28 mục
    là hệ thống tự trình admin duyệt. Chi tiết: [docs/GOLIVE.md](docs/GOLIVE.md).
 
+## Gọi agent khác (A2A) — khi việc nằm ngoài phạm vi agent của bạn
+
+Đừng nhúng nghiệp vụ của team khác vào agent mình. Gọi agent đang giữ việc đó:
+
+```bash
+# ai đang sống, làm được gì, mình được gọi ai (can_call)
+curl -sS https://platform.34-126-154-135.sslip.io/v1/self/directory \
+  -H "Authorization: Bearer $LSR_AGENT_TOKEN" | python3 -m json.tool
+```
+
+Đường vào **mở sẵn**, không cần gateway token: `POST /v1/self/a2a/{target}` để gọi,
+`GET /v1/self/a2a/{req_id}` để lấy kết quả. Hai điều kiện: **cả hai agent phải `active`**
+và **admin đã cấp grant** `caller → target`. Job A2A vào CÙNG hàng đợi với Lark/web nên
+bên nhận thường không phải viết thêm code.
+
+Hướng dẫn đầy đủ + code copy-paste + bảng lỗi: **[docs/A2A.md](docs/A2A.md)**.
+
 ## Cấu trúc repo (tham khảo nhanh)
 
 - `agents/` — project của từng agent (mỗi agent 1 docker, tự chạy được)
@@ -54,7 +71,8 @@ Sau đó **đọc `agents/<ID>/CLAUDE.md`** — đó là hướng dẫn chính c
 - `scripts/` — new-agent.sh, agent-test.sh, agent-chat.sh, lsr_adopt.py,
   add-model-credential.sh, add-lark-app.sh
 - `libs/lsr_lark/` — thư viện Lark dùng chung (broker qua platform, không cầm secret)
-- `docs/` — ARCHITECTURE.md (kiến trúc v3), TESTCASES.md (bộ test toàn platform),
+- `docs/` — A2A.md (agent gọi agent), GOLIVE.md, LARK_USER_BROKER.md,
+  ARCHITECTURE.md (kiến trúc v3), TESTCASES.md (bộ test toàn platform),
   PLAN.md §0 (lộ trình P1–P10)
 
 ## Lệnh hay dùng

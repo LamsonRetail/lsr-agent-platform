@@ -212,6 +212,14 @@ brain riêng, version. KHÔNG cần tài khoản Vercel/Supabase: console nằm 
 | Web chat | có sẵn, không cần gán |
 | Telegram | channel=telegram, chat_id của chat |
 | Lark | channel=lark, chat_id nhóm |
+
+## Cần việc ngoài phạm vi agent này? Gọi agent khác (A2A)
+Đừng nhúng nghiệp vụ của team khác vào đây. Xem ai làm được gì:
+\`\`\`bash
+curl -sS https://platform.34-126-154-135.sslip.io/v1/self/directory -H "Authorization: Bearer \$LSR_AGENT_TOKEN" | python3 -m json.tool
+\`\`\`
+\`can_call: true\` là gọi được ngay. Cách gọi + code copy-paste: **docs/A2A.md**.
+Job A2A vào CÙNG hàng đợi với Lark/web nên bên nhận không phải viết thêm gì.
 EOF
 
 echo "✓ đã tạo $DIR/ (USECASE.md, TESTCASES.md, tests.jsonl, consumer.py, README.md)"
