@@ -1,7 +1,19 @@
 # Yêu cầu core: User Identity Broker cho Lark (dùng chung toàn platform)
 
 > Người yêu cầu: AG-LEGAL (owner `thint@hapas.vn`) · 19/08/2026
-> Mã nội bộ: **C8**. Làm xong C8 thì **C5 (broker Approval) không cần làm nữa** — xem §6.
+> Mã nội bộ: **C8**.
+>
+> ## ✅ CORE ĐÃ LÀM XONG — 20/08/2026
+>
+> `POST /v1/lark/user/call` + `GET /v1/lark/user/status` đã live; tài liệu:
+> `docs/LARK_USER_BROKER.md`. Identity `ann_legal@hapas.vn` đã authorize và đã grant cho
+> AG-LEGAL (`path_prefixes: ["/open-apis/approval/v4/"]`, `GET`+`POST`). Agent dùng qua
+> `legalkb/approval.py`. **Đo chạy thật**: `tasks?topic=1` trả `code:0`.
+>
+> ⚠️ **Nhưng câu "làm xong C8 thì C5 không cần làm nữa" là SAI** — đo lại 20/08 cho thấy
+> phần lớn API Approval dùng **tenant** token, user token chỉ dùng được cho view "việc
+> đang chờ tôi". Nên C5 vẫn cần, với nội dung khác: passthrough **tenant** token.
+> Xem `requests/C5-lark-tenant-passthrough.md`.
 
 ## 1. Vấn đề
 

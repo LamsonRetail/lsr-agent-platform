@@ -1,8 +1,8 @@
 {
-  "_trang_thai": "BẢN NHÁP — chưa nộp. Còn 3 mục phụ thuộc việc admin/Pháp chế làm (đánh dấu CHỜ:). Nộp bằng: bash ../../scripts/submit-golive.sh AG-LEGAL",
+  "_trang_thai": "BẢN NHÁP — chưa nộp. Còn 5 mục CHỜ người (add bot vào group · nội dung mẫu HĐ · publish instruction · thông báo phòng ban · minh bạch account máy). Nộp bằng: bash ../../scripts/submit-golive.sh AG-LEGAL",
 
   "owner_email": "thint@hapas.vn",
-  "backup_owner": "CHỜ: email Nguyễn Thị Anh (Legal) — cần để làm backup owner và nạp legal_roles",
+  "backup_owner": "anhnt1@hapas.vn — Nguyễn Thị Anh (Pháp chế). Đã nạp vào legal_roles, open_id ou_41b21c59… resolve qua broker 19/08",
   "team_id": "SQ-LEGAL",
   "team_members": [
     {"full_name": "Nguyễn Trần Thi", "role": "owner", "expertise": "BOD, chủ agent"},
@@ -37,9 +37,9 @@
 
   "data_sources_allowed": [
     "Lark Wiki space pháp chế 7595876759661186785 (chỉ đọc)",
-    "Lark Drive folder văn bản luật MIx2fFd8rlzWJBd9bQGlcLQegCd (đọc + ghi file văn bản luật crawl về)",
-    "Lark Drive folder mẫu hợp đồng (CHỜ: legal team chỉ định token folder)",
-    "Lark Drive folder lưu bản thảo LEGAL_DRAFT_FOLDER (CHỜ: chỉ định token folder)",
+    "Lark Drive kho văn bản luật GUYFfiGeqlnyiOd8rU9lMLDvgwf (đọc + GHI — đã kiểm ghi được 20/08; agent tự tạo folder con theo nước VN/, TH/)",
+    "Lark Drive folder mẫu hợp đồng T8DzfOysElvbf4dMHB7lomb7grc (đọc+ghi được; CHỜ legal team ĐIỀN NỘI DUNG mẫu — hiện trống)",
+    "Lark Drive folder bản thảo DRAFT NHe5fRCSclUMvNdDmhul5njvg7c (đọc+ghi được)",
     "NotebookLM: notebook 'LSR Legal KB' + 'Legal Updates' (nguồn đã sync từ 2 mục trên)",
     "Nguồn luật public: thuvienphapluat.vn, luatvietnam.vn, chinhphu.vn, congbao.chinhphu.vn",
     "file hợp đồng do chính người dùng đính kèm trong chat (tải qua /v1/lark/resource)"
@@ -61,11 +61,11 @@
   ],
 
   "auth_mode": "subscription của owner (claude setup-token) — KHÔNG dùng API key chung",
-  "lark_connect": "app Lark của platform (gửi/nhận qua broker /v1/lark/*, agent không cầm app_secret). CHỜ: admin add bot vào group oc_2c44821d37e5e12a2c1651251cfd4efb và cấp scope wiki:wiki:readonly, drive:drive:readonly, docx:document:readonly, drive:file:upload, im:resource. Ngoại lệ đã ghi nhận: đọc/ghi Wiki-Drive còn dùng tenant token trực tiếp vì broker chưa có nhóm endpoint này (yêu cầu core C1)",
-  "telemetry_verified": "CHỜ: xác nhận thấy run/token trên Console → Agent → AG-LEGAL sau khi deploy runtime",
+  "lark_connect": "app Lark của platform (gửi/nhận qua broker /v1/lark/*, agent không cầm app_secret). ⛔ CHẶN — ĐO LẠI 20/08: app Admin cli_aaff13891ff85ee6 thấy 0 chat, gửi vào group trả 'Bot/User can NOT be out of the chat'. Không app nào của platform ở trong group oc_2c44821d37e5e12a2c1651251cfd4efb. CHỜ: admin add bot vào group đó và cấp scope wiki:wiki:readonly, drive:drive:readonly, docx:document:readonly, drive:file:upload, im:resource. Ngoại lệ đã ghi nhận: đọc/ghi Wiki-Drive còn dùng tenant token trực tiếp vì broker chưa có nhóm endpoint này (yêu cầu core C1)",
+  "telemetry_verified": "ĐÃ XÁC NHẬN 20/08: GET /v1/self → status=active, 29 run, golive_at=2026-08-14. Đọc bằng token agent, không cần vào Console",
   "deployment": "self_hosted: docker compose service AG-LEGAL trên VM platform /opt/lsr-platform. MỘT tiến trình duy nhất chứa cả chat + kb-sync + news-crawl + gate worker, vì NotebookLM chỉ cho một phiên mỗi tài khoản",
 
-  "tests_passed": "python3 -m pytest tests/ -q → 77/77 pass (offline, không cần secret) ngày 18/08/2026. Còn phải chạy: bash ../../scripts/agent-test.sh AG-LEGAL sau khi có LSR_AGENT_TOKEN",
+  "tests_passed": "python3 -m pytest tests/ -q → 174/174 pass (offline, không cần secret) ngày 20/08/2026. Còn phải chạy: bash ../../scripts/agent-test.sh AG-LEGAL",
   "escalation_rules": [
     "KB không có căn cứ → nói thẳng 'tài liệu hiện chưa quy định', hướng về Pháp chế, KHÔNG suy diễn",
     "NotebookLM lỗi → trả thông báo degrade rõ ràng, tuyệt đối không trả lời bằng kiến thức nền của model",
@@ -93,5 +93,6 @@
   "feedback_channel": "Group Lark oc_2c44821d37e5e12a2c1651251cfd4efb — Pháp chế thấy mọi câu trả lời và phản hồi ngay tại card; nhân viên phản hồi trực tiếp trong hội thoại với agent",
   "review_cadence": "weekly — owner xem Console (số run, token, lỗi) và hàng đợi gate (#ds) mỗi thứ Hai; monthly — Pháp chế soát log các cảnh báo mức thấp mà Bước 5 phát hiện để hiệu chỉnh checklist",
   "team_notified": "CHỜ: thông báo cho các phòng ban dùng agent trước khi mở kênh thật — nội dung: agent ghi log hội thoại và bộ phận Pháp chế giám sát để bảo đảm chất lượng tư vấn (câu chào của agent cũng nói rõ điều này ở lượt đầu mỗi hội thoại)",
+  "machine_identity_disclosed": "CHỜ: thông báo cho người trong quy trình trình ký rằng \"Ann Nguyen\" (ann_legal@hapas.vn) là ACCOUNT MÁY của agent, không phải người. Bắt buộc theo docs/LARK_USER_BROKER.md — agent hành động dưới danh tính này để đọc Lark Approval (quyền do platform giữ, agent không thấy token; thu hồi bất cứ lúc nào bằng /v1/lark/user/identities/.../revoke)",
   "scope_confirmed": "Owner xác nhận agent chỉ làm đúng phạm vi USECASE.md: hỏi đáp có trích dẫn, soạn bản thảo hợp đồng từ mẫu, rà soát hợp đồng đối tác, hỗ trợ hồ sơ trình ký, tổng hợp văn bản luật. Agent KHÔNG tư vấn pháp lý chính thức, KHÔNG ký/phát hành hợp đồng, KHÔNG quyết thay Pháp chế"
 }

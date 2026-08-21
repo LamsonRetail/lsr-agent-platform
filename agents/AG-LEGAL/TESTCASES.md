@@ -108,7 +108,7 @@
 | 22f | Nguồn chết | luatvietnam timeout | Trả rỗng, **không** làm vỡ lượt trả lời |
 | 22g | Không tìm được | tên không tồn tại | Nói thẳng không thấy, **không đoán** nội dung |
 
-## S5 — Hỗ trợ trình ký (Phase 6, chạy shadow)
+## S5 — Hỗ trợ trình ký (Phase 6) — **hồ sơ đến từ Lark Approval thật** từ 20/08
 
 | # | Kịch bản | Đầu vào | Kỳ vọng |
 |---|----------|---------|---------|
@@ -119,6 +119,21 @@
 | 26 | Bước 5 mức thấp | Góp ý câu chữ | **Cảnh báo tham khảo**, không chặn, Admin vẫn trình ký |
 | 27 | Vòng lặp | Đã quay lại Bước 4 2 lần | Lần 3 **escalate trưởng Pháp chế**, Agent chỉ ghi nhận |
 | 28 | Agent lỗi/timeout | Model không trả kết quả | Báo "chưa rà soát kịp", hồ sơ **vẫn đi tiếp**; gate observe quá SLA → `auto_passed` |
+
+### Đường vào từ Lark Approval (broker C8 — platform giữ user token)
+
+| # | Kịch bản | Đầu vào | Kỳ vọng |
+|---|----------|---------|---------|
+| 28a | Chưa cấu hình danh tính | thiếu `AGENT_LARK_SUBJECT` | Nói rõ thiếu cấu hình, **không** ném lỗi giữa việc |
+| 28b | Đọc việc đang chờ | poll | Gọi `tasks?topic=1&user_id_type=open_id` — `topic` là tham số **bắt buộc** |
+| 28c | Đọc instance bị chặn | Lark trả `99991668` | Nói rõ "cần TENANT token (C5)", **không** trả rỗng như thể hồ sơ không có gì |
+| 28d | Báo trùng | cùng `task_id` ở 3 lần poll | Báo group **đúng một lần** |
+| 28e | Chưa đọc được nội dung | instance không đọc được | **Vẫn báo** hồ sơ đã tới + nhờ Pháp chế mở trực tiếp |
+| 28f | Task không có id | payload lạ | Bỏ qua, không báo |
+| 28g | Hồ sơ đọc được | form có tên + mô tả | Rà soát bằng **`step3` cũ**, lưu `signing_dossiers`, mở gate observe |
+| 28h | Có file đính kèm chưa đọc được | form có `attachments` | Báo cáo ghi rõ "rà soát dựa trên mô tả trong form" |
+| 28i | Form rỗng | `form=[]` | **Không gọi model**, không sinh báo cáo từ không có gì |
+| 28j | Danh tính sắp hết hạn | `refresh_days_left ≤ 2` | Nhắc vào group **một lần cho mỗi mốc ngày** |
 
 ## Phase 7 — Golive & chống bịa nguồn
 
@@ -134,4 +149,4 @@
 > **Độ phủ tự động**: `python3 -m pytest tests/ -q` → **88 case offline**, không cần secret.
 > Ánh xạ: `test_consumer.py` (chuẩn platform + S1 + observe) · `test_gates.py` (lệnh duyệt,
 > quyền, SLA) · `test_flows.py` (S2–S5 + hệ quả sau khi duyệt) · `test_golden.py` (chống
-> bịa nguồn + trích text) · `test_sync.py` (đồng bộ KB).
+> bịa nguồn + trích text) · `test_sync.py` (đồng bộ KB) · `test_approval.py` (S5 qua broker C8).

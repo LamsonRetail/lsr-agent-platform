@@ -395,9 +395,48 @@ def news_cycle(b, group_chat_id, log=print):
 
 # ============================ S5 — trình ký (shadow) ============================
 
+def s5_from_instance(b, instance_code, title, data):
+    """Hồ sơ đến từ **Lark Approval thật** → báo cáo Bước 3.
+
+    Đường vào mới (thay cho shadow): `consumer.approval_loop` thấy việc đang chờ account
+    của agent, đọc instance rồi gọi hàm này. Logic rà soát dùng lại **nguyên** `step3` —
+    đúng như đã hứa từ đầu là khi nối được Approval thì chỉ đổi phần vào/ra.
+
+    Chưa đọc được file đính kèm thì vẫn rà soát trên **mô tả trong form** và nói rõ là
+    chưa đọc file: nửa cái rà soát có ghi chú còn hơn không rà gì mà im.
+    """
+    form = signing.parse_form((data or {}).get("form"))
+    ctype = _guess_type(b, form.get("contract_name") or title or "")
+    text = "\n".join(x for x in (form.get("contract_name"), form.get("description")) if x)
+    atts = form.get("attachments")
+    if not text:
+        return (f"📋 **Hồ sơ trình ký mới** — {title}\n- Instance: `{instance_code}`\n"
+                "- ⚠️ Form không có nội dung đọc được → chưa rà soát được, nhờ Pháp chế "
+                "mở trực tiếp trên Lark Approval.")
+    d = b.dossiers.open(instance_code, contract_type=ctype, requester=None, chat_id=None)
+    policy, _ = review_mod.get_checklist(b.engine, b.store)
+    res = signing.step3(brain, b.store, text, ctype, policy, model=b.model)
+    report = signing.render_step3(res, ctype)
+    b.dossiers.save(instance_code, step="step3", step3_report=report)
+    risk = "high" if (res["missing_docs"] or
+                      any(f.get("severity") == "high" for f in res["findings"])) else "low"
+    b.gates.open("s5_step3", OBSERVE, risk=risk,
+                 title=f"{instance_code} · {ctype or 'chưa rõ loại'}",
+                 payload={"summary": report[:400], "instance_code": instance_code},
+                 sla_hours=signing.SLA_MINUTES / 60.0, notify=(risk == "high"))
+    head = (f"📋 **Hồ sơ trình ký mới** — {title}\n- Instance: `{instance_code}`\n"
+            + ("- File đính kèm: chưa đọc được nội dung file (rà soát dựa trên mô tả "
+               "trong form)\n" if atts else ""))
+    return head + "\n" + report
+
+
 def s5_dossier(b, job, q, sid, uref, chat_id):
-    """Shadow mode: hồ sơ vào qua chat. Khi core mở broker Approval (C5) thì chỉ đổi
-    phần vào/ra, logic Bước 3/5 dùng lại."""
+    """Hồ sơ vào qua **chat** — đường phụ, vẫn giữ.
+
+    Đường chính là `s5_from_instance` (hồ sơ đến từ Approval). Giữ đường chat lại vì: hồ
+    sơ nào không có node duyệt tới account của agent thì agent không thấy trong
+    `tasks?topic=1`, và người vẫn cần nhờ rà soát được.
+    """
     payload = job.get("payload") or {}
     file_key = payload.get("file_key")
     if not file_key:

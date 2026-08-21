@@ -26,7 +26,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from legalkb import addressing, brain, contracts, flows, gates as gates_mod, news, voice
+from legalkb import (addressing, approval, brain, contracts, flows,
+                     gates as gates_mod, news, voice)
 from legalkb.engine import NotebookLMEngine
 from legalkb.flows import Bundle
 from legalkb.gates import GATE, OBSERVE, Gates
@@ -53,6 +54,8 @@ GREETING = ("Mình là **Legal Agent** — trợ lý pháp chế nội bộ củ
             "để bảo đảm chất lượng tư vấn, và Pháp chế có thể tham gia trực tiếp khi cần.\n\n"
             "---\n")
 GROUP_CHAT_ID = os.environ.get("LEGAL_GROUP_CHAT_ID", DEFAULT_GROUP)
+# Hồ sơ trình ký không tới theo giây; 5 phút là đủ nhanh mà không nện API Lark.
+APPROVAL_TICK = float(os.environ.get("APPROVAL_TICK_MIN", "5")) * 60
 
 
 # ============================ khởi tạo ============================
@@ -477,6 +480,77 @@ def news_loop(b):
         time.sleep(600)
 
 
+def approval_loop(b):
+    """S5 — phát hiện hồ sơ trình ký đang chờ **account của agent** trên Lark Approval.
+
+    Đây là phần S5 đã **thoát khỏi shadow**: trước đây hồ sơ phải được người nộp vào nhóm
+    chat, nay agent tự thấy việc đang chờ mình trong Approval (qua C8, đã đo chạy 20/08).
+
+    Còn thiếu **một** thứ: đọc form + file đính kèm của hồ sơ cần TENANT token và platform
+    chưa có passthrough (yêu cầu C5, xem `requests/C5-lark-tenant-passthrough.md`). Nên khi
+    thấy hồ sơ mới, agent báo vào group Pháp chế kèm nói rõ chưa đọc được nội dung — **cố ý
+    không im lặng**: một hồ sơ đã tới mà không ai biết còn tệ hơn một tin báo thiếu.
+
+    Ba điều KHÔNG được phá ở vòng lặp này:
+      1. **Không bao giờ chặn hồ sơ.** Agent chỉ đọc và báo; người vẫn duyệt như cũ.
+      2. **Không báo trùng.** Khoá theo `task_id` trong `meta`, vì `topic=1` trả lại đúng
+         việc đó ở mọi lần poll cho tới khi người xử lý xong.
+      3. **Danh tính hết hạn thì kêu.** `refresh_token` sống 7 ngày; im lặng hết hạn nghĩa
+         là S5 chết âm thầm — đúng lỗi đã xảy ra 17/07 mà 19/08 mới phát hiện.
+    """
+    warned_days = None
+    while True:
+        try:
+            st = approval.status(b.pf)
+            if not st.get("connected"):
+                if warned_days != "off":
+                    print(f"[approval] {approval.summarise_status(st)}", file=sys.stderr,
+                          flush=True)
+                    warned_days = "off"
+                time.sleep(APPROVAL_TICK)
+                continue
+            left = st.get("refresh_days_left")
+            if isinstance(left, int) and left <= 2 and warned_days != left:
+                warned_days = left
+                b.pf.lark_send(GROUP_CHAT_ID, markdown=(
+                    f"⚠️ **Danh tính Lark của agent còn {left} ngày** "
+                    f"(`{st.get('subject')}`). Hết hạn thì phần trình ký (S5) dừng đọc "
+                    f"được hồ sơ. Nhờ admin cấp quyền lại: Console → trang agent → "
+                    f"Danh tính Lark."))
+            tasks, err = approval.pending_tasks(b.pf)
+            if err:
+                print(f"[approval] không đọc được việc chờ: {err}", file=sys.stderr,
+                      flush=True)
+            for t in tasks:
+                _handle_pending_task(b, t)
+        except Exception as exc:
+            print(f"[approval] lỗi: {exc}", file=sys.stderr, flush=True)
+        time.sleep(APPROVAL_TICK)
+
+
+def _handle_pending_task(b, task):
+    """Một việc đang chờ → mở gate observe + báo group. Chỉ báo MỘT lần cho mỗi việc."""
+    tid = str(task.get("id") or task.get("task_id") or "")
+    inst = str(task.get("instance_code") or task.get("instance_id") or "")
+    if not tid:
+        return
+    seen_key = f"approval:task:{tid}"
+    if b.store.get_meta(seen_key):
+        return
+    b.store.set_meta(seen_key, str(int(time.time())))
+    title = task.get("title") or task.get("approval_name") or "(không có tiêu đề)"
+    data, err = approval.instance(b.pf, inst) if inst else (None, "task không có instance_code")
+    if err:
+        body = (f"📋 **Hồ sơ trình ký mới đang chờ agent** — {title}\n"
+                f"- Instance: `{inst or 'không rõ'}`\n"
+                f"- ⚠️ Chưa đọc được nội dung hồ sơ: {err}\n"
+                f"- Nhờ Pháp chế mở trực tiếp trên Lark Approval để rà soát Bước 3.")
+    else:
+        body = flows.s5_from_instance(b, inst, title, data)
+    b.pf.lark_send(GROUP_CHAT_ID, markdown=body)
+    print(f"[approval] báo hồ sơ {inst or tid} vào group", flush=True)
+
+
 def gate_loop(b):
     """Nhắc SLA + nạp lại instruction khi có version mới publish."""
     while True:
@@ -516,6 +590,14 @@ def main():
         print(f"news-crawl chạy nền (hằng tuần, thứ "
               f"{int(os.environ.get('NEWS_WEEKDAY', '0')) + 2}, "
               f"{os.environ.get('NEWS_HOUR', '7')}h)")
+    if os.environ.get("APPROVAL_WATCH", "1") == "1" and approval.subject():
+        threading.Thread(target=approval_loop, args=(b,), daemon=True,
+                         name="approval").start()
+        print(f"approval-watch chạy nền (danh tính {approval.subject()}, "
+              f"{int(APPROVAL_TICK / 60)} phút/lần)")
+    elif not approval.subject():
+        print(f"ℹ️  chưa đặt {approval.SUBJECT_ENV} — S5 không tự thấy hồ sơ trình ký",
+              flush=True)
     threading.Thread(target=gate_loop, args=(b,), daemon=True, name="gate").start()
 
     jobs_q = queue.Queue()

@@ -55,7 +55,9 @@ legalkb/
   chinhphu.py      chinhphu.vn — số hiệu từ cột dữ liệu + PDF KÝ SỐ bản gốc
   tvpl.py          thuvienphapluat.vn — toàn văn qua HTML, không cần đăng nhập
   luatvietnam.py   luatvietnam.vn — TRA CỨU THEO TÊN (cách pháp chế đang làm tay)
-  signing.py       S5: Bước 3/Bước 5 trình ký (shadow — chờ core C5)
+  signing.py       S5: logic Bước 3/Bước 5 + form thật của workflow Lark Approval
+  approval.py      đọc Lark Approval qua broker C8 (platform giữ user token, agent
+                   KHÔNG thấy token). Bảng ĐO THẬT endpoint nào dùng token nào ở đầu file
   extract.py       trích text PDF/DOCX (không dùng /v1/extract vì nó đòi admin)
   addressing.py    gọi tên mới trả lời trong nhóm + khoá phiên theo chat (bộ nhớ nhóm)
   voice.py         nghe tin thoại; chưa có transcriber thì NÓI THẬT, không im lặng
@@ -84,6 +86,11 @@ legalkb/
 | Tra cứu | Model trả rác (JSON, quá dài) → **không tra cứu** | Đem rác đi tìm thì nguồn vẫn ra kết quả, và agent trích dẫn 3 văn bản không liên quan |
 | Tra cứu | `-d10.html` của luatvietnam là **DỰ THẢO** → loại, hoặc gắn cờ rõ | 72/123 kết quả tìm kiếm là dự thảo; trích dự thảo như đang có hiệu lực là sai nghiêm trọng |
 | S5 | Quá SLA 30' hoặc model lỗi → `auto_passed` | Máy không được làm nghẽn quy trình người |
+| S5 | Nguồn sự thật là `tasks?topic=1`, **không** phải `instances` | `instances` liệt kê đòi tenant token (đo 20/08); `topic` là tham số BẮT BUỘC, options [1,2,17,18] |
+| S5 | Mỗi `task_id` báo **đúng một lần** (khoá ở `meta`) | `topic=1` trả lại đúng việc đó ở mọi lần poll → không khoá là spam group mỗi 5 phút |
+| S5 | Chưa đọc được nội dung hồ sơ → **vẫn báo**, nói rõ chưa đọc được | Một hồ sơ đã tới mà không ai biết còn tệ hơn một tin báo thiếu |
+| S5 | Form rỗng → **không** rà soát | Không sinh báo cáo từ không có gì |
+| Danh tính | `refresh_token` 7 ngày; còn ≤2 ngày thì **nhắc group** | Im lặng hết hạn = S5 chết âm thầm (đã xảy ra 17/07, 19/08 mới phát hiện) |
 | S5 | Tối đa 2 lần quay lại Bước 4, lần 3 escalate | Chống vòng lặp vô hạn |
 | Mọi gate | Quá hạn chỉ **NHẮC**, không tự thông qua (trừ `observe`) | Điểm an toàn cốt lõi |
 | Nhóm | Chỉ trả lời khi **được gọi tên/@mention**; tin khác vẫn **ghi lượt** | Nhảy vào mọi câu là cách nhanh nhất để bị đá khỏi nhóm; nhưng vẫn cần ngữ cảnh khi được gọi |

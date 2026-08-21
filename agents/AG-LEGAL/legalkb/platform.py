@@ -170,6 +170,44 @@ class Platform:
                 print(f"[lark] fallback cũng lỗi: {exc}", file=sys.stderr, flush=True)
         return False
 
+    # ===== C8 — danh tính user Lark (platform giữ token, agent KHÔNG thấy) =====
+    # Một số API Lark chỉ nhận user token (Approval). Chuẩn platform: agent không được
+    # cầm token của account thật, nên gọi qua proxy có allowlist của platform.
+    # Tài liệu: docs/LARK_USER_BROKER.md
+
+    def lark_user_status(self, subject):
+        """Danh tính đã nối chưa. Trả dict (`connected`, `reason`, `refresh_days_left`…).
+
+        Gọi cái này TRƯỚC khi làm việc dài, để báo rõ "chưa nối được danh tính" thay vì
+        chết giữa việc bằng một lỗi 403 không ai hiểu.
+        """
+        q = urllib.parse.urlencode({"subject": subject})
+        return self._quiet("GET", f"/v1/lark/user/status?{q}",
+                           what="lark/user/status") or {"connected": False,
+                                                       "reason": "không gọi được platform"}
+
+    def lark_user_call(self, subject, method, path, body=None):
+        """Gọi một API Lark dưới danh tính `subject`. Trả `(data, error)`.
+
+        `data` là **nguyên response của Lark** (đã bóc lớp vỏ của broker). `error` là
+        chuỗi lý do khi không gọi được — cố ý trả lỗi thay vì raise, vì S5 tuyệt đối
+        không được làm treo hồ sơ của người chỉ vì API lỗi.
+        """
+        payload = {"subject": subject, "method": method, "path": path}
+        if body is not None:
+            payload["body"] = body
+        try:
+            r = self.call("POST", "/v1/lark/user/call", payload, timeout=60)
+        except PlatformError as exc:
+            return None, f"broker từ chối ({exc.status}): {exc.detail}"
+        except Exception as exc:
+            return None, f"không gọi được broker: {exc}"
+        data = (r or {}).get("data") or {}
+        code = data.get("code")
+        if code not in (0, None):
+            return data, f"Lark code={code} {data.get('msg') or ''}".strip()
+        return data.get("data", data), None
+
     def lark_resolve(self, email):
         r = self._quiet("POST", "/v1/lark/resolve", {"email": email}, what="lark/resolve")
         return (r or {}).get("open_id")

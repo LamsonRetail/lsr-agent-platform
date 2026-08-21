@@ -94,6 +94,80 @@ Chốt 17/08/2026: dùng **một group Lark** cho cả thông báo và phê duy�
 
 > Telegram: **bỏ khỏi scope** (chốt 17/08/2026) — không tạo bot, không cấu hình.
 
+## 3b. Add bot Lark vào group  ⛔ ĐANG CHẶN (đo lại 20/08)
+
+**Đây là việc chặn nhiều nhất còn lại.** Đo bằng token agent, không phải phỏng đoán:
+
+```
+GET /v1/lark/chats?app_id=cli_aaff13891ff85ee6  →  {"chats": []}          # 0 chat
+POST /v1/lark/send  →  502 "Lark từ chối: Bot/User can NOT be out of the chat."
+```
+
+Kiểm cả 4 app Lark có secret trên VM: **không app nào ở trong group
+`oc_2c44…4efb`**, cũng không ở trong `oc_7323f980…` (chat của account Ann). Nên việc
+"đã add bot" trước đó chưa có hiệu lực — có thể add app khác, hoặc add vào group khác.
+
+Cách làm (người có quyền quản group, trên Lark):
+
+1. Mở group → **Settings → Bots → Add bot** → chọn bot của **app Admin platform**
+   `cli_aaff13891ff85ee6`.
+2. Kiểm lại bằng chính lệnh trên: `GET /v1/lark/chats` phải thấy `chat_id` của group.
+3. Console → **Ingress** → routing binding `channel=lark` → **điền cả `app_id` và
+   `chat_id`** (để trống cả hai = binding "bắt tất", AG-OPS sẽ cảnh báo) → AG-LEGAL.
+
+Chưa có bước này thì: **không có thông báo, không duyệt được bằng lệnh `#12 duyệt`,
+S4 digest không gửi được, S5 không báo được hồ sơ**. Mọi thứ khác vẫn chạy.
+
+> Muốn bot mang **danh tính riêng** (tên "Ann"/AG-LEGAL thay vì bot dùng chung): core đã
+> mở sẵn chỗ `LEGAL_*` trong compose (C9, commit `7f6f7f1`), chỉ còn tạo custom app mới
+> trong Lark Developer Console rồi nạp `LEGAL_LARK_APP_ID/SECRET` bằng
+> `bash scripts/add-lark-app.sh LEGAL cli_xxx platform_api`. **Không** được trỏ `LEGAL_*`
+> vào app đang dùng của agent khác — hai long-connection trên cùng một app làm Lark chỉ
+> đẩy event cho một container, tin nhắn rơi rụng ngẫu nhiên (script đã chặn).
+
+## 3c. Danh tính Lark của agent (C8)  ✅ XONG 20/08
+
+Agent đọc Lark Approval dưới account **`ann_legal@hapas.vn`** ("Ann Nguyen") — account
+**máy**, không phải người. Platform giữ token (mã hoá, tự refresh); agent gọi
+`/v1/lark/user/call` và **không bao giờ thấy token**.
+
+```
+GET /v1/lark/user/status?subject=ann_legal@hapas.vn
+→ connected: true · scope approval read/write · path /open-apis/approval/v4/ · refresh 7 ngày
+```
+
+Hai việc **của người**, chưa xong:
+
+1. **Thông báo minh bạch** cho người trong quy trình trình ký rằng đây là account máy —
+   yêu cầu của `docs/LARK_USER_BROKER.md`, đã ghi vào `golive.json`
+   (`machine_identity_disclosed`).
+2. **`refresh_token` sống 7 ngày** (đo thật trong tenant này). Hết hạn thì phải có người
+   authorize lại: Console → trang agent → **Danh tính Lark**. Agent tự nhắc vào group khi
+   còn ≤2 ngày, nhưng nhắc chỉ tới được nếu bot đã ở trong group (mục 3b).
+
+## 3d. Publish `INSTRUCTION.md` — chỉ làm được trên Console
+
+Đo 20/08: `POST /v1/agents/AG-LEGAL/versions` → **403** vì Caddy chỉ mở nhóm `@selfserve`
+(`/v1/self/*`, `/v1/lark/*`…), route publish nằm sau `guard` (cần `X-Gateway-Token` trên VM).
+Không có endpoint `/v1/self/instruction`.
+
+**Và như vậy là đúng**: `instruction_block` là *policy*. Để agent tự publish policy của
+chính nó thì mất luôn ý nghĩa kiểm soát. Nên đây là việc của owner/admin, không phải việc
+agent tự làm.
+
+Cách làm: Console (**`https://agent.hapas-ai.tech`** — domain mới, commit `53eb2bb`) →
+Agent **AG-LEGAL** → Instruction → dán nội dung `INSTRUCTION.md` → **Publish version**.
+
+Kiểm bằng:
+
+```bash
+curl -s -H "Authorization: Bearer $LSR_AGENT_TOKEN" \
+  "$LSR_PLATFORM_URL/v1/self/version"
+```
+
+Phải thấy `version` ≠ null. Hiện trả `"note": "chưa publish version nào"`.
+Agent nạp lại trong ≤10 phút (`gate_loop`), không cần deploy lại.
+
 ## 4. Đăng ký agent với platform
 
 Chuẩn mới (P11) — **không đi xin enroll token của ai**:
@@ -167,12 +241,15 @@ Lưu ý vận hành:
 ## Checklist
 
 - [x] Bot vào được wiki space (mục 1) — ✅ 18/08, đọc được 56 node
-- [ ] `storage_state.json` (mục 2) — ⚠️ **hết hạn 18/08, đang chặn sync** (0/50 nạp được)
-- [ ] Bot ở trong group `oc_2c44…4efb` (mục 3) — **chặn thông báo & phê duyệt**
-- [ ] **Email của Nguyễn Thị Anh** để `seed_roles.py` chạy được (mục 3)
-- [x] LSR_AGENT_TOKEN (mục 4) — ✅ agent `status=active` từ 14/08, 20 run
-- [ ] `instruction_block` đã publish (`GET /v1/self/context` ≠ null) — **điều kiện golive thật**
-- [ ] Sync lần đầu thành công (mục 5)
+- [x] `storage_state.json` (mục 2) — ✅ login lại 19/08, sync **32/32, 0 lỗi**. Phiên xoay cookie nên sẽ hết hạn lại: dấu hiệu là `Authentication expired` cho MỌI tài liệu
+- [ ] Bot ở trong group `oc_2c44…4efb` (mục **3b**) — ⛔ **đo lại 20/08: 0 app nào ở trong group**
+- [x] **Email của Nguyễn Thị Anh** — ✅ `anhnt1@hapas.vn`, đã nạp `legal_roles`
+- [x] Danh tính Lark của agent (C8, mục 3c) — ✅ connected 20/08
+- [ ] Thông báo minh bạch "Ann Nguyen là account máy" (mục 3c)
+- [x] LSR_AGENT_TOKEN (mục 4) — ✅ agent `status=active` từ 14/08, **29 run** (đo 20/08)
+- [ ] `instruction_block` đã publish (mục **3d** — chỉ làm trên Console) — **điều kiện golive thật**
+- [x] Sync lần đầu thành công (mục 5) — ✅ 19/08: 32 tài liệu nạp, 18 mục rỗng bị loại đúng
 - [ ] (Phase 3) **Nội dung 8 mẫu hợp đồng trong Wiki** — hiện rỗng (12 ký tự/node). Mẫu lấy từ Wiki được (export Lark Doc → docx đã kiểm OK), không cần Drive folder riêng
-- [ ] (Phase 5) Danh sách nguồn luật uy tín khởi tạo
-- [ ] (Phase 6) Tên quy trình trình ký trên Lark Approval + checklist đầu mục hồ sơ
+- [x] (Phase 5) Danh sách nguồn luật — ✅ **3 nguồn VN đang bật** (chinhphu.vn · thuvienphapluat · LuatVietnam RSS), đã lưu thật PDF ký số + toàn văn. **Thái Lan còn 0 nguồn** — 3 nguồn thử đều không lấy được tự động, cần URL trang danh sách thật từ nhóm pháp chế
+- [x] (Phase 6) Quy trình trình ký — ✅ `approval_code=0338BCF9…`, 4 node, 4 field form đã ghim vào `signing.py`; checklist đầu mục đã nạp (`seed_news.py`)
+- [ ] (Phase 6) **C5 — passthrough tenant token** để đọc form/file hồ sơ + ghi comment vào instance (`requests/C5-lark-tenant-passthrough.md`)
