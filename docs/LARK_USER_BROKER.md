@@ -97,6 +97,54 @@ Cách đọc lỗi: `99991668` = endpoint đó **đòi tenant token**, gọi qua
 hoặc connector `lark` thường. `99992402` = user token ĐÃ được nhận, chỉ sai tham số —
 đây là dấu hiệu tốt, cứ sửa query rồi gọi lại.
 
+## Bộ grant chuẩn (dùng lại cho mọi agent về sau)
+
+`path_prefixes` là allowlist theo tiền tố path, `methods` là allowlist method. Dùng đúng
+bộ dưới đây thay vì tự nghĩ mỗi lần:
+
+| Nhu cầu | `path_prefixes` | `methods` |
+|---|---|---|
+| Tra Approval | `/open-apis/approval/v4/` | `GET`, `POST` |
+| **Đọc + trả lời tin (DM và group)** | `/open-apis/im/v1/` | `GET`, `POST` |
+| Chỉ đọc tin, KHÔNG gửi | `/open-apis/im/v1/chats`, `/open-apis/im/v1/messages` | `GET` |
+
+`/open-apis/im/v1/` + `GET,POST` phủ toàn bộ việc nhắn tin dưới danh nghĩa account:
+
+| Việc | Lời gọi |
+|---|---|
+| Danh sách chat đang ở trong | `GET /open-apis/im/v1/chats` |
+| Đọc lịch sử một chat | `GET /open-apis/im/v1/messages?container_id_type=chat&container_id=oc_…` |
+| Đọc một tin cụ thể | `GET /open-apis/im/v1/messages/{message_id}` |
+| Gửi vào **group** | `POST /open-apis/im/v1/messages?receive_id_type=chat_id` |
+| Gửi **DM** | `POST /open-apis/im/v1/messages?receive_id_type=open_id` |
+| Trả lời trong thread | `POST /open-apis/im/v1/messages/{message_id}/reply` |
+| Tải ảnh/file trong tin | `GET /open-apis/im/v1/messages/{id}/resources/{file_key}` |
+| Thả emoji | `POST /open-apis/im/v1/messages/{id}/reactions` |
+
+**Cố tình KHÔNG cấp `DELETE`.** Thu hồi tin (`DELETE /open-apis/im/v1/messages/{id}`) là
+hành động xoá dấu vết dưới danh nghĩa một account — nằm ngoài "đọc và trả lời". Cần thì
+cấp riêng, đừng gộp vào bộ chuẩn.
+
+## Được phép ≠ biết có tin: chuyện NHẬN tin
+
+Grant cho agent quyền **đọc và gửi**. Nó không làm agent **biết** có tin mới.
+
+Long-connection của platform mở bằng credential của **APP (bot)**, nên:
+
+| Tình huống | Có tới platform không |
+|---|---|
+| Tin trong group mà **bot của agent cũng ở trong đó** | ✅ có — đi qua `event_gateway` như thường |
+| Tin trong group mà chỉ có **account** (không có bot) | ❌ không |
+| **DM gửi thẳng cho account** (vd nhắn riêng `ann_legal@`) | ❌ không |
+
+Hai cách xử lý ca ❌:
+
+1. **Poll** — agent tự gọi `GET /open-apis/im/v1/chats` + `messages` theo chu kỳ qua broker.
+   Grant hiện tại đã đủ, không cần core làm gì thêm; đổi lại có độ trễ và tốn lời gọi.
+2. **Listener theo user token** — mở long-connection bằng danh tính account thay vì app
+   (cách agent Jenny đang dùng với `bod_assistant@hapas.vn`). Nhận tức thì, nhưng phải làm
+   ở core.
+
 ## Agent dùng thế nào
 
 ```python

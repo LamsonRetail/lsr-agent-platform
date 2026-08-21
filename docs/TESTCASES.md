@@ -755,3 +755,27 @@ không phải fail trên máy người đọc.
 `GET /v1/self/jobs` trả về **list**, tài liệu bản đầu viết `["jobs"]` → `TypeError` ngay
 dòng đầu người đọc copy. Và lần chạy đầu crash giữa bài để lại `a2a_grants`, làm case
 "chưa grant → bị chặn" pass sai ở lần sau — test phải tự dọn **trước** khi chạy.
+
+## §26 — Grant `im` cho user account: đọc + trả lời (DM và group)
+
+Grant AG-LEGAL → `ann_legal@hapas.vn`: `path_prefixes=[/open-apis/approval/v4/,
+/open-apis/im/v1/]`, `methods=[GET,POST]`. Kiểm qua domain thật bằng token tạm của
+AG-LEGAL (đã xoá sau khi test). **Không gửi tin thật cho ai**: các case gửi dùng
+`receive_id` không tồn tại — Lark trả lỗi THAM SỐ chứng tỏ quyền đã qua.
+
+| # | Case | Kỳ vọng | KQ |
+|---|---|---|---|
+| 26.1 | authorize lại với `domains=approval,im` | identity có đủ 4 scope `im`, refresh reset 7 ngày | ✅ |
+| 26.2 | `GET im/v1/chats` | `code 0`, 3 chat | ✅ |
+| 26.3 | `GET im/v1/messages` (nhóm Legal) | `code 0`, đọc được lịch sử | ✅ |
+| 26.4 | `POST im/v1/messages` receive_id_type=chat_id | lỗi tham số (230001), **không** lỗi quyền → gửi group được phép | ✅ |
+| 26.5 | `POST im/v1/messages` receive_id_type=open_id | lỗi tham số (99992351) → gửi DM được phép | ✅ |
+| 26.6 | `POST im/v1/messages/{id}/reply` | lỗi tham số (99992354) → trả lời thread được phép | ✅ |
+| 26.7 | `DELETE im/v1/messages/{id}` | chặn ở platform: "method DELETE không được cấp" | ✅ |
+| 26.8 | `GET contact/v3/users` | chặn: ngoài allowlist | ✅ |
+| 26.9 | `GET drive/v1/files` | chặn: ngoài allowlist | ✅ |
+| 26.10 | trước khi nới grant | `im/v1/chats` bị chặn đúng (403 kèm danh sách path được cấp) | ✅ |
+
+Chưa nghiệm thu được: **nhận** tin nhắn gửi thẳng cho user account. Long-connection hiện
+mở bằng credential APP nên DM tới account không tới platform — xem mục "Được phép ≠ biết
+có tin" trong `docs/LARK_USER_BROKER.md`.
