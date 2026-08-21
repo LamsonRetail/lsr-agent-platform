@@ -1,12 +1,27 @@
 {
-  "as_of": null,
-  "quet_luc": null,
-  "note": "Job 'ploy-quet-lark-thailand' (chạy 08:07 hằng ngày) sẽ ghi file này. Chưa chạy lần nào.",
-  "diem_chinh": [],
+  "as_of": "2026-08-21",
+  "quet_luc": "2026-08-21 12:05",
+  "khoang_quet": "19/08 22:00 → 21/08 12:00 (chạy bù, gộp 2 ngày)",
+  "diem_chinh": [
+    "Đối tác vận chuyển báo KHÔNG thuận tiện vào nhận hàng buổi chiều/tối (20/08 20:41) — lặp lại tình trạng 19/08 'không có xe vào nhận hàng'",
+    "Kho được yêu cầu ưu tiên xử lý và bàn giao đơn cho hãng vận chuyển ngay trong ngày (20/08, nhóm HAPAS_TH & FFM BST)",
+    "4 nhóm cung ứng/nhập hàng (VẬN HÀNH CUNG ỨNG · HAPAS X FLASH FFM · NHẬP HÀNG HAPAS THÁI LAN · KD HAPAS THAILAND) im lặng từ 19/08 22:00 — không có mốc/số mới",
+    "Nhóm [TH] COUNTRY LEADER TEAM có link Base mới sáng 21/08 nhưng là bảng tuyển dụng/hồ sơ ứng viên → LOẠI TRỪ theo luật, không nạp"
+  ],
   "so_moi": [],
   "moc_thay_doi": [],
   "quyet_dinh": [],
-  "rui_ro": [],
-  "cho_vinh_quyet": [],
-  "khong_doc_duoc": []
+  "rui_ro": [
+    {
+      "noi_dung": "Xe không vào nhận hàng buổi chiều/tối — đã xảy ra 2 ngày liên tiếp (19/08 và 20/08). Đơn dồn sang ngày sau → rủi ro trượt SLA giao hàng.",
+      "nguon": "HAPAS_TH & FFM BST 20/08"
+    }
+  ],
+  "cho_vinh_quyet": [
+    "Chốt khung giờ nhận hàng cố định với đối tác vận chuyển, hay chấp nhận cut-off sớm hơn trong ngày?"
+  ],
+  "khong_doc_duoc": [],
+  "loai_tru_theo_luat": [
+    "Base tuyển dụng/hồ sơ ứng viên chia sẻ trong [TH] COUNTRY LEADER TEAM 21/08 (CV, email, điện thoại, kết quả phỏng vấn) — thuộc nhóm con người/hồ sơ cá nhân"
+  ]
 }
