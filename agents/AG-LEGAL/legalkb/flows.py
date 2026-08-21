@@ -374,6 +374,12 @@ def news_cycle(b, group_chat_id, log=print):
     diễn giải (digest) mới phải chờ Pháp chế (review §B).
     """
     keys = news.crawl(b.store, log=log)
+    # Văn bản do người bỏ tay vào kho Drive cũng phải vào index — nước nào chưa crawl tự
+    # động được (Thái Lan) thì đây là đường vào duy nhất.
+    manual = news.ingest_drive_folder(b.store, b.lark, os.environ.get(LAW_ARCHIVE_ENV),
+                                      log=log)
+    if manual:
+        index_legal_docs(b, manual, log=log)
     if not keys:
         log("[news] không có văn bản mới")
         return None

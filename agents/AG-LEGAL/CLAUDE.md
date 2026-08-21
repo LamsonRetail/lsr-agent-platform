@@ -79,6 +79,8 @@ legalkb/
 | S4 | **Lưu bản gốc + index TRƯỚC gate**, chỉ digest mới chờ duyệt | Bản gốc là tài liệu nhà nước, không phải nội dung AI — cần tra được ngay khi phát sinh việc |
 | S4 | Nguồn chưa kiểm được → **inactive + `note`** | Để active thì mỗi tuần báo lỗi mà không ai biết là do seed sai (3/4 nguồn seed đầu đã chết) |
 | S4 | Nguồn `html` **bắt buộc** có `link_pattern` | Parse HTML tuỳ ý sẽ ra rác mà vẫn "thành công" |
+| S4 | Văn bản người **bỏ tay** vào kho Drive cũng phải vào index | Có nước không crawl tự động được (Thái Lan: 9 nguồn đã đo, WAF hoặc render JS) — kho có văn bản mà agent không biết thì vô ích |
+| S4 | Số hiệu đọc lại từ **tên file** khi nạp tay | `_safe_name()` làm phẳng dấu `/` khi upload ⇒ `doc_no` NULL ⇒ dedupe không chạy ⇒ Bộ luật Lao động đã vào kho 2 lần thật |
 | S4 | Số hiệu do **nguồn cấp** > regex dò tiêu đề | Trích yếu "Quy định về định danh địa điểm" (326/2026/NĐ-CP) không có chữ số nào ⇒ regex trượt ⇒ dedupe liên nguồn vỡ |
 | S4 | Bản gốc **tốt hơn tới sau thì đổi** (`file_urls`) | RSS chạy trước chỉ có link trang tin; chinhphu.vn có PDF ký số |
 | S4 | Host nào chưa có bộ trích toàn văn → **báo lỗi**, không lưu HTML cả trang | Lưu 2MB menu/quảng cáo rồi gọi là "văn bản gốc" = báo thành công mà vô dụng |

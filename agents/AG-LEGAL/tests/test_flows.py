@@ -1091,3 +1091,104 @@ def test_never_saves_whole_page_html_as_the_original(tmp_path, monkeypatch):
 ])
 def test_lookup_matches_by_phrase_not_by_loose_word_overlap(keyword, title, ok):
     assert flows._matches(keyword, title) is ok
+
+
+# ==================== nạp tay: người bỏ file vào kho Drive ====================
+
+class FakeDriveTree:
+    """Drive giả có cây folder: root → VN/, TH/ → file."""
+
+    def __init__(self, tree):
+        self.tree = tree      # {folder_token: [entry, ...]}
+        self.uploaded = []
+
+    def drive_files(self, token):
+        return self.tree.get(token, [])
+
+    def drive_file_url(self, token, file_type="file"):
+        return f"https://tenant/file/{token}"
+
+
+def _tree():
+    return {
+        "root": [{"token": "fVN", "name": "VN", "type": "folder"},
+                 {"token": "fTH", "name": "TH", "type": "folder"}],
+        "fVN": [{"token": "v1", "name": "Nghị định 99/2026/NĐ-CP về nhãn hàng hoá.pdf",
+                 "type": "file"}],
+        "fTH": [{"token": "t1", "name": "Notification MOC labelling 2026.pdf", "type": "file"},
+                {"token": "t2", "name": "Royal Gazette vol 143 retail.pdf", "type": "file"}],
+    }
+
+
+def test_manual_drive_files_become_indexable(tmp_path):
+    """Thái Lan không crawl tự động được (9 nguồn đã đo) → người bỏ tay vào folder TH/
+    thì vẫn phải vào index, nếu không thì kho có văn bản mà agent không biết."""
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDriveTree(_tree()))
+    keys = news.ingest_drive_folder(store, b.lark, "root", log=lambda m: None)
+    assert len(keys) == 3
+    rows = {r["country"] for r in store.query("SELECT country FROM legal_news_items")}
+    assert rows == {"VN", "TH"}
+    th = store.query("SELECT * FROM legal_news_items WHERE country='TH'")
+    assert len(th) == 2
+    assert all(r["drive_url"] and r["status"] == "archived" for r in th)
+
+
+def test_manual_ingest_is_idempotent(tmp_path):
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDriveTree(_tree()))
+    news.ingest_drive_folder(store, b.lark, "root", log=lambda m: None)
+    again = news.ingest_drive_folder(store, b.lark, "root", log=lambda m: None)
+    assert again == [], "quét lại không được tạo bản ghi trùng"
+
+
+def test_manual_ingest_skips_doc_already_crawled(tmp_path):
+    """Cùng số hiệu đã crawl về thì file bỏ tay KHÔNG tạo bản ghi thứ hai."""
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDriveTree(_tree()))
+    store.write("INSERT INTO legal_news_items (key,country,doc_no,title,url,status,found_at)"
+                " VALUES ('99/2026/NĐ-CP','VN','99/2026/NĐ-CP','đã crawl','https://x','new',1)")
+    keys = news.ingest_drive_folder(store, b.lark, "root", log=lambda m: None)
+    assert len(keys) == 2, "chỉ 2 file TH được nhận"
+    assert store.one("SELECT COUNT(*) c FROM legal_news_items WHERE doc_no='99/2026/NĐ-CP'")["c"] == 1
+
+
+def test_manual_ingest_survives_unreadable_folder(tmp_path):
+    class Broken(FakeDriveTree):
+        def drive_files(self, token):
+            if token == "fTH":
+                raise RuntimeError("1061004 forbidden")
+            return super().drive_files(token)
+    store, pf, eng, g, b = make(tmp_path, lark=Broken(_tree()))
+    logs = []
+    keys = news.ingest_drive_folder(store, b.lark, "root", log=logs.append)
+    assert len(keys) == 1, "folder VN vẫn nhận được"
+    assert any("không đọc được folder TH" in m for m in logs)
+
+
+@pytest.mark.parametrize("filename,expected", [
+    # `_safe_name()` làm phẳng dấu "/" khi upload → phải đọc lại được số hiệu
+    ("326 2026 NĐ-CP Nghị định quy định về định danh địa điểm.pdf", "326/2026/NĐ-CP"),
+    ("55 CĐ-TTg Công điện của Thủ tướng.pdf", "55/CĐ-TTg"),
+    ("45 2019 QH14 Bộ luật Lao động 2019.txt", "45/2019/QH14"),
+    ("5947 CT-KTr Công văn năm 2026.txt", "5947/CT-KTr"),
+    # chốt chống nhận bừa: không có năm VÀ không có gạch nối → không phải số hiệu
+    ("2026 BAO CAO nam.pdf", None),
+    ("Notification MOC labelling 2026.pdf", None),
+    ("Royal Gazette vol 143 retail.pdf", None),
+    # tên còn nguyên dấu "/" thì đường cũ vẫn chạy
+    ("Nghị định 326/2026/NĐ-CP.pdf", "326/2026/NĐ-CP"),
+])
+def test_doc_no_recovered_from_flattened_filename(filename, expected):
+    """Lỗi thật: mọi văn bản nạp tay đều doc_no=NULL ⇒ dedupe không chạy ⇒ Bộ luật Lao
+    động vào kho hai lần."""
+    assert news.doc_no_from_filename(filename) == expected
+
+
+def test_manual_ingest_dedupes_by_recovered_doc_no(tmp_path):
+    tree = {"root": [{"token": "fVN", "name": "VN", "type": "folder"}],
+            "fVN": [{"token": "a", "name": "45 2019 QH14 Bộ luật Lao động 2019.txt",
+                     "type": "file"},
+                    {"token": "b", "name": "45 2019 QH14 Bộ luật Lao động 2019.txt",
+                     "type": "file"}]}
+    store, pf, eng, g, b = make(tmp_path, lark=FakeDriveTree(tree))
+    keys = news.ingest_drive_folder(store, b.lark, "root", log=lambda m: None)
+    assert len(keys) == 1, "hai file cùng số hiệu → một bản ghi"
+    assert store.one("SELECT doc_no FROM legal_news_items")["doc_no"] == "45/2019/QH14"

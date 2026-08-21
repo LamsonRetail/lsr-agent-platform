@@ -148,6 +148,34 @@ def doc_no_of(text):
     return re.sub(r"\s+", "", m.group(1)) if m else None
 
 
+# Tên file: `_safe_name()` đổi "/" thành khoảng trắng khi upload (dấu / không đặt được
+# trong tên file), nên "326/2026/NĐ-CP" thành "326 2026 NĐ-CP" và DOC_NO không nhận ra.
+FILE_NO = re.compile(
+    rf"^\s*(\d{{1,6}})\s+(?:(\d{{4}})\s+)?({_SEG}(?:-{_SEG})*)\b")
+
+
+def doc_no_from_filename(name):
+    """Số hiệu đọc lại từ TÊN FILE trong Drive.
+
+    Cần vì bản lưu trong kho mang tên đã bị làm phẳng dấu "/". Không có hàm này thì mọi
+    văn bản nạp tay đều `doc_no=NULL` ⇒ dedupe theo số hiệu không chạy ⇒ cùng một văn bản
+    lưu hai lần (đã xảy ra thật: Bộ luật Lao động vào kho 2 lần).
+
+    Chốt chống nhận bừa: hoặc phải có **nhóm năm 4 chữ số**, hoặc hậu tố phải **có gạch
+    nối**. Không có chốt này thì "2026 BAO CAO nam.pdf" cũng thành số hiệu "2026/BAO".
+    """
+    no = doc_no_of(name)
+    if no:
+        return no
+    m = FILE_NO.match(name or "")
+    if not m:
+        return None
+    year, suffix = m.group(2), m.group(3)
+    if not year and "-" not in suffix:
+        return None
+    return "/".join([m.group(1)] + ([year] if year else []) + [suffix])
+
+
 def parse_html(html, base_url, link_pattern):
     """Lấy danh sách văn bản từ trang HTML theo regex cấu hình riêng của nguồn.
 
@@ -363,6 +391,57 @@ def fetch_bytes(url, timeout=60):
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read()
+
+
+def ingest_drive_folder(store, lark, root_folder, log=print):
+    """Nhận văn bản do NGƯỜI bỏ tay vào kho Drive → đăng ký + trả về key để index.
+
+    Vì sao cần: có nước không crawl tự động được. Thái Lan là ví dụ thật — đã đo 9 nguồn
+    (Royal Gazette, Krisdika, Revenue Dept, Bộ Thương mại, DBD, Nghị viện…), **không cái
+    nào** đọc được bằng HTTP thuần: hoặc WAF trả 403, hoặc trang render bằng JS nên HTML
+    tĩnh chỉ có menu.
+
+    Nên đường vào thứ hai: người (squad Thái, hoặc pháp chế) tải văn bản về rồi bỏ vào
+    folder con theo nước trong kho Drive. Agent quét thấy file mới thì đăng ký và index —
+    **kết quả cuối giống hệt crawl tự động**: hỏi tới là biết truy xuất từ đâu.
+
+    Cố ý KHÔNG đọc nội dung file ở đây: file người bỏ vào là pdf/docx/scan, trích text là
+    việc của bước index sau. Ở đây chỉ ghi *có văn bản này, nằm ở đây*.
+    """
+    if not (lark and root_folder):
+        return []
+    out = []
+    try:
+        entries = lark.drive_files(root_folder)
+    except Exception as exc:
+        log(f"[drive] không đọc được kho văn bản: {exc}")
+        return []
+    for folder in [e for e in entries if e.get("type") == "folder"]:
+        cc = (folder.get("name") or "").strip().upper()[:8] or "VN"
+        try:
+            files = lark.drive_files(folder["token"])
+        except Exception as exc:
+            log(f"[drive] không đọc được folder {cc}: {exc}")
+            continue
+        for f in files:
+            if f.get("type") == "folder":
+                continue
+            name = f.get("name") or ""
+            key = f"drive:{f.get('token')}"
+            if store.one("SELECT key FROM legal_news_items WHERE key=?", (key,)):
+                continue
+            no = doc_no_from_filename(name)
+            # Số hiệu đã có trong kho từ nguồn khác → không tạo bản ghi thứ hai.
+            if no and store.one("SELECT key FROM legal_news_items WHERE doc_no=?", (no,)):
+                continue
+            url = lark.drive_file_url(f["token"]) if hasattr(lark, "drive_file_url") else None
+            store.write(
+                "INSERT INTO legal_news_items (key, country, doc_no, title, url, drive_url, "
+                "status, found_at) VALUES (?,?,?,?,?,?,'archived',?)",
+                (key, cc, no, name[:500], url, url, time.time()))
+            out.append(key)
+            log(f"[drive] nhận {cc}/{name[:60]}")
+    return out
 
 
 def render_digest(store, keys):

@@ -210,11 +210,19 @@ Agent chạy tại `/opt/ag-legal` trên VM `digital-transformation-hosting`
 (project `ganesha-381907`, zone `asia-southeast1-b`), 2 container:
 `ag-legal-agent-1` (chat consumer) + `ag-legal-kb-sync-1` (sync KB 3h/lần).
 
-Cập nhật code lên VM:
+⚠️ **Đường dẫn nguồn deploy đã ĐỔI — kiểm 20/08.** Thư mục cũ
+`~/LSR Legal Agent/ag-legal/` là cây code **ngày 12/08** (chỉ có 6 module: engine,
+lark_client, store, sync). Toàn bộ việc từ đó tới nay — S2–S5, gates, addressing, voice,
+news, 3 adapter nguồn luật, approval — nằm ở `lsr-agent-platform/agents/AG-LEGAL/`.
+Lệnh cũ trỏ vào thư mục cũ nên **chạy xong vẫn là bản 12/08 mà tưởng đã cập nhật**. Nên
+xoá thư mục cũ đi cho khỏi nhầm lần sau.
+
+Cập nhật code lên VM (nguồn ĐÚNG là `lsr-agent-platform/agents/AG-LEGAL`):
 
 ```bash
-cd "~/LSR Legal Agent" && rm -rf /tmp/ag-legal-deploy && mkdir -p /tmp/ag-legal-deploy \
-  && rsync -a --exclude .git --exclude __pycache__ --exclude data --exclude .venv ag-legal/ /tmp/ag-legal-deploy/ \
+cd "$HOME/LSR Legal Agent/lsr-agent-platform/agents/AG-LEGAL" && rm -rf /tmp/ag-legal-deploy \
+  && mkdir -p /tmp/ag-legal-deploy && rsync -a --exclude .git --exclude __pycache__ \
+     --exclude data --exclude .venv --exclude '*.db' ./ /tmp/ag-legal-deploy/ \
   && mkdir -p /tmp/ag-legal-deploy/secrets/notebooklm \
   && cp ~/.notebooklm/profiles/default/storage_state.json /tmp/ag-legal-deploy/secrets/notebooklm/ \
   && sed -i '' 's|^NLM_AUTH_PATH=.*|NLM_AUTH_PATH=/agent/secrets/notebooklm/storage_state.json|' /tmp/ag-legal-deploy/.env \
@@ -223,6 +231,14 @@ cd "~/LSR Legal Agent" && rm -rf /tmp/ag-legal-deploy && mkdir -p /tmp/ag-legal-
   && gcloud compute ssh digital-transformation-hosting --zone asia-southeast1-b --project ganesha-381907 \
      --command 'sudo tar -xzf /tmp/ag-legal-deploy.tgz -C /opt/ag-legal --strip-components=1 && cd /opt/ag-legal && sudo docker compose up -d --build'
 ```
+
+> **Không dùng `POST /v1/self/deploy` cho agent này.** Đã đọc handler ở core: nó tạo
+> container mới chỉ với một bộ env cố định (`CLAUDE_CODE_OAUTH_TOKEN`, `LSR_*`,
+> `AGENT_REPO`, `AGENT_START_CMD`) và **không mang theo `.env` của agent** —
+> `LARK_APP_SECRET`, `NLM_*`, các token folder Drive, `AGENT_LARK_SUBJECT` sẽ mất, và
+> `secrets/notebooklm` không được mount. Agent này cần `.env` đầy đủ nên deploy bằng
+> docker compose như trên. `GET /v1/self/deploy/status` trả `not_deployed` là **đúng**,
+> không phải lỗi.
 
 Xem log / trạng thái:
 
