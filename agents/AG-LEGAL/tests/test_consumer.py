@@ -454,3 +454,33 @@ def test_existing_env_token_is_respected(monkeypatch):
             raise AssertionError("đã có token trong env thì không cần lease")
     assert "có sẵn" in brain.lease_model_auth(PF())
     brain._lease.update(env=None, note="reset")
+
+
+# ==================== ai nhắn cũng được trả lời, đủ tính năng ====================
+
+def test_any_sender_gets_a_full_answer_without_approval(tmp_path):
+    """Chốt 21/08: KHÔNG có allowlist người dùng. Người chưa từng xuất hiện, không có
+    trong legal_roles, nhắn lần đầu → vẫn được trả lời đầy đủ, không ai phải duyệt."""
+    store, pf, eng, g, b = make(tmp_path, ctx={"n_turns": 0}, engine_answer=EngineAnswer(
+        ok=True, text="Theo quy chế nội bộ…",
+        citations=[Citation("Quy chế", "https://x/wiki/a", "")]))
+    out = consumer.handle({"id": 77, "channel": "lark", "payload": {
+        "text": "cho mình hỏi về hợp đồng thử việc",
+        "chat_id": "oc_nguoi_hoan_toan_moi",
+        "sender_open_id": "ou_chua_tung_thay"}}, b)
+    assert out and "Theo quy chế nội bộ" in out
+    assert not [m for to, m in pf.sent if to == consumer.GROUP_CHAT_ID], \
+        "không gửi gì vào group — không phải hàng chờ phê duyệt"
+    assert [t for t in pf.turns if t[0] == "lark:oc_nguoi_hoan_toan_moi"], \
+        "phải ghi lượt vào bộ nhớ"
+    assert any(e[1] == "audit" for e in pf.events), "phải có dấu audit"
+
+
+def test_only_approval_commands_check_who_you_are(tmp_path):
+    """Chỗ DUY NHẤT còn kiểm danh tính là lệnh quyết định trong group admin — bỏ nó thì ai
+    cũng duyệt được hợp đồng của công ty."""
+    store, pf, eng, g, b = make(tmp_path)
+    out = consumer.handle_group({"id": 78, "channel": "lark", "payload": {
+        "text": "#1 duyệt", "chat_id": consumer.GROUP_CHAT_ID,
+        "sender_open_id": "ou_nguoi_ngoai"}}, b)
+    assert "chưa có quyền" in out
