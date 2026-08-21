@@ -23,6 +23,9 @@ INTERVAL = int(os.environ.get("OPS_INTERVAL_SECS", "300"))
 DLQ_TH = int(os.environ.get("OPS_DLQ_THRESHOLD", "5"))
 ERR_TH = int(os.environ.get("OPS_ERR_THRESHOLD", "20"))
 POOL_MIN = int(os.environ.get("OPS_POOL_MIN", "1"))
+DISK_WARN_PCT = int(os.environ.get("OPS_DISK_WARN_PCT", "80"))   # xin duyệt dọn
+DISK_AUTO_PCT = int(os.environ.get("OPS_DISK_AUTO_PCT", "90"))   # tự dọn, không chờ
+PRUNE_AGE_H = int(os.environ.get("OPS_PRUNE_AGE_HOURS", "168"))  # không đụng image mới
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ag-ops")
@@ -91,6 +94,70 @@ def diagnose(snap: dict) -> list[tuple]:
                                              f"({c.get('owner_email') or '?'}) còn **{d} ngày** là hết hạn. "
                                              f"Gia hạn: chạy `claude setup-token` rồi nạp lại vào pool."},
                         "low", f"credential còn {d} ngày"))
+
+    # Ổ đĩa VM: đầy là deploy/build/Postgres chết đứng (sự cố 08-14) — báo sớm.
+    # Hai nấc: ngưỡng cảnh báo thì XIN DUYỆT dọn (người quyết); vượt ngưỡng nguy hiểm
+    # thì TỰ DỌN ngay, vì chờ duyệt lúc 3h sáng là kịp hỏng cả platform. Dọn ở đây
+    # chỉ là image "dangling" — không đụng image nào đang có container dùng.
+    disk = snap.get("disk") or {}
+    pct = int(disk.get("used_pct") or 0)
+    if pct >= DISK_AUTO_PCT:
+        out.append(("prune_docker", {"scope": "unused", "older_than_hours": PRUNE_AGE_H}, "low",
+                    f"🔴 Đĩa VM {pct}% ≥ {DISK_AUTO_PCT}% (còn {disk.get('free_gb')}GB) — tự dọn "
+                    f"image Docker không dùng (quá {PRUNE_AGE_H}h), không chờ duyệt"))
+    elif pct >= DISK_WARN_PCT:
+        out.append(("prune_docker", {"scope": "unused", "older_than_hours": PRUNE_AGE_H}, "high",
+                    f"🟡 Ổ đĩa VM đã dùng {pct}% (còn {disk.get('free_gb')}GB/"
+                    f"{disk.get('total_gb')}GB). Xin duyệt dọn image Docker không container nào "
+                    f"dùng và cũ hơn {PRUNE_AGE_H}h. Image của agent đang tắt vẫn được giữ "
+                    f"(container stop vẫn tính là đang dùng). Từ {DISK_AUTO_PCT}% hệ thống tự "
+                    f"dọn không chờ duyệt."))
+    if pct >= 95:
+        out.append(("alert", {"message": f"🔴 Ổ đĩa VM **{pct}%** — dọn image có thể KHÔNG "
+                                         f"đủ. Soi thêm: `ssh lsr-gcp \"sudo docker system df; "
+                                         f"sudo du -sh /var/lib/docker/containers/* | sort -h | "
+                                         f"tail\"` và cân nhắc tăng dung lượng đĩa."},
+                    "low", f"đĩa {pct}% — vượt mức dọn image cứu được"))
+
+    # Routing "bắt tất" (không khai app_id lẫn chat_id): mọi tin Lark/Telegram chưa có
+    # binding cụ thể sẽ chảy nhầm vào agent này. Báo admin để gỡ hoặc khai rõ phạm vi.
+    for r in (snap.get("catchall_routes") or []):
+        out.append(("alert", {"message":
+            f"⚠️ Routing BẮT TẤT #{r['id']}: kênh `{r.get('channel')}` không khai app_id "
+            f"lẫn chat_id → mọi tin chưa có binding riêng đều chảy vào **{r.get('agent_id')}** "
+            f"(người tạo: {r.get('created_by') or '?'}).\n"
+            f"Nên: khai rõ app_id/chat_id cho binding này, hoặc gỡ ở Console → Ingress."},
+            "low", f"catchall routing #{r['id']}"))
+
+    # Agent active nhưng gateway Lark của app riêng không kết nối được: console xanh
+    # hết nhưng agent câm — phải báo kèm ĐÚNG lệnh nạp secret để admin làm ngay.
+    for g in (snap.get("lark_gateway_gaps") or []):
+        prefix = g.get("env_prefix") or "<TIENTO>"
+        svc = g.get("service") or f"event_gateway_{prefix.lower()}"
+        out.append(("alert", {"message":
+            f"🔴 **{g.get('agent_id')}** đang `active` với app Lark riêng "
+            f"`{g.get('app_id')}` — **{g.get('reason')}**. Gateway KHÔNG mở long-connection: "
+            f"agent không nhận được tin nào và cũng không trả lời được, trong khi console "
+            f"vẫn hiển thị xanh. Chủ agent: {g.get('owner') or '?'}.\n"
+            f"Xin App Secret của app rồi chạy:\n"
+            f"`ssh -t lsr-gcp \"cd /opt/lsr-platform && bash scripts/add-lark-app.sh "
+            f"{prefix} {g.get('app_id')} {svc}\"`"},
+            "low", f"gateway Lark hỏng: {g.get('agent_id')} ({g.get('reason')})"))
+
+    # C8: identity user token sắp mất refresh -> agent hành động dưới danh nghĩa người
+    # sẽ đứng máy. Phải báo TRƯỚC, vì hết hạn rồi thì bắt buộc có người authorize lại.
+    for u in (snap.get("lark_user_identities_expiring") or []):
+        d = int(u.get("days_left") or 0)
+        who = ", ".join(u.get("agents") or []) or "(chưa agent nào dùng)"
+        icon = "🔴" if d <= 0 else "🟠" if d <= 3 else "🟡"
+        tail = ("ĐÃ HẾT HẠN — mọi lời gọi user token của account này đang 401."
+                if d <= 0 else f"còn **{d} ngày**.")
+        out.append(("alert", {"message":
+            f"{icon} Refresh token Lark của `{u.get('subject_email')}` {tail}\n"
+            f"Agent đang dùng: {who}.\n"
+            f"Phải có NGƯỜI authorize lại: admin gọi POST /v1/lark/user/authorize/start "
+            f"với subject={u.get('subject_email')}, mở link, đăng nhập ĐÚNG account đó."},
+            "low", f"lark user token {u.get('subject_email')} còn {d} ngày"))
 
     errs = snap.get("connector_errors_24h") or []
     for e in errs:

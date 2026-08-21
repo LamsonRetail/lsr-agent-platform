@@ -35,7 +35,28 @@
 platform.34-126-154-135.sslip.io {
 	# Self-service: enroll + bootstrap + agent-scoped API (/v1/self*). Mở (không cần
 	# gateway token); auth ở app (enroll token / agent telemetry key). Vẫn rate-limit.
-	@selfserve path /v1/agents/enroll /bootstrap/* /v1/self /v1/self/* /v1/lark/* /v1/chat/*
+	@selfserve path /v1/agents/enroll /bootstrap/* /v1/self /v1/self/* /v1/lark/* /v1/chat/* /v1/auth/device/* /v1/auth/me /v1/auth/tokens /v1/auth/tokens/* /v1/roles/catalog /v1/roles/request
+	# Route theo từng agent mà OWNER cần gọi từ máy dev (golive checklist, spec, master
+	# data). Dùng path_regexp vì path matcher không khớp wildcard giữa đường dẫn.
+	# Auth vẫn do app kiểm: _require_role trên đúng agent_id.
+	@selfagent path_regexp ^/v1/agents/[^/]+/(golive-checklist|spec|profile|lark-identities)$
+	# C8: /v1/lark/* mở cho agent (resolve/send/resource...), nhưng authorize/grants/
+	# revoke của broker user token là việc của ADMIN — kéo về sau lớp guard để không
+	# ai ngoài mạng gọi tới được, kể cả khi lỡ lộ admin token.
+	@larkuseradmin path /v1/lark/user/authorize/* /v1/lark/user/grants /v1/lark/user/identities /v1/lark/user/identities/*
+	handle @larkuseradmin {
+		import guard platform_api:8090 zlarkuser
+	}
+	handle @selfagent {
+		rate_limit {
+			zone zselfagent {
+				key {remote_host}
+				events 60
+				window 1m
+			}
+		}
+		reverse_proxy platform_api:8090
+	}
 	handle @selfserve {
 		rate_limit {
 			zone zenroll {
@@ -70,10 +91,35 @@ collector.34-126-154-135.sslip.io {
 	}
 }
 
-# UI backend (Next.js) — mở bằng trình duyệt, chặn bằng basic-auth.
-app.34-126-154-135.sslip.io {
-	basic_auth {
-		lamson $2a$14$mCnOcSgMWnhjsG1AKdZwqOG./Itm3V1e41xA1AeuZUYCk5TsXDody
+# UI backend (Next.js). Console đã có đăng nhập riêng (Lark OAuth + RBAC + middleware),
+# basic-auth chỉ còn là lớp ngoài tạm thời cho các trang nội bộ.
+# 3 path đăng nhập PHẢI mở: người trong org tự login bằng Lark và tự duyệt CLI (/device)
+# mà không cần ai đưa mật khẩu dùng chung. Các trang này vẫn tự bảo vệ bằng session:
+# chưa đăng nhập thì /device không duyệt được gì (401) và middleware đá về /login.
+# Cấu hình console dùng CHUNG cho mọi domain trỏ vào nó. Tách thành snippet để hai
+# domain không trôi lệch nhau (sslip.io giữ lại trong lúc chuyển sang domain thật).
+(console) {
+	@openauth path /login /login/* /device /device/* /api/auth/*
+	handle @openauth {
+		reverse_proxy web:3000
 	}
-	reverse_proxy web:3000
+	handle {
+		basic_auth {
+			lamson $2a$14$mCnOcSgMWnhjsG1AKdZwqOG./Itm3V1e41xA1AeuZUYCk5TsXDody
+		}
+		reverse_proxy web:3000
+	}
+}
+
+# Domain thật của console. TLS tự động, nhưng CHỈ cấp được sau khi DNS
+# agent.hapas-ai.tech trỏ A về 34.126.154.135 (hiện DNS do Hostinger giữ, apex
+# hapas-ai.tech đang trỏ VPS của Jenny 187.77.135.158 — đừng đụng apex).
+agent.hapas-ai.tech {
+	import console
+}
+
+# Domain cũ: GIỮ LẠI, không redirect. Lark chỉ nhận redirect_uri đã đăng ký trong
+# console app; cắt domain này trước khi đăng ký URI mới là gãy đăng nhập của cả nhà.
+app.34-126-154-135.sslip.io {
+	import console
 }

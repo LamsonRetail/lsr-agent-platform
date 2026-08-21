@@ -2,15 +2,15 @@
 # Có hiệu lực khi bật Branch protection → "Require review from Code Owners".
 
 # 1) Mặc định: mọi thứ = core team
-*                               @ntranthi
+*                               @ntranthi @thienquy71
 
 # 2) Agent + backend của USER: KHÔNG chủ sở hữu (tác giả tự quản, không đòi review core)
 /agents/
 /apps/agents/
 
 # 3) Agent NỀN TẢNG = core (đặt SAU để override mục 2)
-/agents/AG-LSR-BRAIN/           @ntranthi
-/agents/minh-anh/               @ntranthi
+/agents/AG-LSR-BRAIN/           @ntranthi @thienquy71
+/agents/minh-anh/               @ntranthi @thienquy71
 
 # (Core khác đã thuộc mục 1: infra/ src/ scripts/ plugins/ installers/
 #  apps/platform-web/ .github/ tests/ docs/ + rules chung ở gốc.)

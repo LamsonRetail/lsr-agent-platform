@@ -1,5 +1,18 @@
 # Rating Agent — LamsonRetail
 
+## 🚀 Bắt đầu một agent bằng Claude Code (folder mới, chỉ cần link repo)
+
+```bash
+mkdir hr-agent && cd hr-agent && claude
+```
+Rồi dán cho Claude: `https://github.com/LamsonRetail/lsr-agent-platform` + tên agent
+(vd **AG-HR**) — Claude sẽ clone, checkout đúng branch của team và làm theo
+`agents/<ID>/CLAUDE.md`. Danh sách agent ↔ branch: xem [CLAUDE.md](CLAUDE.md).
+Hoặc tự tay:
+```bash
+git clone https://github.com/LamsonRetail/lsr-agent-platform.git && cd lsr-agent-platform && git checkout agent/hr-AG-HR && claude
+```
+
 Hệ thống nội bộ đánh giá **hai đối tượng tách biệt**:
 
 - **Squad** (đội người) — chấm theo **hiệu quả mục tiêu** (Key Result achievement + đúng tiến độ).

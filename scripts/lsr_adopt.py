@@ -221,7 +221,13 @@ def main() -> int:
         "backend_url": args.backend_url or None,
         "dashboard_url": args.dashboard_url or None,
     }
-    # Ưu tiên admin-token (đầy đủ); nếu không có thì dùng enroll-token (self-service).
+    # Thứ tự ưu tiên: admin-token → TOKEN CÁ NHÂN (~/.lsr/token, từ `lsr-login.sh`)
+    # → enroll-token dùng chung (giữ tương thích script cũ).
+    if not args.enroll_token:
+        pat_file = Path(os.environ.get("LSR_TOKEN_FILE", str(Path.home() / ".lsr" / "token")))
+        if pat_file.exists():
+            args.enroll_token = pat_file.read_text(encoding="utf-8").strip()
+            print(f"  (dùng token cá nhân {pat_file} — quyền theo tài khoản của bạn)")
     do_admin = bool(args.platform and args.admin_token)
     do_enroll = bool(args.platform and not args.admin_token and args.enroll_token)
     if do_admin or do_enroll:

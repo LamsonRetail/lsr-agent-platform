@@ -1,0 +1,52 @@
+{
+  "_huong_dan": "Copy file này thành agents/<AGENT-ID>/golive.json rồi ĐIỀN THẬT. Đủ 28 mục là hệ thống tự trình admin duyệt. Xoá các khoá _huong_dan/_vi_du trước khi nộp cũng được — platform bỏ qua khoá lạ.",
+
+  "owner_email": "ten@hapas.vn",
+  "backup_owner": "nguoi_thay_the@hapas.vn",
+  "team_id": "SQ-XXX",
+  "team_members": [
+    {"full_name": "Nguyễn Văn A", "role": "owner", "lark_user_id": "ou_...", "expertise": "vận hành"},
+    {"full_name": "Trần Thị B", "role": "reviewer", "expertise": "số liệu"}
+  ],
+  "approver": "ten_nguoi_duyet_ket_qua@hapas.vn",
+  "collaboration_rules": [
+    "Agent trả lời trong nhóm khi được gọi tên; việc cần quyết thì đẩy cho người phụ trách",
+    "Không tự gửi tin ra ngoài nhóm đã khai"
+  ],
+  "work_channels": ["Lark nhóm <tên nhóm> (chat_id oc_...)", "web chat console"],
+
+  "kpis": [
+    {"kpi_name": "số câu hỏi được trả lời/tuần", "unit": "câu", "target": 50, "period": "weekly",
+     "data_source": "mart_daily", "formula": "count(job done)"}
+  ],
+  "agent_kpi": "≥90% câu trả lời có trích nguồn; ≤5% câu phải hỏi lại người",
+  "alert_thresholds": ["DLQ > 5 job", "im lặng > 24h", "tỷ lệ lỗi > 10%/ngày"],
+
+  "data_sources_allowed": ["Lark Base <tên base>", "Lark Doc thư mục <tên>", "BigQuery dataset <tên>"],
+  "data_forbidden": ["lương/hợp đồng lao động", "báo cáo tài chính chi tiết", "dữ liệu khách hàng cá nhân"],
+  "skills": ["resource-index", "lark-task"],
+  "writes": ["tạo task Lark trong nhóm đã khai", "ghi brain riêng của agent"],
+
+  "auth_mode": "subscription của owner (claude setup-token) — KHÔNG dùng API key chung",
+  "lark_connect": "app riêng cli_... , bot đã add vào nhóm oc_... , event im.message.receive_v1 + Long Connection đã publish",
+  "telemetry_verified": "đã thấy run/token trên Console → Agent → <ID> ngày dd/mm",
+  "deployment": "self_hosted: docker compose trên máy/VPS <mô tả>",
+
+  "tests_passed": "bash scripts/agent-test.sh <AGENT-ID> → x/x pass ngày dd/mm",
+  "escalation_rules": [
+    "Agent không chắc → nói không chắc + gợi ý người phụ trách, KHÔNG đoán",
+    "Lỗi kỹ thuật 2 lần liên tiếp → nhắn owner"
+  ],
+  "risks": [
+    "Số liệu nguồn cập nhật trễ → luôn ghi KỲ DỮ LIỆU trong câu trả lời",
+    "Người dùng hỏi ngoài phạm vi → từ chối và chỉ đúng người"
+  ],
+  "reviewer_first_week": "ten_nguoi_review@hapas.vn — đọc lại toàn bộ câu trả lời tuần đầu",
+
+  "schedule": ["không có job định kỳ"],
+  "retrain_process": "tri thức sai → owner sửa trong kho/Lark Base rồi sync lại; prompt sửa qua version mới + rollback được",
+  "feedback_channel": "Lark nhóm <tên nhóm> — người dùng phản hồi trực tiếp, owner tổng hợp hằng tuần",
+  "review_cadence": "weekly — owner xem Console (số run, token, lỗi) mỗi thứ Hai",
+  "team_notified": "đã thông báo minh bạch cho nhóm ngày dd/mm: agent ghi log hội thoại phục vụ vận hành",
+  "scope_confirmed": "owner xác nhận agent chỉ làm đúng phạm vi trong USECASE.md, không quyết thay người"
+}

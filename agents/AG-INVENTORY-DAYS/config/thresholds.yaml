@@ -1,0 +1,60 @@
+# Chỉ tiêu ngày tồn kho (DOI) + ngưỡng cảnh báo an toàn theo nguồn.
+# Nguồn: bảng "BỔ SUNG CHỈ TIÊU NGÀY TỒN KHO" — cuộc họp S&OP.
+# Đơn vị: ngày. "current" = kho + đang trên đường. "total" = current + hàng NCC đã nhận lệnh sản xuất.
+#
+# data_source: nguồn dữ liệu để tính current/total qty + TĐB cho nguồn này.
+#   - "excel": đọc từ file excel (MVP hiện tại)
+#   - null: chưa có dữ liệu, agent sẽ báo "thiếu dữ liệu" thay vì crash
+#
+# overstock_multiplier: cảnh báo tồn dư khi ngày_tồn_kho >= target_days * multiplier.
+# Áp dụng chung cho mọi nguồn trừ khi nguồn tự khai `overstock_multiplier` riêng.
+overstock_multiplier: 1.5
+
+sources:
+  hapas_vn:
+    label: "Hapas VN"
+    target_days:
+      current: 30
+      total: 60
+    safety_threshold_days:      # <= ngưỡng này -> cảnh báo đỏ, cần đặt ngay (ngoài kế hoạch)
+      current: 20
+      total: 35
+    data_source: excel
+    excel:
+      # File "data gốc" theo dõi tồn kho SKU của Hapas VN.
+      sheet: "THEO DÕI TỒN KHO"
+      velocity_column: "TĐB 30 ngày"     # mẫu số dùng để quy đổi số lượng -> ngày tồn kho
+      current_qty_columns:               # tử số cho "current" = kho + đang trên đường
+        - "Slg_TỒN KHO HAPAS"
+        - "Slg_ĐANG TRÊN ĐƯỜNG"
+      total_qty_column: "TỔNG_SLG TỒN KHO"   # tử số cho "total" (đã gồm cả current + đã xuống đơn)
+
+  matemade_vn:
+    label: "MateMade VN"
+    target_days:
+      current: 35
+      total: 65
+    safety_threshold_days:
+      current: 20
+      total: 35
+    data_source: null   # chưa có file — chờ bổ sung
+
+  hapas_tl:
+    label: "Hapas TL"
+    target_days:
+      current: 45
+      total: 85
+    safety_threshold_days:
+      current: 25
+      total: 45
+    data_source: null   # chưa có file — chờ bổ sung
+
+  nguyen_vat_lieu:
+    label: "Nguyên vật liệu"
+    target_days:
+      current: 30
+      total: 45
+    safety_threshold_days:
+      current: 20
+      total: 30
+    data_source: null   # chưa có file — chờ bổ sung

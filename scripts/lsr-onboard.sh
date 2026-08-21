@@ -17,7 +17,8 @@ BACKEND_URL=""                  # URL backend riêng của agent (nếu đã dep
 # ---- 2) Hằng số platform (đã điền sẵn — không cần đổi) ----
 PLATFORM="https://platform.34-126-154-135.sslip.io"
 COLLECTOR="https://collector.34-126-154-135.sslip.io"
-APP="https://app.34-126-154-135.sslip.io"
+# Domain console: đổi được bằng env để không phải sửa script khi chuyển domain.
+APP="${LSR_APP_PUBLIC:-https://app.34-126-154-135.sslip.io}"
 ENROLL_TOKEN="${LSR_ENROLL_TOKEN:-DAN_ENROLL_TOKEN_VAO_DAY}"   # xin admin token
 
 # ---- 3) Tải helper TỪ PLATFORM (repo private nên không dùng raw GitHub) ----

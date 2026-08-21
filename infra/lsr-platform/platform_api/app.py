@@ -15,6 +15,7 @@ Auth admin: header Authorization: Bearer <PLATFORM_ADMIN_TOKEN>.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import pathlib
@@ -87,10 +88,79 @@ def _agent_links(agent_id: str, backend_url: str = "", dashboard_url: str = "") 
 # Lark notify: bot của platform (fallback creds Minh Anh nếu chưa cấu hình riêng)
 LARK_APP_ID = os.environ.get("LARK_NOTIFY_APP_ID") or os.environ.get("MINH_ANH_LARK_APP_ID", "")
 LARK_APP_SECRET = os.environ.get("LARK_NOTIFY_APP_SECRET") or os.environ.get("MINH_ANH_LARK_APP_SECRET", "")
+
+# ĐA APP: mỗi routing_binding có thể gắn một app Lark riêng (vd Sawadee HAPAS cho squad TH).
+# Trả lời job PHẢI đi bằng đúng bot đã nhận tin — bot khác không ở trong nhóm đó.
+# Secret chỉ nằm trong .env trên VM; compose ghép thành LARK_EXTRA_APPS='{"cli_x":"secret"}'.
+_LARK_APPS: dict = {}
+for _aid, _sec in (
+    (os.environ.get("LARK_NOTIFY_APP_ID", ""), os.environ.get("LARK_NOTIFY_APP_SECRET", "")),
+    (os.environ.get("MINH_ANH_LARK_APP_ID", ""), os.environ.get("MINH_ANH_LARK_APP_SECRET", "")),
+):
+    if _aid and _sec:
+        _LARK_APPS.setdefault(_aid, _sec)
+try:
+    for _aid, _sec in json.loads(os.environ.get("LARK_EXTRA_APPS") or "{}").items():
+        if _aid and _sec:
+            _LARK_APPS[_aid] = _sec
+except Exception:
+    pass
 LARK_DOMAIN = os.environ.get("LARK_DOMAIN", "https://open.larksuite.com").rstrip("/")
+# Cache tên bot theo app_id (đổi rất ít; process restart là nạp lại).
+_LARK_BOT_NAME: dict = {}
+
+# --- C8: khoá mã hoá token người dùng (at-rest). Chỉ nằm trong .env trên VM. ---
+# Không có khoá = broker TẮT HẲN, chứ không lưu token dạng rõ. Thà thiếu tính năng
+# còn hơn để token của một con người nằm trần trong Postgres.
+LARK_USER_TOKEN_KEY = os.environ.get("LARK_USER_TOKEN_KEY", "")
+# Trang đồng ý OAuth v2 nằm ở host accounts.*, KHÔNG phải open.* (open.* trả 404 cho
+# /authen/v2/oauth/authorize; v1 thì có 302 sang accounts nhưng v1 lại không nhận scope).
+LARK_ACCOUNTS_DOMAIN = os.environ.get(
+    "LARK_ACCOUNTS_DOMAIN", LARK_DOMAIN.replace("//open.", "//accounts.")).rstrip("/")
+# Cảnh báo trước khi refresh_token chết (Lark refresh sống ~30 ngày, hết là phải
+# xin người authorize lại — AG-LEGAL từng chết âm thầm 1 tháng vì chuyện này).
+# Refresh token Lark ở tenant này sống 7 ngày và được gia hạn mỗi lần refresh.
+# Ngưỡng 2 ngày: đủ sớm để kịp xin authorize lại, không kêu ngay sau khi vừa cấp.
+LARK_USER_REFRESH_WARN_DAYS = int(os.environ.get("LARK_USER_REFRESH_WARN_DAYS", "2"))
+
+
+def _user_token_cipher():
+    """AES-GCM từ LARK_USER_TOKEN_KEY (băm SHA-256 → 32 byte). None nếu chưa cấu hình."""
+    if not LARK_USER_TOKEN_KEY:
+        return None
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # type: ignore
+    return AESGCM(hashlib.sha256(LARK_USER_TOKEN_KEY.encode()).digest())
+
+
+def _enc_token(plain: str) -> bytes:
+    c = _user_token_cipher()
+    if c is None:
+        raise HTTPException(status_code=503,
+                            detail="thiếu LARK_USER_TOKEN_KEY — broker user token đang tắt")
+    nonce = os.urandom(12)
+    return nonce + c.encrypt(nonce, (plain or "").encode(), None)
+
+
+def _dec_token(blob) -> str:
+    c = _user_token_cipher()
+    if c is None:
+        raise HTTPException(status_code=503, detail="thiếu LARK_USER_TOKEN_KEY")
+    raw = bytes(blob)
+    return c.decrypt(raw[:12], raw[12:], None).decode()
+
 LARK_NOTIFY = os.environ.get("LARK_NOTIFY_ENABLED", "true").lower() != "false"
 # Nhóm nhận thông báo khi CHƯA có scope contact:user.id:readonly (không tra được email→open_id)
 LARK_NOTIFY_CHAT_ID = os.environ.get("LARK_NOTIFY_CHAT_ID", "")
+
+# --- P10: đăng nhập console qua Lark OAuth + quyền mặc định -----------------
+# CONSOLE_BASE_URL: gốc của console web (Lark redirect người dùng về đây sau khi cho phép).
+CONSOLE_BASE_URL = os.environ.get("CONSOLE_BASE_URL", "").rstrip("/")
+# Kiểm tra org: tenant_key (chặt nhất, lấy sau lần đăng nhập admin đầu) và/hoặc domain email.
+LARK_TENANT_KEY = os.environ.get("LARK_TENANT_KEY", "")
+ALLOWED_LOGIN_DOMAINS = [d.strip().lower() for d in
+                         os.environ.get("ALLOWED_LOGIN_DOMAINS", "hapas.vn").split(",") if d.strip()]
+# Mặc định MỌI tài khoản đã đăng nhập có quyền 'user' trên mọi agent (xem được, không sửa).
+DEFAULT_LOGIN_ROLE = os.environ.get("DEFAULT_LOGIN_ROLE", "user")
 
 # --- Cost & Quota ---------------------------------------------------------
 # Agent dùng SUBSCRIPTION của owner (không tính tiền theo token) → chi phí ở đây là
@@ -173,7 +243,11 @@ def _session_email(conn, token: str) -> str | None:
 
 
 def _effective_role(conn, email: str, agent_id: str | None = None) -> str | None:
-    """Quyền hiệu lực = CAO HƠN giữa quyền platform và quyền trên chính agent đó."""
+    """Quyền hiệu lực = CAO HƠN giữa quyền platform và quyền trên chính agent đó.
+
+    P10: không có binding nào → rơi về DEFAULT_LOGIN_ROLE ('user') — mọi người
+    đăng nhập đều XEM được mọi agent; sửa/duyệt vẫn phải được cấp quyền tường minh.
+    """
     rows = conn.execute(
         "SELECT scope_type, scope_id, role FROM role_bindings WHERE email=%s", (email,)).fetchall()
     best = None
@@ -182,14 +256,32 @@ def _effective_role(conn, email: str, agent_id: str | None = None) -> str | None
                                              and r["scope_id"] == agent_id):
             if best is None or _ROLE_RANK.get(r["role"], 0) > _ROLE_RANK.get(best, 0):
                 best = r["role"]
+    if best is None and DEFAULT_LOGIN_ROLE in _ROLE_RANK:
+        best = DEFAULT_LOGIN_ROLE
     return best
+
+
+def _pat_email(conn, token: str) -> str | None:
+    """Token cá nhân (CLI/Claude Code) → email chủ token. Cập nhật last_used_at."""
+    if not token.startswith("lsr_pat_"):
+        return None
+    h = hashlib.sha256(token.encode()).hexdigest()
+    row = conn.execute(
+        "UPDATE personal_tokens p SET last_used_at=now() "
+        "FROM accounts a WHERE p.token_hash=%s AND a.email=p.email AND a.status='active' "
+        "  AND p.revoked_at IS NULL AND p.expires_at > now() RETURNING p.email", (h,)).fetchone()
+    if row:
+        conn.commit()
+        return row["email"]
+    return None
 
 
 def _principal(authorization: str, agent_id: str | None = None) -> dict:
     """Nhận diện người/dịch vụ đang gọi.
 
     - admin token (service-to-service: gateway, bot, CI) → quyền admin, actor='service'
-    - session token của người dùng   → quyền theo role_bindings, actor=email
+    - session token console           → quyền theo role_bindings, actor=email
+    - token cá nhân `lsr_pat_` (CLI)  → CÙNG quyền như khi đăng nhập console
     """
     tok = _bearer(authorization)
     if not tok:
@@ -198,10 +290,10 @@ def _principal(authorization: str, agent_id: str | None = None) -> dict:
         return {"kind": "admin_token", "actor": "service", "role": "admin"}
     try:
         with _db() as conn:
-            email = _session_email(conn, tok)
+            email = _session_email(conn, tok) or _pat_email(conn, tok)
             if email:
-                return {"kind": "session", "actor": email,
-                        "role": _effective_role(conn, email, agent_id)}
+                return {"kind": "pat" if tok.startswith("lsr_pat_") else "session",
+                        "actor": email, "role": _effective_role(conn, email, agent_id)}
     except Exception:
         pass
     return {"kind": "unknown", "actor": None, "role": None}
@@ -212,7 +304,8 @@ def _require_role(authorization: str, need: str, agent_id: str | None = None) ->
     p = _principal(authorization, agent_id)
     # Phân biệt rõ: CHƯA đăng nhập → 401 (console đưa về trang login);
     # ĐÃ đăng nhập nhưng không đủ quyền trên phạm vi này → 403 (không đá người dùng ra).
-    if p["kind"] not in ("session", "admin_token"):
+    # "pat" = token cá nhân CLI (lsr-login.sh) — cùng danh tính, cùng RBAC như session.
+    if p["kind"] not in ("session", "pat", "admin_token"):
         raise HTTPException(status_code=401, detail="cần đăng nhập console")
     if not p["role"]:
         raise HTTPException(
@@ -974,6 +1067,9 @@ def _ensure_schema() -> None:
         # Đăng ký 2 connector đang chạy thật + khung cho các connector sắp làm.
         for cid, kind, name, enforce in (
             ("lark", "lark", "Lark Suite (IM/Doc/Base)", True),
+            # C8: hành động dưới danh nghĩa một account người dùng (user token).
+            # enforce=True và KHÔNG backfill grant — mode rủi ro cao nhất, phải cấp tay.
+            ("lark_user", "lark", "Lark — hành động dưới danh nghĩa user (broker)", True),
             ("telegram", "telegram", "Telegram (bot admin + kênh chat agent)", False),
             ("bigquery", "data", "BigQuery AI_DB", True),
             ("web_search", "web", "Web search/crawl (khung)", True),
@@ -1115,6 +1211,62 @@ def _ensure_schema() -> None:
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_login_recent ON login_attempts(email, at DESC)")
+        # P10: đăng nhập qua Lark + yêu cầu phân quyền per-agent (admin duyệt).
+        conn.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS lark_open_id text")
+        conn.execute("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS auth_via text DEFAULT 'password'")
+        conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS lark_bot_name text")
+        # Master data năng lực agent: agent khác đọc qua /v1/self/directory để biết
+        # AI làm được GÌ và GỌI THẾ NÀO trước khi A2A.
+        conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS capabilities jsonb")
+        conn.execute("ALTER TABLE agents ADD COLUMN IF NOT EXISTS usage_guide text")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS role_requests (
+                id          bigserial PRIMARY KEY,
+                email       text NOT NULL REFERENCES accounts(email) ON DELETE CASCADE,
+                scope_type  text NOT NULL DEFAULT 'agent',   -- agent | platform
+                scope_id    text NOT NULL,
+                role        text NOT NULL,                   -- moderator | admin
+                reason      text,
+                status      text DEFAULT 'pending',          -- pending | approved | rejected
+                decided_by  text,
+                decided_at  timestamptz,
+                decide_note text,
+                created_at  timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rolereq_status ON role_requests(status, created_at DESC)")
+        # P11: token CÁ NHÂN cho CLI/Claude Code (thay enroll token dùng chung) +
+        # device-login (như `gh auth login`): CLI không phải dán secret nào.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS personal_tokens (
+                token_hash   text PRIMARY KEY,
+                email        text NOT NULL REFERENCES accounts(email) ON DELETE CASCADE,
+                label        text,
+                created_at   timestamptz DEFAULT now(),
+                expires_at   timestamptz NOT NULL,
+                last_used_at timestamptz,
+                revoked_at   timestamptz
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_pat_email ON personal_tokens(email)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS device_codes (
+                device_code text PRIMARY KEY,
+                user_code   text UNIQUE NOT NULL,
+                label       text,
+                status      text DEFAULT 'pending',   -- pending | approved | denied
+                email       text,                     -- người duyệt (chủ token)
+                token_once  text,                     -- PAT trả 1 lần cho CLI rồi xoá
+                created_at  timestamptz DEFAULT now(),
+                expires_at  timestamptz NOT NULL
+            )
+            """
+        )
         # P9: token NGẮN HẠN để nocode_runtime hành động NHÂN DANH agent no-code
         # (khoá gốc của agent chỉ lưu hash nên không lấy lại được).
         conn.execute(
@@ -1160,6 +1312,62 @@ def _ensure_schema() -> None:
                 eval_score  numeric(5,4),
                 built_at    timestamptz DEFAULT now(),
                 PRIMARY KEY (day, agent_id, channel)
+            )
+            """
+        )
+        # ---- C8: User Identity Broker cho Lark -------------------------------
+        # Có API Lark chỉ nhận USER token (Approval v4 là ca đầu). Chuẩn platform:
+        # agent KHÔNG cầm token của người/account thật — platform giữ, tự refresh,
+        # audit từng lời gọi. Token nằm ở đây dạng MÃ HOÁ (bytea), không bao giờ
+        # trả ra API, không ghi log.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lark_user_identities (
+                subject_email      text PRIMARY KEY,
+                open_id            text NOT NULL DEFAULT '',
+                name               text,
+                app_id             text NOT NULL,
+                access_token_enc   bytea NOT NULL,
+                refresh_token_enc  bytea NOT NULL,
+                scope              text NOT NULL DEFAULT '',
+                expires_at         timestamptz NOT NULL,
+                refresh_expires_at timestamptz NOT NULL,
+                granted_by         text NOT NULL,
+                last_used_at       timestamptz,
+                created_at         timestamptz DEFAULT now(),
+                updated_at         timestamptz DEFAULT now()
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_user_identity_grants (
+                agent_id      text NOT NULL,
+                subject_email text NOT NULL REFERENCES lark_user_identities(subject_email)
+                              ON DELETE CASCADE,
+                path_prefixes text[] NOT NULL,
+                methods       text[] NOT NULL DEFAULT '{GET,POST}',
+                active        boolean NOT NULL DEFAULT true,
+                granted_by    text NOT NULL,
+                created_at    timestamptz DEFAULT now(),
+                PRIMARY KEY (agent_id, subject_email)
+            )
+            """
+        )
+        # Phiên authorize đang chờ người bấm đồng ý trên Lark (biến thể "device":
+        # admin lấy link ở CLI, mở ở máy/điện thoại nào cũng được, rồi poll ở đây).
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS lark_user_authorize_sessions (
+                state        text PRIMARY KEY,
+                subject_email text NOT NULL,
+                scope        text NOT NULL DEFAULT '',
+                app_id       text NOT NULL,
+                requested_by text NOT NULL,
+                status       text NOT NULL DEFAULT 'pending',
+                error        text,
+                created_at   timestamptz DEFAULT now(),
+                expires_at   timestamptz NOT NULL
             )
             """
         )
@@ -1222,7 +1430,9 @@ def _require_admin(authorization: str) -> None:
     p = _principal(authorization)
     if p.get("role") == "admin":
         return
-    if p.get("kind") == "session":
+    # ĐÃ xác thực (phiên console hoặc token cá nhân CLI) nhưng thiếu quyền → 403,
+    # không phải 401 (401 sẽ đá người dùng về trang login dù họ đang đăng nhập).
+    if p.get("kind") in ("session", "pat"):
         raise HTTPException(status_code=403, detail="cần quyền admin")
     raise HTTPException(status_code=401, detail="admin token required")
 
@@ -1230,7 +1440,7 @@ def _require_admin(authorization: str) -> None:
 def _actor_of(authorization: str, x_actor: str = "") -> str:
     """Danh tính ghi vào audit: ưu tiên người đăng nhập thật, không tin header."""
     p = _principal(authorization)
-    if p.get("kind") == "session" and p.get("actor"):
+    if p.get("kind") in ("session", "pat") and p.get("actor"):
         return p["actor"]
     return x_actor or "service"
 
@@ -1290,10 +1500,13 @@ def auth_logout(authorization: str = Header(default="")) -> dict:
 
 @app.get("/v1/auth/me")
 def auth_me(authorization: str = Header(default="")) -> dict:
-    """Người đang đăng nhập + vai trò (platform và theo từng agent)."""
+    """Người đang đăng nhập + vai trò (platform và theo từng agent).
+
+    Dùng được cả bằng phiên console lẫn token cá nhân CLI (`lsr-login.sh --status`).
+    """
     tok = _bearer(authorization)
     with _db() as conn:
-        email = _session_email(conn, tok)
+        email = _session_email(conn, tok) or _pat_email(conn, tok)
         if not email:
             raise HTTPException(status_code=401, detail="chưa đăng nhập")
         a = conn.execute("SELECT email, name, must_change_pw FROM accounts WHERE email=%s",
@@ -1304,6 +1517,7 @@ def auth_me(authorization: str = Header(default="")) -> dict:
     agents = {r["scope_id"]: r["role"] for r in rows if r["scope_type"] == "agent"}
     return {"email": a["email"], "name": a["name"], "must_change_pw": a["must_change_pw"],
             "platform_role": plat, "agent_roles": agents,
+            "default_role": DEFAULT_LOGIN_ROLE if DEFAULT_LOGIN_ROLE in _ROLE_RANK else None,
             "can_manage_accounts": plat == "admin",
             "can_create_agent": _ROLE_RANK.get(plat or "", 0) >= 2 or bool(
                 [r for r in rows if _ROLE_RANK.get(r["role"], 0) >= 2])}
@@ -1331,6 +1545,384 @@ def auth_change_pw(body: dict, authorization: str = Header(default="")) -> dict:
     return {"ok": True}
 
 
+# ---------------- P10: đăng nhập console qua Lark OAuth ----------------
+# Luồng: console → /start lấy URL authorize (state ký HMAC, TTL 10') → Lark hỏi người
+# dùng → redirect về console (/api/auth/lark/callback) → console (server-side) POST
+# code+state về đây → đổi user_access_token, kiểm tra ORG, tự tạo tài khoản, cấp phiên.
+# Session token chỉ đi server-to-server, KHÔNG xuất hiện trên URL trình duyệt.
+
+_OAUTH_STATE_TTL = 600
+
+
+def _oauth_sign(ts: str) -> str:
+    key = (ADMIN_TOKEN or "lsr-oauth").encode()
+    return hmac.new(key, f"lark-oauth:{ts}".encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def _oauth_state_ok(state: str) -> bool:
+    try:
+        ts, sig = state.split(".", 1)
+        return (hmac.compare_digest(sig, _oauth_sign(ts))
+                and 0 <= time.time() - int(ts) < _OAUTH_STATE_TTL)
+    except Exception:
+        return False
+
+
+@app.get("/v1/auth/lark/start")
+def auth_lark_start() -> dict:
+    """Trả URL authorize của Lark để console redirect người dùng sang."""
+    if not (LARK_APP_ID and LARK_APP_SECRET):
+        raise HTTPException(status_code=503, detail="Lark OAuth chưa cấu hình (LARK_NOTIFY_APP_ID/SECRET)")
+    if not CONSOLE_BASE_URL:
+        raise HTTPException(status_code=503, detail="thiếu CONSOLE_BASE_URL")
+    from urllib.parse import quote
+    ts = str(int(time.time()))
+    state = f"{ts}.{_oauth_sign(ts)}"
+    redirect_uri = f"{CONSOLE_BASE_URL}/api/auth/lark/callback"
+    url = (f"{LARK_DOMAIN}/open-apis/authen/v1/authorize?app_id={LARK_APP_ID}"
+           f"&redirect_uri={quote(redirect_uri, safe='')}&state={state}")
+    return {"url": url, "state": state}
+
+
+@app.post("/v1/auth/lark/callback")
+def auth_lark_callback(body: dict, request: Request) -> dict:
+    """Đổi code lấy danh tính Lark → kiểm ORG → tạo/tìm tài khoản → cấp phiên console."""
+    _ensure_schema()
+    code = (body.get("code") or "").strip()
+    state = body.get("state") or ""
+    if not code:
+        raise HTTPException(status_code=400, detail="thiếu code")
+    if not _oauth_state_ok(state):
+        raise HTTPException(status_code=400, detail="state không hợp lệ hoặc đã hết hạn — đăng nhập lại")
+    # 1) code → user_access_token (OAuth v2)
+    r = requests.post(f"{LARK_DOMAIN}/open-apis/authen/v2/oauth/token", json={
+        "grant_type": "authorization_code", "client_id": LARK_APP_ID,
+        "client_secret": LARK_APP_SECRET, "code": code,
+        "redirect_uri": f"{CONSOLE_BASE_URL}/api/auth/lark/callback"}, timeout=10)
+    d = r.json() if r.content else {}
+    at = d.get("access_token")
+    if not at:
+        raise HTTPException(status_code=401,
+                            detail=f"Lark từ chối code: {d.get('error_description') or d.get('msg') or d.get('error')}")
+    # 2) danh tính người dùng
+    u = requests.get(f"{LARK_DOMAIN}/open-apis/authen/v1/user_info",
+                     headers={"Authorization": f"Bearer {at}"}, timeout=10).json()
+    info = (u.get("data") or {})
+    email = (info.get("enterprise_email") or info.get("email") or "").strip().lower()
+    tenant = info.get("tenant_key") or ""
+    name = info.get("name") or email
+    open_id = info.get("open_id") or ""
+    # 3) kiểm tra ĐÚNG ORG: tenant_key (nếu đã cấu hình) + domain email công ty
+    if LARK_TENANT_KEY and tenant != LARK_TENANT_KEY:
+        raise HTTPException(status_code=403, detail="tài khoản Lark không thuộc tổ chức LamsonRetail")
+    if not email:
+        raise HTTPException(status_code=403,
+                            detail="Lark không trả email — app cần scope email/enterprise_email và tài khoản phải có email công ty")
+    domain = email.split("@")[-1]
+    if ALLOWED_LOGIN_DOMAINS and domain not in ALLOWED_LOGIN_DOMAINS:
+        raise HTTPException(status_code=403, detail=f"email @{domain} không thuộc org được phép")
+    ip = (request.client.host if request.client else "") or ""
+    provisioned = False
+    with _db() as conn:
+        a = conn.execute("SELECT email, status FROM accounts WHERE email=%s", (email,)).fetchone()
+        if a and a["status"] != "active":
+            raise HTTPException(status_code=403, detail="tài khoản đã bị khoá — liên hệ admin")
+        if not a:
+            # Tự mở tài khoản: danh tính đã được Lark + kiểm org xác nhận. Mật khẩu ngẫu
+            # nhiên (không dùng được) — người này đăng nhập bằng Lark, không phát mật khẩu.
+            conn.execute(
+                "INSERT INTO accounts(email, name, password_hash, must_change_pw, created_by, "
+                " auth_via, lark_open_id) VALUES (%s,%s,%s,false,'lark-oauth','lark',%s)",
+                (email, name, _hash_pw(secrets.token_urlsafe(24)), open_id))
+            provisioned = True
+        else:
+            conn.execute("UPDATE accounts SET lark_open_id=coalesce(%s, lark_open_id) WHERE email=%s",
+                         (open_id or None, email))
+        _identity_cache_put(email, open_id)     # agent gửi Lark cho người này khỏi tra lại
+        token = secrets.token_urlsafe(32)
+        conn.execute(
+            "INSERT INTO web_sessions(token_hash, email, expires_at, ip, user_agent) "
+            "VALUES (%s,%s, now() + make_interval(hours => %s), %s,%s)",
+            (hashlib.sha256(token.encode()).hexdigest(), email, SESSION_HOURS,
+             ip, request.headers.get("user-agent", "")[:200]))
+        conn.execute("UPDATE accounts SET last_login_at=now() WHERE email=%s", (email,))
+        has_roles = bool(conn.execute(
+            "SELECT 1 FROM role_bindings WHERE email=%s LIMIT 1", (email,)).fetchone())
+        _audit(conn, email, "login_lark", "account", email,
+               {"ip": ip, "tenant": tenant, "provisioned": provisioned})
+        conn.commit()
+    return {"token": token, "email": email, "name": name, "provisioned": provisioned,
+            "has_roles": has_roles, "default_role": DEFAULT_LOGIN_ROLE,
+            "expires_hours": SESSION_HOURS}
+
+
+# ---------------- P11: device-login + token cá nhân cho CLI/Claude Code ----------------
+# Vấn đề cũ: enroll cần LSR_ENROLL_TOKEN — secret dùng chung, ai cũng phải đi xin.
+# Nay: CLI gọi /device/start → người dùng mở console duyệt → CLI nhận TOKEN CÁ NHÂN
+# mang đúng quyền của người đó. Admin enroll thì agent ACTIVE luôn (tự duyệt).
+
+_PAT_DAYS = int(os.environ.get("PAT_DAYS", "90"))
+_DEVICE_TTL_MIN = 15
+_USER_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"     # bỏ ký tự dễ nhìn nhầm
+
+
+def _mint_pat(conn, email: str, label: str) -> str:
+    token = "lsr_pat_" + secrets.token_urlsafe(24)
+    conn.execute(
+        "INSERT INTO personal_tokens(token_hash, email, label, expires_at) "
+        "VALUES (%s,%s,%s, now() + make_interval(days => %s))",
+        (hashlib.sha256(token.encode()).hexdigest(), email, label[:80], _PAT_DAYS))
+    return token
+
+
+@app.post("/v1/auth/device/start")
+def device_start(body: dict) -> dict:
+    """CLI mở phiên đăng nhập. KHÔNG cần auth — chưa cấp gì cho tới khi người duyệt."""
+    _ensure_schema()
+    label = (body.get("label") or "Claude Code CLI")[:80]
+    device_code = secrets.token_urlsafe(32)
+    with _db() as conn:
+        for _ in range(5):      # tránh trùng user_code hiếm gặp
+            user_code = ("".join(secrets.choice(_USER_CODE_ALPHABET) for _ in range(4))
+                         + "-" + "".join(secrets.choice(_USER_CODE_ALPHABET) for _ in range(4)))
+            try:
+                conn.execute(
+                    "INSERT INTO device_codes(device_code, user_code, label, expires_at) "
+                    "VALUES (%s,%s,%s, now() + make_interval(mins => %s))",
+                    (device_code, user_code, label, _DEVICE_TTL_MIN))
+                conn.commit()
+                break
+            except Exception:
+                conn.rollback()
+        else:
+            raise HTTPException(status_code=503, detail="không sinh được mã — thử lại")
+    return {"device_code": device_code, "user_code": user_code,
+            "verify_url": f"{APP_PUBLIC_URL}/device?code={user_code}",
+            "expires_in": _DEVICE_TTL_MIN * 60, "interval": 3}
+
+
+@app.post("/v1/auth/device/poll")
+def device_poll(body: dict) -> dict:
+    """CLI hỏi kết quả. Token trả về ĐÚNG MỘT LẦN rồi xoá khỏi DB."""
+    dc = body.get("device_code") or ""
+    with _db() as conn:
+        r = conn.execute("SELECT * FROM device_codes WHERE device_code=%s", (dc,)).fetchone()
+        if not r:
+            raise HTTPException(status_code=404, detail="mã thiết bị không tồn tại")
+        if r["expires_at"] and r["expires_at"] < datetime.now(timezone.utc):
+            return {"status": "expired"}
+        if r["status"] == "denied":
+            return {"status": "denied"}
+        if r["status"] != "approved":
+            return {"status": "pending"}
+        token = r["token_once"]
+        conn.execute("DELETE FROM device_codes WHERE device_code=%s", (dc,))
+        conn.commit()
+    if not token:
+        return {"status": "expired"}
+    return {"status": "approved", "token": token, "email": r["email"],
+            "expires_days": _PAT_DAYS}
+
+
+@app.post("/v1/auth/device/approve")
+def device_approve(body: dict, authorization: str = Header(default="")) -> dict:
+    """Người dùng (đã đăng nhập console) duyệt phiên CLI của chính mình."""
+    p = _principal(authorization)
+    if p["kind"] not in ("session", "pat"):
+        raise HTTPException(status_code=401, detail="cần đăng nhập console")
+    code = (body.get("user_code") or "").strip().upper()
+    deny = bool(body.get("deny"))
+    with _db() as conn:
+        r = conn.execute(
+            "SELECT device_code, status, expires_at, label FROM device_codes WHERE user_code=%s",
+            (code,)).fetchone()
+        if not r:
+            raise HTTPException(status_code=404, detail="mã không đúng — kiểm tra lại")
+        if r["expires_at"] and r["expires_at"] < datetime.now(timezone.utc):
+            raise HTTPException(status_code=410, detail="mã đã hết hạn — chạy lại lệnh đăng nhập")
+        if r["status"] != "pending":
+            raise HTTPException(status_code=409, detail=f"mã đã được xử lý ({r['status']})")
+        if deny:
+            conn.execute("UPDATE device_codes SET status='denied' WHERE user_code=%s", (code,))
+            conn.commit()
+            return {"ok": True, "status": "denied"}
+        token = _mint_pat(conn, p["actor"], r["label"] or "CLI")
+        conn.execute("UPDATE device_codes SET status='approved', email=%s, token_once=%s "
+                     "WHERE user_code=%s", (p["actor"], token, code))
+        _audit(conn, p["actor"], "device_login_approve", "account", p["actor"],
+               {"label": r["label"]})
+        conn.commit()
+    return {"ok": True, "status": "approved", "email": p["actor"], "expires_days": _PAT_DAYS}
+
+
+@app.get("/v1/auth/tokens")
+def pat_list(authorization: str = Header(default="")) -> list[dict]:
+    p = _principal(authorization)
+    if p["kind"] not in ("session", "pat"):
+        raise HTTPException(status_code=401, detail="cần đăng nhập console")
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT token_hash, label, created_at, expires_at, last_used_at FROM personal_tokens "
+            "WHERE email=%s AND revoked_at IS NULL ORDER BY created_at DESC", (p["actor"],)).fetchall()
+    return [{"id": r["token_hash"][:12], "label": r["label"], "created_at": r["created_at"],
+             "expires_at": r["expires_at"], "last_used_at": r["last_used_at"]} for r in rows]
+
+
+@app.post("/v1/auth/tokens/{token_id}/revoke")
+def pat_revoke(token_id: str, authorization: str = Header(default="")) -> dict:
+    p = _principal(authorization)
+    if p["kind"] not in ("session", "pat"):
+        raise HTTPException(status_code=401, detail="cần đăng nhập console")
+    with _db() as conn:
+        n = conn.execute(
+            "UPDATE personal_tokens SET revoked_at=now() WHERE email=%s AND token_hash LIKE %s "
+            "AND revoked_at IS NULL RETURNING token_hash", (p["actor"], token_id + "%")).fetchone()
+        if not n:
+            raise HTTPException(status_code=404, detail="không thấy token")
+        _audit(conn, p["actor"], "pat_revoke", "account", p["actor"], {"id": token_id})
+        conn.commit()
+    return {"ok": True}
+
+
+# ---------------- P10: yêu cầu phân quyền per-agent (admin duyệt) ----------------
+
+@app.get("/v1/roles/catalog")
+def roles_catalog(authorization: str = Header(default="")) -> dict:
+    """Trang 'Xin quyền': mọi agent (tên + bot Lark) + quyền hiện có + yêu cầu của tôi."""
+    p = _principal(authorization)
+    if p["kind"] not in ("session", "pat"):
+        raise HTTPException(status_code=401, detail="cần đăng nhập console")
+    email = p["actor"]
+    _ensure_schema()
+    with _db() as conn:
+        agents = conn.execute(
+            "SELECT agent_id, name, squad, status, lark_app_id, lark_bot_name FROM agents "
+            "WHERE coalesce(is_platform, false) = false ORDER BY agent_id").fetchall()
+        binds = {r["scope_id"]: r["role"] for r in conn.execute(
+            "SELECT scope_id, role FROM role_bindings WHERE email=%s AND scope_type='agent'",
+            (email,)).fetchall()}
+        prow = conn.execute(
+            "SELECT role FROM role_bindings WHERE email=%s AND scope_type='platform'",
+            (email,)).fetchone()
+        reqs = conn.execute(
+            "SELECT id, scope_type, scope_id, role, reason, status, decided_by, decide_note, "
+            "created_at, decided_at FROM role_requests WHERE email=%s "
+            "ORDER BY id DESC LIMIT 100", (email,)).fetchall()
+    plat = prow["role"] if prow else None
+    out = []
+    for a in agents:
+        mine = binds.get(a["agent_id"])
+        eff = mine or plat or DEFAULT_LOGIN_ROLE
+        out.append({**dict(a), "my_role": mine, "effective_role": eff})
+    return {"email": email, "platform_role": plat, "default_role": DEFAULT_LOGIN_ROLE,
+            "agents": out, "requests": [dict(r) for r in reqs]}
+
+
+@app.post("/v1/roles/request")
+def roles_request(body: dict, authorization: str = Header(default="")) -> dict:
+    """Người dùng xin quyền moderator|admin trên 1 agent (hoặc platform). Admin sẽ duyệt."""
+    p = _principal(authorization)
+    if p["kind"] not in ("session", "pat"):
+        raise HTTPException(status_code=401, detail="cần đăng nhập console")
+    email = p["actor"]
+    scope_type = body.get("scope_type") or "agent"
+    scope_id = (body.get("scope_id") or "").strip() or ("*" if scope_type == "platform" else "")
+    role = body.get("role") or ""
+    reason = (body.get("reason") or "").strip()[:500]
+    if scope_type not in ("agent", "platform"):
+        raise HTTPException(status_code=400, detail="scope_type: agent|platform")
+    if role not in ("moderator", "admin"):
+        raise HTTPException(status_code=400,
+                            detail="chỉ xin moderator|admin — quyền 'user' là mặc định của mọi tài khoản")
+    with _db() as conn:
+        if scope_type == "agent":
+            if not conn.execute("SELECT 1 FROM agents WHERE agent_id=%s", (scope_id,)).fetchone():
+                raise HTTPException(status_code=404, detail="agent không tồn tại")
+        cur = _effective_role(conn, email, scope_id if scope_type == "agent" else None)
+        if _ROLE_RANK.get(cur or "", 0) >= _ROLE_RANK.get(role, 99):
+            raise HTTPException(status_code=400, detail=f"bạn đã có quyền '{cur}' — không cần xin '{role}'")
+        dup = conn.execute(
+            "SELECT id FROM role_requests WHERE email=%s AND scope_type=%s AND scope_id=%s "
+            "AND status='pending'", (email, scope_type, scope_id)).fetchone()
+        if dup:
+            raise HTTPException(status_code=409, detail=f"đã có yêu cầu #{dup['id']} đang chờ duyệt")
+        row = conn.execute(
+            "INSERT INTO role_requests(email, scope_type, scope_id, role, reason) "
+            "VALUES (%s,%s,%s,%s,%s) RETURNING id",
+            (email, scope_type, scope_id, role, reason)).fetchone()
+        _audit(conn, email, "role_request", "role_request", str(row["id"]),
+               {"scope": f"{scope_type}:{scope_id}", "role": role})
+        scope_disp = scope_id if scope_type == "agent" else "PLATFORM"
+        _notify_admins(conn,
+                       f"🔑 {email} xin quyền {role.upper()} trên {scope_disp}"
+                       + (f"\nLý do: {reason}" if reason else "")
+                       + "\nDuyệt tại Console → Accounts → Yêu cầu phân quyền.")
+        conn.commit()
+    return {"ok": True, "id": row["id"], "status": "pending"}
+
+
+@app.get("/v1/roles/requests")
+def roles_requests_list(status: str = "pending",
+                        authorization: str = Header(default="")) -> list[dict]:
+    _require_role(authorization, "admin")
+    _ensure_schema()
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT q.id, q.email, a.name, q.scope_type, q.scope_id, q.role, q.reason, "
+            "q.status, q.decided_by, q.decide_note, q.created_at, q.decided_at "
+            "FROM role_requests q LEFT JOIN accounts a ON a.email=q.email "
+            "WHERE (%s = 'all' OR q.status = %s) ORDER BY q.id DESC LIMIT 200",
+            (status, status)).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/v1/roles/requests/{req_id}/decide")
+def roles_request_decide(req_id: int, body: dict,
+                         authorization: str = Header(default="")) -> dict:
+    """Admin duyệt/từ chối. Duyệt → ghi role_bindings; báo người xin qua Lark/Telegram."""
+    p = _require_role(authorization, "admin")
+    approve = bool(body.get("approve"))
+    note = (body.get("note") or "").strip()[:300]
+    actor = p["actor"] or "admin"
+    with _db() as conn:
+        q = conn.execute("SELECT * FROM role_requests WHERE id=%s FOR UPDATE", (req_id,)).fetchone()
+        if not q:
+            raise HTTPException(status_code=404, detail="yêu cầu không tồn tại")
+        if q["status"] != "pending":
+            raise HTTPException(status_code=409, detail=f"yêu cầu đã ở trạng thái '{q['status']}'")
+        # Tách vai: không tự duyệt yêu cầu của chính mình (dù là admin).
+        if p["kind"] == "session" and actor == q["email"]:
+            raise HTTPException(status_code=403, detail="không tự duyệt yêu cầu của chính mình")
+        if approve:
+            conn.execute(
+                "INSERT INTO role_bindings(email, scope_type, scope_id, role, granted_by) "
+                "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (email, scope_type, scope_id) "
+                "DO UPDATE SET role=EXCLUDED.role, granted_by=EXCLUDED.granted_by, granted_at=now()",
+                (q["email"], q["scope_type"], q["scope_id"], q["role"], actor))
+        conn.execute(
+            "UPDATE role_requests SET status=%s, decided_by=%s, decided_at=now(), decide_note=%s "
+            "WHERE id=%s", ("approved" if approve else "rejected", actor, note, req_id))
+        _audit(conn, actor, "role_request_decide", "role_request", str(req_id),
+               {"approve": approve, "email": q["email"],
+                "scope": f"{q['scope_type']}:{q['scope_id']}", "role": q["role"]})
+        conn.commit()
+    # Báo người xin (best-effort, ngoài transaction — lỗi gửi tin không hỏng quyết định).
+    scope_disp = q["scope_id"] if q["scope_type"] == "agent" else "PLATFORM"
+    verdict = "✅ ĐƯỢC DUYỆT" if approve else "❌ BỊ TỪ CHỐI"
+    _send_lark(q["email"], f"Yêu cầu quyền {q['role'].upper()} trên {scope_disp} của bạn {verdict}"
+                           f" (bởi {actor})." + (f"\nGhi chú: {note}" if note else ""))
+    try:
+        with _db() as conn:
+            tg = conn.execute("SELECT telegram_chat_id FROM accounts WHERE email=%s",
+                              (q["email"],)).fetchone()
+            if tg and tg["telegram_chat_id"]:
+                _tg_send(tg["telegram_chat_id"],
+                         f"Yêu cầu quyền {q['role']} trên {scope_disp}: {verdict} (bởi {actor})")
+    except Exception:
+        pass
+    return {"ok": True, "id": req_id, "status": "approved" if approve else "rejected"}
+
+
 # ---------------- Quản lý tài khoản (chỉ admin) ----------------
 
 @app.get("/v1/accounts")
@@ -1340,7 +1932,7 @@ def accounts_list(authorization: str = Header(default="")) -> list[dict]:
     with _db() as conn:
         rows = conn.execute(
             "SELECT a.email, a.name, a.status, a.must_change_pw, a.last_login_at, a.created_at, "
-            "a.telegram_chat_id, "
+            "a.telegram_chat_id, a.auth_via, (a.lark_open_id IS NOT NULL) AS lark_linked, "
             "coalesce(json_agg(json_build_object('scope_type', r.scope_type, 'scope_id', r.scope_id, "
             "  'role', r.role) ORDER BY r.scope_type) FILTER (WHERE r.id IS NOT NULL), '[]') AS roles "
             "FROM accounts a LEFT JOIN role_bindings r ON r.email=a.email "
@@ -1829,15 +2421,31 @@ def enroll(agent: dict, authorization: str = Header(default="")) -> dict:
     key của agent đã có (409 nếu trùng id).
     """
 
-    if not ENROLL_TOKEN or authorization != f"Bearer {ENROLL_TOKEN}":
-        raise HTTPException(status_code=401, detail="enroll token required (LSR_ENROLL_TOKEN)")
     _ensure_schema()
+    # 3 cách xác thực, ưu tiên DANH TÍNH NGƯỜI DÙNG (không cần secret dùng chung):
+    #   1. token cá nhân / phiên console  → owner mặc định = chính người đó;
+    #      admin platform thì agent ACTIVE luôn (tự duyệt).
+    #   2. enroll token dùng chung        → giữ tương thích cho script cũ (agent 'registered').
+    p = _principal(authorization)
+    tok = _bearer(authorization)
+    if p["kind"] in ("session", "pat", "admin_token"):
+        actor, actor_role = p["actor"], p["role"]
+    elif ENROLL_TOKEN and tok == ENROLL_TOKEN:
+        actor, actor_role = None, None
+    else:
+        raise HTTPException(
+            status_code=401,
+            detail="cần đăng nhập: chạy `bash scripts/lsr-login.sh` (mở console duyệt 1 lần) "
+                   "— hoặc dùng LSR_ENROLL_TOKEN nếu bạn có sẵn")
     agent_id = (agent.get("agent_id") or "").strip()
-    owner = str(agent.get("owner", "")).strip()
+    owner = str(agent.get("owner", "")).strip() or (actor or "")
     if not agent_id:
         raise HTTPException(status_code=422, detail="agent_id required")
     if not _EMAIL_RE.match(owner):
         raise HTTPException(status_code=422, detail="owner phải là email thật của người sở hữu")
+    # Admin tự duyệt agent mình tạo; người khác vẫn cần admin activate.
+    auto_approve = actor_role == "admin"
+    status0 = "active" if auto_approve else "registered"
     skills = agent.get("skills") or []
     if not isinstance(skills, list):
         skills = [str(skills)]
@@ -1852,26 +2460,45 @@ def enroll(agent: dict, authorization: str = Header(default="")) -> dict:
             INSERT INTO agents (agent_id, name, owner, squad, connect_mode, is_squad_agent,
                                 skills, status, telemetry_key_hash, deployment, repo_url,
                                 host_note, backup_owner, prompt_version, prompt_ref,
-                                backend_url, dashboard_url)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,'registered',%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                                backend_url, dashboard_url, golive_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                    CASE WHEN %s='active' THEN now() END)
             """,
             (agent_id, agent.get("name"), owner, agent.get("squad"),
              agent.get("connect_mode", "bot"), bool(agent.get("is_squad_agent", False)),
-             skills, key_hash, agent.get("deployment", "managed"), agent.get("repo_url"),
+             skills, status0, key_hash, agent.get("deployment", "managed"), agent.get("repo_url"),
              agent.get("host_note"), agent.get("backup_owner"),
              agent.get("prompt_version"), agent.get("prompt_ref"),
-             agent.get("backend_url"), agent.get("dashboard_url")),
+             agent.get("backend_url"), agent.get("dashboard_url"), status0),
         )
+        # Người tạo là moderator của chính agent mình (quản trong console mà không cần xin).
+        if actor and "@" in actor:
+            conn.execute(
+                "INSERT INTO role_bindings(email, scope_type, scope_id, role, granted_by) "
+                "VALUES (%s,'agent',%s,'moderator','auto-enroll') ON CONFLICT DO NOTHING",
+                (actor, agent_id))
         schema = agent_schema(agent_id)
         conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema}"')
-        _audit(conn, owner, "enroll", "agent", agent_id,
+        _audit(conn, actor or owner, "enroll", "agent", agent_id,
                {"name": agent.get("name"), "deployment": agent.get("deployment", "managed"),
-                "self_service": True})
+                "self_service": True, "auto_approved": auto_approve,
+                "via": p["kind"] if actor else "enroll_token"})
+        _notify_admins(conn,
+                       f"🆕 Agent mới: {agent_id} ({agent.get('name') or '?'})\n"
+                       f"Owner: {owner} · người tạo: {actor or 'enroll-token'} · "
+                       f"deploy: {agent.get('deployment', 'managed')}\n"
+                       + ("✅ ĐÃ TỰ ACTIVE (người tạo là admin platform)."
+                          if auto_approve else
+                          "Token đã cấp TỰ ĐỘNG; test web chat được ngay. "
+                          "Cần ACTIVATE để chạy Lark/Telegram + A2A.")
+                       + f"\n{APP_PUBLIC_URL}/agent/{agent_id}")
         conn.commit()
     _minh_anh_share(agent_id)
     return {
         "agent_id": agent_id,
-        "status": "registered",
+        "status": status0,
+        "auto_approved": auto_approve,
+        "created_by": actor,
         "telemetry_key": telemetry_key,     # hiện MỘT LẦN — dùng cho plugin VÀ backend
         "agent_token": telemetry_key,       # alias: LSR_AGENT_TOKEN cho API /v1/self*
         "db_schema": schema,                # schema Postgres riêng của agent (truy cập qua /v1/self*)
@@ -1887,7 +2514,8 @@ def enroll(agent: dict, authorization: str = Header(default="")) -> dict:
             "— backend gọi /v1/self* để lấy dữ liệu agent (không cần admin/gateway token).",
             "Deploy backend: node scripts/provision-vercel.mjs " + agent_id +
             " (dùng VERCEL_TOKEN của owner) → tự set backend_url.",
-            "Hoàn tất golive checklist rồi nhờ admin chuyển sang 'active'.",
+            "Agent đã ACTIVE — chạy được cả Lark/Telegram + A2A." if auto_approve
+            else "Test ngay bằng web chat console; nhờ admin ACTIVATE để chạy Lark/Telegram + A2A.",
         ],
     }
 
@@ -1928,19 +2556,26 @@ def set_status(agent_id: str, body: dict, authorization: str = Header(default=""
     status = body.get("status")
     if status not in ("registered", "testing", "active", "deactivated"):
         raise HTTPException(status_code=422, detail="invalid status")
-    # GATE: chỉ cho golive khi checklist đủ mục bắt buộc (bỏ qua nếu force=true).
-    if status == "active" and not body.get("force"):
+    # GATE golive (chốt lại 18/08): chưa đủ checklist thì KHÔNG active — nhưng không
+    # im lặng: platform NHẮC OWNER đúng những mục còn thiếu. Đủ checklist thì hệ thống
+    # tự đẩy sang admin duyệt (xem submit_checklist). force=true chỉ dành cho admin
+    # xử lý ngoại lệ và luôn bị ghi audit.
+    miss: list = []
+    if status == "active":
         with _db() as conn:
             row = conn.execute(
                 "SELECT payload FROM agent_golive_checklist WHERE agent_id=%s", (agent_id,)
             ).fetchone()
-        miss = missing_checklist((row or {}).get("payload") or {})
-        if miss:
-            raise HTTPException(
-                status_code=409,
-                detail={"error": "golive checklist chưa đủ", "missing": miss,
-                        "hint": "POST /v1/agents/{id}/golive-checklist"},
-            )
+            miss = missing_checklist((row or {}).get("payload") or {})
+            if miss and not body.get("force"):
+                _notify_owner_checklist(conn, agent_id, miss)
+                conn.commit()
+                raise HTTPException(
+                    status_code=409,
+                    detail={"error": "golive checklist chưa đủ — đã nhắc owner bổ sung",
+                            "missing": miss,
+                            "hint": "owner nộp tại POST /v1/agents/{id}/golive-checklist; "
+                                    "đủ mục là hệ thống tự trình admin duyệt"})
     golive = "now()" if status == "active" else "golive_at"
     with _db() as conn:
         cur = conn.execute(
@@ -1958,9 +2593,11 @@ def set_status(agent_id: str, body: dict, authorization: str = Header(default=""
         vm = _agent_vm_action(agent_id, "start" if status == "active" else "stop") \
             if status in ("active", "deactivated") else None
         _audit(conn, x_actor or "admin", "set_status", "agent", agent_id,
-               {"status": status, "forced": bool(body.get("force")), "lark_sync": lark, "vm": vm})
+               {"status": status, "lark_sync": lark, "vm": vm,
+                "checklist_missing": miss})
         conn.commit()
-    return {"agent_id": agent_id, "status": status, "lark_sync": lark, "vm": vm}
+    return {"agent_id": agent_id, "status": status, "lark_sync": lark, "vm": vm,
+            "checklist_missing": miss}
 
 
 # ======================= Second brain của team =======================
@@ -2081,53 +2718,111 @@ def team_brain(team_id: str) -> dict:
 
 # ======================= LSR Brain: shared brain + consolidate =======================
 
-_LARK_TOKEN: dict = {"value": "", "exp": 0.0}
+_LARK_TOKEN: dict = {}          # app_id -> {"value": str, "exp": float}
 
 
-def _lark_token() -> str:
-    """tenant_access_token dùng chung — cache 2 tầng: L1 in-memory, L2 Postgres.
+def _lark_token(app_id: str = "") -> str:
+    """tenant_access_token THEO APP — cache 2 tầng: L1 in-memory, L2 Postgres.
 
-    Cache L2 (bảng lark_token_cache) để MỌI service/agent trong platform xài chung
-    một token, không mỗi nơi tự fetch (đồng bộ + tiết kiệm call, sống qua restart).
+    app_id rỗng = app mặc định của platform (LARK_NOTIFY/MINH_ANH). App khác
+    (vd Sawadee HAPAS) phải có secret trong _LARK_APPS — không có thì trả "",
+    caller báo lỗi rõ thay vì âm thầm gửi bằng bot sai (bot đó không ở trong nhóm).
+    Cache L2 (bảng lark_token_cache, key app_id) để MỌI service/agent xài chung
+    một token mỗi app, không mỗi nơi tự fetch (đồng bộ + tiết kiệm call, sống qua restart).
     """
 
     import time as _t
-    now = _t.time()
-    if _LARK_TOKEN["value"] and now < _LARK_TOKEN["exp"]:
-        return _LARK_TOKEN["value"]
-    if not (LARK_APP_ID and LARK_APP_SECRET):
+    app_id = app_id or LARK_APP_ID
+    secret = _LARK_APPS.get(app_id, "")
+    if not (app_id and secret):
         return ""
+    now = _t.time()
+    ent = _LARK_TOKEN.get(app_id)
+    if ent and ent["value"] and now < ent["exp"]:
+        return ent["value"]
     # L2: token còn hạn do service khác vừa lấy?
     try:
         with _db() as conn:
             row = conn.execute(
                 "SELECT token, extract(epoch from expire_at) AS exp "
-                "FROM lark_token_cache WHERE app_id=%s", (LARK_APP_ID,)).fetchone()
+                "FROM lark_token_cache WHERE app_id=%s", (app_id,)).fetchone()
         if row and row["token"] and row["exp"] and now < float(row["exp"]):
-            _LARK_TOKEN["value"], _LARK_TOKEN["exp"] = row["token"], float(row["exp"])
-            return _LARK_TOKEN["value"]
+            _LARK_TOKEN[app_id] = {"value": row["token"], "exp": float(row["exp"])}
+            return row["token"]
     except Exception:
         pass
     r = requests.post(
         f"{LARK_DOMAIN}/open-apis/auth/v3/tenant_access_token/internal",
-        json={"app_id": LARK_APP_ID, "app_secret": LARK_APP_SECRET}, timeout=10)
+        json={"app_id": app_id, "app_secret": secret}, timeout=10)
     d = r.json()
     if d.get("code") != 0:
         return ""
     exp = now + int(d.get("expire", 7200)) - 120
-    _LARK_TOKEN["value"] = d["tenant_access_token"]
-    _LARK_TOKEN["exp"] = exp
+    _LARK_TOKEN[app_id] = {"value": d["tenant_access_token"], "exp": exp}
     try:
         with _db() as conn:
             conn.execute(
                 "INSERT INTO lark_token_cache (app_id, token, expire_at) "
                 "VALUES (%s,%s,to_timestamp(%s)) ON CONFLICT (app_id) DO UPDATE "
                 "SET token=EXCLUDED.token, expire_at=EXCLUDED.expire_at",
-                (LARK_APP_ID, _LARK_TOKEN["value"], exp))
+                (app_id, d["tenant_access_token"], exp))
             conn.commit()
     except Exception:
         pass
-    return _LARK_TOKEN["value"]
+    return d["tenant_access_token"]
+
+
+def _lark_env_prefix(app_id: str) -> str:
+    """Tiền tố env đã khai app_id này (vd 'LYLY' cho LYLY_LARK_APP_ID) — dùng để in
+    đúng lệnh `add-lark-app.sh <PREFIX> <app_id> <service>` trong cảnh báo AG-OPS.
+
+    Đọc LARK_APP_PREFIXES (compose ghép sẵn, KHÔNG chứa secret) trước, vì container
+    platform_api cố tình không nhận các biến <PREFIX>_LARK_APP_* của app phụ.
+    """
+    try:
+        pref = json.loads(os.environ.get("LARK_APP_PREFIXES") or "{}").get(app_id)
+        if pref:
+            return str(pref)
+    except Exception:
+        pass
+    for k, v in os.environ.items():
+        if k.endswith("_LARK_APP_ID") and (v or "").strip() == app_id:
+            return k[: -len("_LARK_APP_ID")]
+    return ""
+
+
+def _lark_gateway_gaps(conn) -> list:
+    """Agent 'active' có app Lark riêng nhưng platform KHÔNG dùng được app_secret của app đó.
+
+    Triệu chứng đã gặp 3 lần (Sawadee, AG-HARRY, AG-KD-MATE-MADE): container gateway
+    vẫn 'running', binding + grant + status đều xanh trên console, nhưng gateway bỏ qua
+    long-connection vì thiếu secret → agent không nhận được một tin nào, và platform
+    cũng không gửi trả lời bằng đúng bot được. Không ai thấy vì cảnh báo chỉ nằm
+    trong log container. Kiểm 2 mức: (1) có secret không, (2) secret còn dùng được không
+    (token bị cache nên gần như không tốn call).
+    """
+    rows = conn.execute(
+        "SELECT DISTINCT coalesce(a.lark_app_id, r.app_id) AS app_id, a.agent_id, a.owner "
+        "FROM agents a LEFT JOIN routing_binding r "
+        "  ON r.agent_id = a.agent_id AND r.active AND r.channel = 'lark' "
+        "WHERE a.status = 'active' AND coalesce(a.lark_app_id, r.app_id) IS NOT NULL "
+        "ORDER BY 2").fetchall()
+    out = []
+    for r in rows:
+        app_id = (r["app_id"] or "").strip()
+        if not app_id:
+            continue
+        if app_id not in _LARK_APPS:
+            reason = "platform chưa có app_secret của app này"
+        elif not _lark_token(app_id):
+            reason = "app_secret platform đang giữ bị Lark từ chối (sai hoặc đã thu hồi)"
+        else:
+            continue
+        prefix = _lark_env_prefix(app_id)
+        out.append({"agent_id": r["agent_id"], "owner": r["owner"], "app_id": app_id,
+                    "reason": reason, "env_prefix": prefix,
+                    "service": f"event_gateway_{prefix.lower()}" if prefix else ""})
+    return out
 
 
 def _identity_cache_get(email: str) -> str | None:
@@ -2217,6 +2912,8 @@ def _lark_open_id_by_enterprise_email(email: str, token: str) -> str:
         return ""
 
     # Duyệt toàn bộ cây phòng ban (fetch_child) — user có thể ở dept con.
+    # QUAN TRỌNG: /users?department_id= mặc định nhận OPEN department_id (od-xxx) —
+    # dùng department_id thường sẽ bị 400 ở MỌI dept con (bug đã sửa 08-14).
     dept_ids = ["0"]
     page = ""
     for _ in range(30):
@@ -2226,7 +2923,9 @@ def _lark_open_id_by_enterprise_email(email: str, token: str) -> str:
             d = (requests.get(url, headers=h, timeout=15).json().get("data") or {})
         except Exception:
             break
-        dept_ids += [x.get("department_id") for x in (d.get("items") or []) if x.get("department_id")]
+        dept_ids += [x.get("open_department_id") or x.get("department_id")
+                     for x in (d.get("items") or [])
+                     if x.get("open_department_id") or x.get("department_id")]
         if not d.get("has_more"):
             break
         page = d.get("page_token") or ""
@@ -2308,10 +3007,16 @@ def _sync_lark_status(conn, agent_id: str, activate: bool) -> list[dict]:
 
 
 def _lark_send_to(receive_id: str, id_type: str, *, text: str = "",
-                  markdown: str = "") -> tuple[bool, str]:
-    """Gửi 1 tin tới receive_id (open_id|email|chat_id). Trả (ok, detail)."""
+                  markdown: str = "", app_id: str = "") -> tuple[bool, str]:
+    """Gửi 1 tin tới receive_id (open_id|email|chat_id). Trả (ok, detail).
 
-    token = _lark_token()
+    app_id: gửi bằng bot của app đó (job đến từ app nào trả lời bằng app đó);
+    rỗng = app mặc định. App chưa có secret trên VM → lỗi RÕ, không gửi bot sai.
+    """
+
+    if app_id and app_id not in _LARK_APPS:
+        return False, f"app {app_id} chưa có secret trên VM — thêm vào /opt/lsr-platform/.env"
+    token = _lark_token(app_id)
     if not token:
         return False, "no lark token (thiếu LARK_APP_ID/SECRET)"
     if markdown:
@@ -2338,6 +3043,528 @@ def _lark_send_to(receive_id: str, id_type: str, *, text: str = "",
 # Mọi agent gọi Lark QUA ĐÂY: không cầm app_secret, không tự resolve open_id, không
 # tự cache token. Đồng bộ nhờ cache token + danh tính dùng chung ở Postgres.
 
+# ---------------- C8: User Identity Broker cho Lark ----------------
+# Vì sao tồn tại: một số API Lark CHỈ nhận user token (Approval v4 trả thẳng
+# "only supports: user" khi gọi bằng tenant token). Agent không được cầm token của
+# người/account thật, nên platform đứng giữa: giữ token (mã hoá), tự refresh, kiểm
+# quyền theo allowlist path, audit + metering từng lời gọi.
+#
+# Thiết kế then chốt: MỘT proxy có allowlist path, không phải N endpoint cho từng
+# nhóm API. Thêm Approval hôm nay, Task/Docs tháng sau = thêm một dòng grant, không
+# phải PR vào core.
+
+# Phiên authorize chờ người bấm đồng ý. 24 giờ, không phải 15-30 phút: đây là bước CÓ
+# NGƯỜI — link được gửi qua chat, người ta còn phải tìm mật khẩu account của agent rồi
+# mới đăng nhập; bấm sau 2 giờ là chuyện thường (đã gặp 20/08). Hết hạn KHÔNG phải lớp
+# bảo vệ chính: state vô dụng nếu không có code hợp lệ của Lark cho đúng redirect_uri,
+# và callback vẫn kiểm email người vừa đồng ý phải đúng subject.
+_LARK_USER_SESSION_TTL = int(os.environ.get("LARK_USER_AUTHORIZE_TTL", "86400"))
+# Scope mặc định theo "domain" nghiệp vụ để người cấp quyền không phải nhớ tên scope.
+# Tên scope KHÔNG được đoán. Bộ dưới đây lấy từ user token đang chạy thật trong tenant
+# (lark-cli auth status). Đoán sai thì Lark trả invalid_scope ở trang đồng ý — người đi
+# authorize mới phát hiện, rất tốn công. Thêm domain mới thì đối chiếu lại bằng cách đó.
+_LARK_USER_SCOPES = {
+    "approval": ["approval:approval:read", "approval:instance:read",
+                 "approval:instance:write", "approval:task:read", "approval:task:write"],
+}
+# Luôn kèm: offline_access để có refresh token, auth:user.id:read để callback đọc được
+# danh tính người vừa đồng ý (bước kiểm "đúng account" phụ thuộc vào scope này).
+_LARK_USER_BASE_SCOPES = ["offline_access", "auth:user.id:read"]
+
+
+def _lark_user_scope_str(domains: str) -> str:
+    """'approval,task' → chuỗi scope Lark + offline_access (bắt buộc để có refresh)."""
+    out: list = list(_LARK_USER_BASE_SCOPES)
+    for d in [x.strip().lower() for x in (domains or "").split(",") if x.strip()]:
+        if d not in _LARK_USER_SCOPES:
+            raise HTTPException(status_code=422,
+                                detail=f"domain '{d}' chưa hỗ trợ — chọn: {sorted(_LARK_USER_SCOPES)}")
+        out += _LARK_USER_SCOPES[d]
+    if len(out) == len(_LARK_USER_BASE_SCOPES):
+        raise HTTPException(status_code=422, detail="cần ít nhất 1 domain (vd approval)")
+    return " ".join(dict.fromkeys(out))
+
+
+# Lark chỉ chấp nhận redirect_uri ĐÃ ĐĂNG KÝ trong console của app; URI lạ bị trả
+# invalid_request ngay ở trang đồng ý (kiểm live 19/08). Trong tenant này chỉ app Admin
+# có sẵn /api/auth/lark/callback, nên C8 DÙNG LẠI đúng route đó và phân luồng bằng tiền
+# tố state ("u..." = C8, số = đăng nhập console). Hai luồng ký HMAC khác nhau nên không
+# thể nhận nhầm nhau. Nhờ vậy thêm agent mới không phải sửa gì trong Lark Console.
+LARK_USER_REDIRECT_PATH = os.environ.get("LARK_USER_REDIRECT_PATH", "/api/auth/lark/callback")
+
+
+def _lark_user_redirect_uri() -> str:
+    if not CONSOLE_BASE_URL:
+        raise HTTPException(status_code=503, detail="thiếu CONSOLE_BASE_URL")
+    return f"{CONSOLE_BASE_URL}{LARK_USER_REDIRECT_PATH}"
+
+
+def _lark_user_store(conn, subject: str, d: dict, *, app_id: str, granted_by: str,
+                     scope: str, open_id: str = "", name: str = "") -> None:
+    """Ghi/cập nhật identity. access + refresh đều mã hoá; expiry tính từ 'expires_in'."""
+    at, rt = d.get("access_token") or "", d.get("refresh_token") or ""
+    if not (at and rt):
+        raise HTTPException(status_code=502,
+                            detail="Lark không trả refresh_token — app thiếu scope offline_access")
+    conn.execute(
+        "INSERT INTO lark_user_identities (subject_email, open_id, name, app_id, "
+        "  access_token_enc, refresh_token_enc, scope, expires_at, refresh_expires_at, "
+        "  granted_by, updated_at) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s, now() + make_interval(secs => %s), "
+        "        now() + make_interval(secs => %s), %s, now()) "
+        "ON CONFLICT (subject_email) DO UPDATE SET open_id=EXCLUDED.open_id, "
+        "  name=coalesce(EXCLUDED.name, lark_user_identities.name), app_id=EXCLUDED.app_id, "
+        "  access_token_enc=EXCLUDED.access_token_enc, "
+        "  refresh_token_enc=EXCLUDED.refresh_token_enc, scope=EXCLUDED.scope, "
+        "  expires_at=EXCLUDED.expires_at, refresh_expires_at=EXCLUDED.refresh_expires_at, "
+        "  granted_by=EXCLUDED.granted_by, updated_at=now()",
+        # 604800 = 7 ngày: refresh token Lark ở tenant này sống đúng 7 ngày (đo thật
+        # 19/08 trên user token đang chạy), chỉ dùng khi Lark không trả expires_in.
+        (subject, open_id, name or None, app_id, _enc_token(at), _enc_token(rt), scope,
+         int(d.get("expires_in") or 7200), int(d.get("refresh_token_expires_in") or 604800),
+         granted_by))
+
+
+def _lark_user_token(conn, subject: str) -> str:
+    """user_access_token còn hạn của subject, tự refresh khi gần hết.
+
+    Refresh là TRẠNG THÁI DÙNG CHUNG: hai tiến trình cùng refresh một account sẽ
+    vô hiệu hoá token của nhau (platform từng mất phiên NotebookLM đúng vì vậy).
+    Nên khoá hàng bằng SELECT ... FOR UPDATE trước khi gọi Lark.
+    """
+    row = conn.execute(
+        "SELECT access_token_enc, refresh_token_enc, app_id, scope, "
+        "  extract(epoch from (expires_at - now())) AS ttl, "
+        "  extract(epoch from (refresh_expires_at - now())) AS rttl "
+        "FROM lark_user_identities WHERE subject_email=%s FOR UPDATE", (subject,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"chưa có identity cho {subject}")
+    if float(row["rttl"] or 0) <= 0:
+        raise HTTPException(status_code=401,
+                            detail=f"refresh token của {subject} đã hết hạn — admin phải authorize lại")
+    if float(row["ttl"] or 0) > 120:
+        return _dec_token(row["access_token_enc"])
+    secret = _LARK_APPS.get(row["app_id"], "")
+    if not secret:
+        raise HTTPException(status_code=503,
+                            detail=f"platform không còn app_secret của {row['app_id']} để refresh")
+    r = requests.post(f"{LARK_DOMAIN}/open-apis/authen/v2/oauth/token", json={
+        "grant_type": "refresh_token", "client_id": row["app_id"], "client_secret": secret,
+        "refresh_token": _dec_token(row["refresh_token_enc"])}, timeout=15)
+    d = r.json() if r.content else {}
+    if not d.get("access_token"):
+        raise HTTPException(status_code=401, detail="refresh thất bại: "
+                            f"{d.get('error_description') or d.get('msg') or d.get('error')}")
+    _lark_user_store(conn, subject, d, app_id=row["app_id"], granted_by="refresh",
+                     scope=d.get("scope") or row["scope"])
+    _audit(conn, "platform", "lark_user_refresh", "lark_user", subject, {"app_id": row["app_id"]})
+    conn.commit()
+    return d["access_token"]
+
+
+@app.post("/v1/lark/user/authorize/start")
+def lark_user_authorize_start(body: dict, authorization: str = Header(default="")) -> dict:
+    """(admin) Tạo phiên authorize → trả URL để mở trên máy nào cũng được + state để poll.
+
+    Bắt buộc có người: chỉ chủ account đó đăng nhập và bấm đồng ý mới ra token.
+    """
+    _require_admin(authorization)
+    _ensure_schema()
+    if not _user_token_cipher():
+        raise HTTPException(status_code=503,
+                            detail="thiếu LARK_USER_TOKEN_KEY trên VM — không lưu token dạng rõ")
+    subject = (body.get("subject") or "").strip().lower()
+    if not subject or "@" not in subject:
+        raise HTTPException(status_code=422, detail="cần subject là email account")
+    domain = subject.split("@")[-1]
+    if ALLOWED_LOGIN_DOMAINS and domain not in ALLOWED_LOGIN_DOMAINS:
+        raise HTTPException(status_code=403, detail=f"email @{domain} không thuộc org")
+    scope = _lark_user_scope_str(body.get("domains") or "approval")
+    app_id = (body.get("app_id") or LARK_APP_ID or "").strip()
+    if not (app_id and _LARK_APPS.get(app_id)):
+        raise HTTPException(status_code=503, detail=f"platform không có app_secret của app {app_id or '(rỗng)'}")
+    from urllib.parse import quote
+    # State phải DUY NHẤT: trước đây ghép timestamp giây + chữ ký tất định, nên xin hai
+    # link cho cùng subject trong cùng một giây là trùng khoá chính -> 500 (gặp 20/08).
+    ts = str(int(time.time()))
+    state = f"u{ts}.{secrets.token_urlsafe(12)}"
+    actor = _actor_of(authorization)
+    with _db() as conn:
+        conn.execute("DELETE FROM lark_user_authorize_sessions WHERE expires_at < now()")
+        # Mỗi subject chỉ nên có MỘT link sống: xin link mới thì link cũ hết giá trị,
+        # để không có hai link cùng mở mà không ai biết cái nào đang dùng.
+        conn.execute("UPDATE lark_user_authorize_sessions SET status='superseded' "
+                     "WHERE subject_email=%s AND status='pending'", (subject,))
+        conn.execute(
+            "INSERT INTO lark_user_authorize_sessions (state, subject_email, scope, app_id, "
+            "requested_by, expires_at) VALUES (%s,%s,%s,%s,%s, now() + make_interval(secs => %s))",
+            (state, subject, scope, app_id, actor, _LARK_USER_SESSION_TTL))
+        _audit(conn, actor, "lark_user_authorize_start", "lark_user", subject,
+               {"scope": scope, "app_id": app_id})
+        conn.commit()
+    # Kiểm live 19/08: /authen/v2/oauth/authorize KHÔNG tồn tại (404 ở cả open.* lẫn
+    # accounts.*). Trang đồng ý là /authen/v1/authorize trên host accounts.*, và nó CÓ
+    # nhận scope. Việc đổi code vẫn dùng /authen/v2/oauth/token như phần đăng nhập.
+    url = (f"{LARK_ACCOUNTS_DOMAIN}/open-apis/authen/v1/authorize?app_id={app_id}"
+           f"&redirect_uri={quote(_lark_user_redirect_uri(), safe='')}"
+           f"&scope={quote(scope, safe='')}&state={state}")
+    return {"url": url, "state": state, "subject": subject, "scope": scope,
+            "expires_in": _LARK_USER_SESSION_TTL,
+            "next": f"Đăng nhập Lark BẰNG CHÍNH account {subject} rồi bấm đồng ý, "
+                    f"sau đó poll /v1/lark/user/authorize/poll?state=..."}
+
+
+@app.post("/v1/lark/user/authorize/callback")
+def lark_user_authorize_callback(body: dict) -> dict:
+    """Console gọi vào sau khi Lark redirect về: đổi code lấy token và lưu."""
+    _ensure_schema()
+    code = (body.get("code") or "").strip()
+    state = (body.get("state") or "").strip()
+    if not (code and state):
+        raise HTTPException(status_code=400, detail="thiếu code/state")
+    with _db() as conn:
+        # Tra KHÔNG kèm điều kiện hết hạn, để phân biệt được "hết hạn" với "không tồn
+        # tại". Gộp hai ca thành một thông báo mờ thì người bấm link không biết phải làm gì.
+        ses = conn.execute(
+            "SELECT *, expires_at <= now() AS het_han FROM lark_user_authorize_sessions "
+            "WHERE state=%s", (state,)).fetchone()
+        if not ses:
+            raise HTTPException(status_code=400,
+                                detail="link authorize không hợp lệ (state không tồn tại) — "
+                                       "xin admin tạo link mới")
+        if ses["het_han"]:
+            conn.execute("UPDATE lark_user_authorize_sessions SET status='expired' "
+                         "WHERE state=%s", (state,))
+            conn.commit()
+            raise HTTPException(status_code=400,
+                                detail=f"link authorize đã hết hạn (tạo lúc "
+                                       f"{ses['created_at']:%d/%m %H:%M} UTC) — "
+                                       f"xin admin tạo link mới cho {ses['subject_email']}")
+        if ses["status"] == "superseded":
+            raise HTTPException(status_code=400,
+                                detail=f"link này đã bị thay bằng link mới hơn cho "
+                                       f"{ses['subject_email']} — dùng link mới nhất")
+        if ses["status"] == "done":
+            raise HTTPException(status_code=400,
+                                detail=f"link này đã dùng xong cho {ses['subject_email']} — "
+                                       f"mỗi link chỉ dùng một lần")
+        secret = _LARK_APPS.get(ses["app_id"], "")
+        r = requests.post(f"{LARK_DOMAIN}/open-apis/authen/v2/oauth/token", json={
+            "grant_type": "authorization_code", "client_id": ses["app_id"],
+            "client_secret": secret, "code": code,
+            "redirect_uri": _lark_user_redirect_uri()}, timeout=15)
+        d = r.json() if r.content else {}
+        if not d.get("access_token"):
+            err = d.get("error_description") or d.get("msg") or d.get("error") or "?"
+            conn.execute("UPDATE lark_user_authorize_sessions SET status='error', error=%s "
+                         "WHERE state=%s", (str(err)[:200], state))
+            conn.commit()
+            raise HTTPException(status_code=401, detail=f"Lark từ chối code: {err}")
+        # Người vừa đồng ý PHẢI đúng account được yêu cầu — nếu không thì token sẽ
+        # hành động dưới danh nghĩa người khác, đúng thứ cơ chế này phải ngăn.
+        u = requests.get(f"{LARK_DOMAIN}/open-apis/authen/v1/user_info",
+                         headers={"Authorization": f"Bearer {d['access_token']}"},
+                         timeout=15).json()
+        info = u.get("data") or {}
+        email = (info.get("enterprise_email") or info.get("email") or "").strip().lower()
+        if email != ses["subject_email"]:
+            conn.execute("UPDATE lark_user_authorize_sessions SET status='error', error=%s "
+                         "WHERE state=%s", (f"đăng nhập bằng {email or '?'}", state))
+            _audit(conn, ses["requested_by"], "lark_user_authorize_wrong_account", "lark_user",
+                   ses["subject_email"], {"got": email})
+            conn.commit()
+            raise HTTPException(status_code=403,
+                                detail=f"đã đăng nhập bằng {email or '?'} chứ không phải "
+                                       f"{ses['subject_email']} — đăng xuất Lark rồi thử lại")
+        _lark_user_store(conn, email, d, app_id=ses["app_id"], granted_by=ses["requested_by"],
+                         scope=d.get("scope") or ses["scope"], open_id=info.get("open_id") or "",
+                         name=info.get("name") or "")
+        conn.execute("UPDATE lark_user_authorize_sessions SET status='done' WHERE state=%s", (state,))
+        _audit(conn, ses["requested_by"], "lark_user_authorize_done", "lark_user", email,
+               {"scope": d.get("scope") or ses["scope"], "app_id": ses["app_id"]})
+        conn.commit()
+    return {"ok": True, "subject": email}
+
+
+@app.get("/v1/lark/user/authorize/poll")
+def lark_user_authorize_poll(state: str, authorization: str = Header(default="")) -> dict:
+    """(admin) Trạng thái phiên authorize — để CLI chờ mà không cần browser tại chỗ."""
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        r = conn.execute("SELECT subject_email, status, error, expires_at < now() AS expired "
+                         "FROM lark_user_authorize_sessions WHERE state=%s", (state,)).fetchone()
+    if not r:
+        raise HTTPException(status_code=404, detail="không thấy phiên")
+    return {"subject": r["subject_email"],
+            "status": "expired" if (r["expired"] and r["status"] == "pending") else r["status"],
+            "error": r["error"]}
+
+
+@app.get("/v1/agents/{agent_id}/lark-identities")
+def agent_lark_identities(agent_id: str, authorization: str = Header(default="")) -> dict:
+    """Danh tính Lark mà agent này được phép hành động dưới danh nghĩa (cho trang agent).
+
+    Quyền 'user' trên agent là đủ: chính sách C8 §5 đòi MINH BẠCH — người trong nhóm phải
+    thấy được có một account máy tham gia quy trình, và nó là account nào. Không trả token.
+    """
+    _require_role(authorization, "user", agent_id)
+    _ensure_schema()
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT g.subject_email, i.name, i.open_id, i.app_id, i.scope, g.path_prefixes, "
+            "  g.methods, g.active, g.granted_by, g.created_at AS granted_at, "
+            "  i.expires_at, i.refresh_expires_at, i.last_used_at, "
+            "  floor(extract(epoch from (i.refresh_expires_at - now()))/86400)::int AS refresh_days_left "
+            "FROM agent_user_identity_grants g "
+            "JOIN lark_user_identities i ON i.subject_email = g.subject_email "
+            "WHERE g.agent_id=%s ORDER BY g.subject_email", (agent_id,)).fetchall()
+        st = conn.execute(
+            "SELECT count(*) FILTER (WHERE ok) AS ok_7d, count(*) FILTER (WHERE NOT ok) AS fail_7d, "
+            "  max(created_at) AS last_call FROM tool_usage "
+            "WHERE agent_id=%s AND connector_id='lark_user' "
+            "  AND created_at > now() - interval '7 days'", (agent_id,)).fetchone()
+    return {"agent_id": agent_id, "identities": [dict(r) for r in rows],
+            "calls_7d": dict(st or {}),
+            "warn_days": LARK_USER_REFRESH_WARN_DAYS}
+
+
+@app.post("/v1/lark/user/grants")
+def lark_user_grant(body: dict, authorization: str = Header(default="")) -> dict:
+    """(admin) Cho agent quyền hành động dưới danh nghĩa subject, GIỚI HẠN theo path."""
+    _require_admin(authorization)
+    _ensure_schema()
+    agent_id = (body.get("agent_id") or "").strip()
+    subject = (body.get("subject") or "").strip().lower()
+    prefixes = [str(p).strip() for p in (body.get("path_prefixes") or []) if str(p).strip()]
+    methods = [str(m).strip().upper() for m in (body.get("methods") or ["GET", "POST"])]
+    if not (agent_id and subject and prefixes):
+        raise HTTPException(status_code=422, detail="cần agent_id, subject, path_prefixes")
+    for p in prefixes:
+        if not p.startswith("/open-apis/"):
+            raise HTTPException(status_code=422, detail=f"path_prefix phải bắt đầu /open-apis/: {p}")
+    actor = _actor_of(authorization)
+    with _db() as conn:
+        if not conn.execute("SELECT 1 FROM agents WHERE agent_id=%s", (agent_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="không thấy agent")
+        if not conn.execute("SELECT 1 FROM lark_user_identities WHERE subject_email=%s",
+                            (subject,)).fetchone():
+            raise HTTPException(status_code=404, detail=f"chưa authorize identity {subject}")
+        # Cấp identity thì cấp luôn connector 'lark_user': đây là CÙNG một quyết định của
+        # admin. Tách làm hai bước chỉ tạo ra 403 "chưa được cấp quyền connector" cho mọi
+        # agent về sau (đã tự vấp 20/08), mà admin thì tưởng đã cấp xong.
+        conn.execute("INSERT INTO connector_grants (agent_id, connector_id, scope, granted_by) "
+                     "VALUES (%s,'lark_user','use',%s) ON CONFLICT DO NOTHING", (agent_id, actor))
+        conn.execute(
+            "INSERT INTO agent_user_identity_grants (agent_id, subject_email, path_prefixes, "
+            "methods, active, granted_by) VALUES (%s,%s,%s,%s,true,%s) "
+            "ON CONFLICT (agent_id, subject_email) DO UPDATE SET path_prefixes=EXCLUDED.path_prefixes, "
+            "methods=EXCLUDED.methods, active=true, granted_by=EXCLUDED.granted_by",
+            (agent_id, subject, prefixes, methods, actor))
+        # Ghi theo SUBJECT (không theo agent): §3.5 đòi dựng lại được "ai làm gì lúc nào"
+        # trên một danh tính con người. Mọi sự kiện C8 của account đó — authorize, grant,
+        # call, refresh, revoke — phải cùng target_id để truy một lượt là ra hết.
+        _audit(conn, actor, "lark_user_grant", "lark_user", subject,
+               {"agent_id": agent_id, "path_prefixes": prefixes, "methods": methods})
+        conn.commit()
+    return {"ok": True, "agent_id": agent_id, "subject": subject, "path_prefixes": prefixes,
+            "methods": methods}
+
+
+@app.get("/v1/lark/user/identities")
+def lark_user_identities(authorization: str = Header(default="")) -> list:
+    """(admin) Danh sách identity + grant. KHÔNG bao giờ trả token."""
+    _require_admin(authorization)
+    _ensure_schema()
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT i.subject_email, i.name, i.open_id, i.app_id, i.scope, i.granted_by, "
+            "  i.expires_at, i.refresh_expires_at, i.last_used_at, "
+            "  floor(extract(epoch from (i.refresh_expires_at - now()))/86400)::int AS refresh_days_left, "
+            "  coalesce(json_agg(json_build_object('agent_id', g.agent_id, 'paths', g.path_prefixes, "
+            "    'methods', g.methods, 'active', g.active)) FILTER (WHERE g.agent_id IS NOT NULL), "
+            "    '[]') AS grants "
+            "FROM lark_user_identities i "
+            "LEFT JOIN agent_user_identity_grants g ON g.subject_email = i.subject_email "
+            "GROUP BY i.subject_email ORDER BY i.subject_email").fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/v1/lark/user/identities/{subject}/revoke")
+def lark_user_revoke(subject: str, authorization: str = Header(default="")) -> dict:
+    """(admin) Thu hồi: xoá token + tắt mọi grant. Lời gọi ngay sau đó phải 403/404."""
+    _require_admin(authorization)
+    _ensure_schema()
+    subject = subject.strip().lower()
+    actor = _actor_of(authorization)
+    with _db() as conn:
+        n = conn.execute("UPDATE agent_user_identity_grants SET active=false "
+                         "WHERE subject_email=%s", (subject,)).rowcount
+        d = conn.execute("DELETE FROM lark_user_identities WHERE subject_email=%s",
+                         (subject,)).rowcount
+        _audit(conn, actor, "lark_user_revoke", "lark_user", subject,
+               {"grants_off": n, "identity_deleted": d})
+        conn.commit()
+    if not d:
+        raise HTTPException(status_code=404, detail=f"không thấy identity {subject}")
+    return {"ok": True, "subject": subject, "grants_off": n}
+
+
+@app.get("/v1/lark/user/status")
+def lark_user_status(subject: str, authorization: str = Header(default="")) -> dict:
+    """Agent tự kiểm trước khi dùng → degrade rõ ràng thay vì lỗi mù giữa việc."""
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    subject = (subject or "").strip().lower()
+    with _db() as conn:
+        # Kiểm ĐỦ 3 điều kiện mà /call sẽ kiểm, kể cả connector — trước đây status trả
+        # connected=True trong khi /call vẫn 403 vì thiếu connector grant (20/08).
+        conn_ok = True
+        c = conn.execute("SELECT status, enforce FROM connectors WHERE connector_id='lark_user'").fetchone()
+        if c and c["status"] == "active" and c["enforce"]:
+            conn_ok = bool(conn.execute(
+                "SELECT 1 FROM connector_grants WHERE agent_id=%s AND connector_id='lark_user'",
+                (agent_id,)).fetchone())
+        g = conn.execute(
+            "SELECT path_prefixes, methods, active FROM agent_user_identity_grants "
+            "WHERE agent_id=%s AND subject_email=%s", (agent_id, subject)).fetchone()
+        i = conn.execute(
+            "SELECT scope, expires_at, refresh_expires_at, "
+            "  floor(extract(epoch from (refresh_expires_at - now()))/86400)::int AS refresh_days_left "
+            "FROM lark_user_identities WHERE subject_email=%s", (subject,)).fetchone()
+    if not (g and g["active"] and i and conn_ok):
+        return {"connected": False, "subject": subject,
+                "reason": "chưa có identity" if not i else
+                          ("chưa được cấp connector 'lark_user'" if not conn_ok else
+                           ("grant đã tắt" if g else "agent chưa được grant subject này"))}
+    return {"connected": True, "subject": subject, "scope": i["scope"],
+            "expires_at": i["expires_at"], "refresh_expires_at": i["refresh_expires_at"],
+            "refresh_days_left": i["refresh_days_left"],
+            "path_prefixes": g["path_prefixes"], "methods": g["methods"]}
+
+
+@app.post("/v1/lark/user/call")
+def lark_user_call(body: dict, authorization: str = Header(default="")) -> dict:
+    """Proxy gọi Lark bằng user token của subject. Agent KHÔNG bao giờ thấy token.
+
+    Chặn 3 tầng: connector 'lark_user' → grant còn active → path/method trong allowlist.
+    """
+    _t0 = time.time()
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    subject = (body.get("subject") or "").strip().lower()
+    method = (body.get("method") or "GET").strip().upper()
+    path = (body.get("path") or "").strip()
+    if not (subject and path.startswith("/open-apis/")):
+        raise HTTPException(status_code=422, detail="cần subject và path bắt đầu bằng /open-apis/")
+    if method not in ("GET", "POST", "PUT", "PATCH", "DELETE"):
+        raise HTTPException(status_code=422, detail=f"method không hỗ trợ: {method}")
+    if ".." in path:
+        raise HTTPException(status_code=422, detail="path không hợp lệ")
+
+    with _db() as conn:
+        _require_connector(conn, agent_id, "lark_user", "call")
+        g = conn.execute(
+            "SELECT path_prefixes, methods, active FROM agent_user_identity_grants "
+            "WHERE agent_id=%s AND subject_email=%s", (agent_id, subject)).fetchone()
+        if not g or not g["active"]:
+            _meter(conn, agent_id, "lark_user", "call", ok=False, error="no grant")
+            _audit(conn, agent_id, "lark_user_denied", "lark_user", subject,
+                   {"path": path, "reason": "chưa có grant hoặc grant đã tắt"})
+            conn.commit()
+            raise HTTPException(status_code=403,
+                                detail=f"agent {agent_id} chưa được cấp quyền hành động dưới "
+                                       f"danh nghĩa {subject} (hoặc grant đã bị thu hồi)")
+        if not any(path.startswith(p) for p in (g["path_prefixes"] or [])):
+            _meter(conn, agent_id, "lark_user", "call", ok=False, error="path off allowlist")
+            _audit(conn, agent_id, "lark_user_denied", "lark_user", subject,
+                   {"path": path, "reason": "path ngoài allowlist",
+                    "allowed": g["path_prefixes"]})
+            conn.commit()
+            raise HTTPException(status_code=403,
+                                detail=f"path {path} ngoài phạm vi được cấp: {g['path_prefixes']}")
+        if method not in (g["methods"] or []):
+            _meter(conn, agent_id, "lark_user", "call", ok=False, error="method off allowlist")
+            _audit(conn, agent_id, "lark_user_denied", "lark_user", subject,
+                   {"path": path, "method": method, "allowed": g["methods"]})
+            conn.commit()
+            raise HTTPException(status_code=403,
+                                detail=f"method {method} không được cấp (chỉ {g['methods']})")
+        token = _lark_user_token(conn, subject)
+
+    try:
+        r = requests.request(method, LARK_DOMAIN + path,
+                            headers={"Authorization": f"Bearer {token}",
+                                     "Content-Type": "application/json"},
+                            params=body.get("query") or None,
+                            json=body.get("body") if method != "GET" else None, timeout=30)
+        payload = r.json() if r.content else {}
+        status, err = r.status_code, "" if r.ok else str(payload)[:200]
+    except Exception as exc:
+        payload, status, err = {"error": str(exc)}, 502, str(exc)[:200]
+
+    with _db() as conn:
+        conn.execute("UPDATE lark_user_identities SET last_used_at=now() WHERE subject_email=%s",
+                     (subject,))
+        _audit(conn, agent_id, "lark_user_call", "lark_user", subject,
+               {"method": method, "path": path, "http": status, "lark_code": payload.get("code")})
+        _meter(conn, agent_id, "lark_user", "call", ok=(status < 400),
+               latency_ms=int((time.time() - _t0) * 1000), error=err)
+        conn.commit()
+    return {"http_status": status, "data": payload}
+
+
+def _lark_bot_name(app_id: str) -> str:
+    """Tên bot THẬT của một app Lark (bot/v3/info), cache trong process.
+
+    Console và trang xin quyền hiển thị `agents.lark_bot_name`. Trường đó trước đây điền
+    tay nên đổi app Lark là nó nói sai ngay (20/08: AG-LEGAL đã chuyển sang app riêng mà
+    console vẫn ghi "Minh Anh (bot chung)"). Lấy từ Lark thì không lệch được.
+    """
+    if not app_id:
+        return ""
+    hit = _LARK_BOT_NAME.get(app_id)
+    if hit is not None:
+        return hit
+    name = ""
+    try:
+        tok = _lark_token(app_id)
+        if tok:
+            d = requests.get(f"{LARK_DOMAIN}/open-apis/bot/v3/info",
+                             headers={"Authorization": f"Bearer {tok}"}, timeout=10).json()
+            name = ((d.get("bot") or {}).get("app_name") or "").strip()
+    except Exception:
+        name = ""
+    if name:
+        _LARK_BOT_NAME[app_id] = name
+    return name
+
+
+@app.post("/v1/lark/bots/sync")
+def lark_bots_sync(authorization: str = Header(default="")) -> dict:
+    """(admin) Đồng bộ lark_bot_name của mọi agent từ Lark. Chạy sau khi đổi app của agent."""
+    _require_admin(authorization)
+    _ensure_schema()
+    out, actor = [], _actor_of(authorization)
+    with _db() as conn:
+        rows = conn.execute("SELECT agent_id, lark_app_id, lark_bot_name FROM agents "
+                            "WHERE coalesce(lark_app_id,'') <> '' ORDER BY agent_id").fetchall()
+        for r in rows:
+            real = _lark_bot_name(r["lark_app_id"])
+            if not real:
+                out.append({"agent_id": r["agent_id"], "app_id": r["lark_app_id"],
+                            "ket_qua": "khong lay duoc ten (thieu app_secret?)"})
+                continue
+            if real != (r["lark_bot_name"] or ""):
+                conn.execute("UPDATE agents SET lark_bot_name=%s WHERE agent_id=%s",
+                             (real, r["agent_id"]))
+                _audit(conn, actor, "lark_bot_name_sync", "agent", r["agent_id"],
+                       {"cu": r["lark_bot_name"], "moi": real, "app_id": r["lark_app_id"]})
+                out.append({"agent_id": r["agent_id"], "cu": r["lark_bot_name"], "moi": real})
+        conn.commit()
+    return {"da_sua": [o for o in out if o.get("moi")], "van_de": [o for o in out if o.get("ket_qua")]}
+
+
 @app.post("/v1/lark/resolve")
 def lark_resolve(body: dict, authorization: str = Header(default="")) -> dict:
     """email → open_id (dùng cache danh tính chung)."""
@@ -2357,10 +3584,11 @@ def lark_resolve(body: dict, authorization: str = Header(default="")) -> dict:
 
 @app.post("/v1/lark/send")
 def lark_send(body: dict, authorization: str = Header(default="")) -> dict:
-    """Gửi tin Lark thay cho agent. body: {to, to_type?, text?|markdown?}.
+    """Gửi tin Lark thay cho agent. body: {to, to_type?, text?|markdown?, app_id?}.
 
     to_type: email (mặc định) | open_id | chat_id. Với email sẽ tự resolve→open_id;
     nếu chưa tra được và có LARK_NOTIFY_CHAT_ID thì rơi về nhóm chung (không mất tin).
+    app_id: gửi bằng bot của app đó (rỗng = app mặc định của platform).
     """
 
     agent_id = _require_self(authorization)
@@ -2369,6 +3597,7 @@ def lark_send(body: dict, authorization: str = Header(default="")) -> dict:
     to_type = (body.get("to_type") or "email").strip()
     text = body.get("text") or ""
     markdown = body.get("markdown") or ""
+    send_app = (body.get("app_id") or "").strip()
     if not to or not (text or markdown):
         raise HTTPException(status_code=400, detail="cần 'to' và 'text' hoặc 'markdown'")
     # P5: adapter chuẩn — kiểm quyền connector trước khi ra ngoài + đo usage.
@@ -2378,7 +3607,8 @@ def lark_send(body: dict, authorization: str = Header(default="")) -> dict:
         conn.commit()
 
     if to_type == "email":
-        token = _lark_token()
+        # Resolve email→open_id bằng token của app sẽ gửi (scope contact theo từng app).
+        token = _lark_token(send_app) or _lark_token()
         open_id = _lark_open_id(to, token) if token else ""
         if open_id:
             receive_id, id_type = open_id, "open_id"
@@ -2394,10 +3624,11 @@ def lark_send(body: dict, authorization: str = Header(default="")) -> dict:
     else:
         receive_id, id_type = to, to_type
 
-    ok, detail = _lark_send_to(receive_id, id_type, text=text, markdown=markdown)
+    ok, detail = _lark_send_to(receive_id, id_type, text=text, markdown=markdown,
+                               app_id=send_app)
     with _db() as conn:
         _audit(conn, agent_id, "lark_send", "lark", f"{id_type}:{receive_id[:24]}",
-               {"ok": ok, "detail": detail, "via": to_type})
+               {"ok": ok, "detail": detail, "via": to_type, "app_id": send_app or None})
         _meter(conn, agent_id, "lark", "send", ok=ok,
                latency_ms=int((time.time() - _t0) * 1000), error="" if ok else detail)
         conn.commit()
@@ -2407,21 +3638,80 @@ def lark_send(body: dict, authorization: str = Header(default="")) -> dict:
 
 
 @app.get("/v1/lark/chats")
-def lark_chats(authorization: str = Header(default="")) -> dict:
-    """Liệt kê các nhóm mà BOT platform đang tham gia (để agent biết chat_id gửi vào)."""
+def lark_chats(authorization: str = Header(default=""), app_id: str = "") -> dict:
+    """Liệt kê các nhóm mà BOT đang tham gia (để agent biết chat_id gửi vào).
+
+    app_id: xem nhóm của bot app đó (vd Sawadee HAPAS); rỗng = bot mặc định platform.
+    """
 
     _require_self(authorization)
-    token = _lark_token()
+    if app_id and app_id not in _LARK_APPS:
+        raise HTTPException(status_code=503,
+                            detail=f"app {app_id} chưa có secret trên VM (.env)")
+    token = _lark_token(app_id)
     if not token:
         raise HTTPException(status_code=503, detail="Lark chưa cấu hình")
     try:
         r = requests.get(f"{LARK_DOMAIN}/open-apis/im/v1/chats?page_size=100",
                          headers={"Authorization": f"Bearer {token}"}, timeout=10)
         items = (r.json().get("data") or {}).get("items") or []
-        return {"chats": [{"chat_id": c.get("chat_id"), "name": c.get("name")}
+        return {"app_id": app_id or LARK_APP_ID,
+                "chats": [{"chat_id": c.get("chat_id"), "name": c.get("name")}
                           for c in items]}
     except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)[:160])
+
+
+@app.get("/v1/lark/resource/{message_id}/{file_key}")
+def lark_resource(message_id: str, file_key: str, type: str = "file", app_id: str = "",
+                  authorization: str = Header(default="")):
+    """Tải file/media đính kèm 1 tin Lark (vd recording cuộc họp) — stream về agent.
+
+    C1: gateway đẩy file_key trong payload; agent gọi endpoint này để lấy nội dung,
+    KHÔNG cần cầm app_secret. type: file (mặc định) | image. app_id = app đã nhận tin
+    (lấy từ reply_to.app_id của job) để dùng đúng tenant token.
+    """
+
+    agent_id = _require_self(authorization)
+    _ensure_schema()
+    _t0 = time.time()
+    with _db() as conn:
+        _require_connector(conn, agent_id, "lark", "resource")
+        conn.commit()
+    if app_id and app_id not in _LARK_APPS:
+        raise HTTPException(status_code=503,
+                            detail=f"app {app_id} chưa có secret trên VM (.env)")
+    token = _lark_token(app_id)
+    if not token:
+        raise HTTPException(status_code=503, detail="Lark chưa cấu hình")
+    url = (f"{LARK_DOMAIN}/open-apis/im/v1/messages/{message_id}"
+           f"/resources/{file_key}?type={type}")
+    try:
+        r = requests.get(url, headers={"Authorization": f"Bearer {token}"},
+                         stream=True, timeout=120)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)[:160])
+    ctype = r.headers.get("content-type", "application/octet-stream")
+    if r.status_code != 200 or ctype.startswith("application/json"):
+        # Lark trả lỗi dạng JSON (code/msg) — chuyển tiếp cho agent biết vì sao.
+        try:
+            detail = str(r.json().get("msg"))[:160]
+        except Exception:
+            detail = f"http {r.status_code}"
+        with _db() as conn:
+            _meter(conn, agent_id, "lark", "resource", ok=False,
+                   latency_ms=int((time.time() - _t0) * 1000), error=detail)
+            conn.commit()
+        raise HTTPException(status_code=502, detail=f"Lark từ chối: {detail}")
+    with _db() as conn:
+        _meter(conn, agent_id, "lark", "resource", ok=True,
+               latency_ms=int((time.time() - _t0) * 1000))
+        _audit(conn, agent_id, "lark_resource", "lark", file_key[:48],
+               {"message_id": message_id, "type": type, "app_id": app_id or None})
+        conn.commit()
+    return StreamingResponse(r.iter_content(chunk_size=64 * 1024), media_type=ctype,
+                             headers={"Content-Disposition":
+                                      f'attachment; filename="{file_key}"'})
 
 
 # ==================== P1: Ingress hợp nhất — routing + job queue ====================
@@ -2487,6 +3777,10 @@ def _ingest(conn, *, channel: str, payload: dict, event_id: str | None = None,
             session_id: str | None = None, reply_to: dict | None = None,
             agent_id: str | None = None) -> dict:
     """dedupe → route → enqueue. Trả {job_id|None, status, dedupe?}."""
+    # Nhớ app nguồn vào reply_to → khi trả lời chọn ĐÚNG bot (app khác không ở trong nhóm).
+    if app_id:
+        reply_to = dict(reply_to or {})
+        reply_to.setdefault("app_id", app_id)
     if event_id:
         r = conn.execute(
             "INSERT INTO event_dedupe(event_id) VALUES (%s) ON CONFLICT DO NOTHING RETURNING event_id",
@@ -2496,10 +3790,13 @@ def _ingest(conn, *, channel: str, payload: dict, event_id: str | None = None,
     if not agent_id:
         agent_id = _route(conn, channel, app_id, chat_id)
     status = "queued"
+    ag_st = _agent_status(conn, agent_id) if agent_id else None
     if not agent_id:
         status = "unrouted"
-    elif _agent_status(conn, agent_id) == "deactivated":
+    elif ag_st == "deactivated":
         status = "rejected"     # kill-switch: nhận nhưng không cho chạy
+    elif channel in ("lark", "telegram") and ag_st != "active":
+        status = "rejected"     # kênh THỰC chỉ chạy khi admin đã activate; web test vẫn được
     row = conn.execute(
         """
         INSERT INTO jobs(agent_id, channel, session_id, reply_to, payload, status)
@@ -2618,9 +3915,12 @@ def self_job_reply(job_id: int, body: dict, authorization: str = Header(default=
         delivered = {"channel": ch, "sent": False}
         if ch == "lark" and rt.get("chat_id"):
             _require_connector(conn, agent_id, "lark", "reply")
-            ok, detail = _lark_send_to(rt["chat_id"], "chat_id", text=text)
+            ok, detail = _lark_send_to(rt["chat_id"], "chat_id", text=text,
+                                       app_id=rt.get("app_id") or "")
             _meter(conn, agent_id, "lark", "reply", ok=ok, error="" if ok else detail)
             delivered["sent"] = ok
+            if not ok:
+                delivered["error"] = detail
         elif ch == "telegram" and rt.get("chat_id"):
             ok = _tg_send(str(rt["chat_id"]), text)
             _meter(conn, agent_id, "telegram", "reply", ok=ok)
@@ -2633,16 +3933,36 @@ def self_job_reply(job_id: int, body: dict, authorization: str = Header(default=
 
 @app.post("/v1/self/jobs/{job_id}/complete")
 def self_job_complete(job_id: int, body: dict, authorization: str = Header(default="")) -> dict:
+    """Báo job xong. body.usage {input_tokens, output_tokens, model, duration_ms} nếu có.
+
+    Platform TỰ ghi 1 trace tối thiểu cho mỗi job xong → Runs/Token trên dashboard
+    không còn phụ thuộc việc team nhớ cài plugin telemetry (bài học AG-BI).
+    Consumer đã dùng plugin thì KHÔNG tự post thêm trace cho job để tránh đếm đôi.
+    """
     agent_id = _require_self(authorization)
+    usage = body.get("usage") or {}
     with _db() as conn:
         n = conn.execute(
             "UPDATE jobs SET status='done', updated_at=now(), last_error=NULL "
-            "WHERE id=%s AND agent_id=%s AND status='running' RETURNING id",
+            "WHERE id=%s AND agent_id=%s AND status='running' RETURNING id, channel, session_id",
             (job_id, agent_id)).fetchone()
         if not n:
             raise HTTPException(status_code=409, detail="job không ở trạng thái running của agent")
         conn.execute("INSERT INTO job_events(job_id, kind, data) VALUES (%s,'done',%s)",
                      (job_id, Json(body.get("result") or {})))
+        try:
+            ti = int(usage.get("input_tokens") or 0)
+            to = int(usage.get("output_tokens") or 0)
+            conn.execute(
+                "INSERT INTO agent_traces (run_id, agent_id, task_id, source, input_tokens, "
+                " output_tokens, total_tokens, tool_calls, duration_ms, status, raw) "
+                "VALUES (%s,%s,%s,'job_auto',%s,%s,%s,%s,%s,'ok',%s)",
+                (f"job-{job_id}", agent_id, n["session_id"], ti, to, ti + to,
+                 int(usage.get("tool_calls") or 0),
+                 int(usage.get("duration_ms") or 0) or None,
+                 Json({"channel": n["channel"], "model": usage.get("model"), "job_id": job_id})))
+        except Exception:
+            pass    # đếm run là best-effort — không được làm hỏng complete
         conn.commit()
     return {"ok": True}
 
@@ -3543,10 +4863,15 @@ def agent_create_nocode(body: dict, authorization: str = Header(default="")) -> 
                     (ch["channel"], ch.get("app_id"), ch["chat_id"], aid, actor))
         _audit(conn, actor, "agent_create_nocode", "agent", aid,
                {"name": name, "n_tests": len(valid_tests), "channels": len(body.get("channels") or [])})
+        _notify_admins(conn,
+                       f"🆕 Agent no-code mới: {aid} ({name})\nNgười tạo: {actor}\n"
+                       f"Token đã cấp TỰ ĐỘNG. Chạy thử được ngay trên console; "
+                       f"duyệt ACTIVATE để chạy Lark/Telegram + A2A: {APP_PUBLIC_URL}/agent/{aid}")
         conn.commit()
     return {"agent_id": aid, "telemetry_key": key, "version": 1, "runtime": "nocode",
             "console_url": f"{APP_PUBLIC_URL}/agent/{aid}",
-            "note": "Agent đã sẵn sàng — bấm Chạy thử. Publish prod cần admin duyệt."}
+            "note": "Agent đã sẵn sàng — bấm Chạy thử. Kênh thực (Lark/Telegram) + A2A "
+                    "cần admin ACTIVATE; publish prod cần admin duyệt."}
 
 
 @app.get("/v1/agents/{agent_id}/spec")
@@ -3554,11 +4879,42 @@ def agent_spec(agent_id: str, authorization: str = Header(default="")) -> dict:
     """Use case + test case của agent (dùng cho console và nút Xuất repo)."""
     _require_role(authorization, "user", agent_id)
     with _db() as conn:
-        r = conn.execute("SELECT agent_id, name, owner, runtime, usecase_md, testcases "
+        r = conn.execute("SELECT agent_id, name, owner, runtime, usecase_md, testcases, "
+                         "capabilities, usage_guide, lark_bot_name "
                          "FROM agents WHERE agent_id=%s", (agent_id,)).fetchone()
     if not r:
         raise HTTPException(status_code=404, detail="agent không tồn tại")
     return dict(r)
+
+
+@app.post("/v1/agents/{agent_id}/profile")
+def agent_profile_update(agent_id: str, body: dict,
+                         authorization: str = Header(default="")) -> dict:
+    """MASTER DATA của agent: năng lực (capabilities) + hướng dẫn sử dụng (usage_guide).
+
+    Nguồn sự thật cho: trang Xin quyền, /v1/self/directory (agent khác đọc trước khi A2A).
+    Moderator của agent (hoặc admin) mới sửa được.
+    """
+    p = _require_role(authorization, "moderator", agent_id)
+    caps = body.get("capabilities")
+    guide = body.get("usage_guide")
+    bot = body.get("lark_bot_name")
+    if caps is not None and not isinstance(caps, list):
+        raise HTTPException(status_code=400, detail="capabilities phải là danh sách chuỗi")
+    with _db() as conn:
+        # %s::jsonb — psycopg gửi Json() dưới type `json`, cột là `jsonb`;
+        # COALESCE(json, jsonb) không ghép được nên phải cast tường minh.
+        n = conn.execute(
+            "UPDATE agents SET capabilities=coalesce(%s::jsonb, capabilities), "
+            "usage_guide=coalesce(%s, usage_guide), lark_bot_name=coalesce(%s, lark_bot_name) "
+            "WHERE agent_id=%s RETURNING agent_id",
+            (Json(caps) if caps is not None else None, guide, bot, agent_id)).fetchone()
+        if not n:
+            raise HTTPException(status_code=404, detail="agent không tồn tại")
+        _audit(conn, p["actor"] or "admin", "agent_profile_update", "agent", agent_id,
+               {"capabilities": bool(caps), "usage_guide": bool(guide)})
+        conn.commit()
+    return {"ok": True, "agent_id": agent_id}
 
 
 @app.post("/v1/agents/{agent_id}/spec")
@@ -3788,6 +5144,7 @@ def self_directory(authorization: str = Header(default="")) -> dict:
         rows = conn.execute(
             """
             SELECT a.agent_id, a.name, a.owner, a.status, a.squad,
+                   a.capabilities, a.usage_guide, a.lark_bot_name,
                    coalesce(v.skills, to_jsonb(coalesce(a.skills,'{}'))) AS skills,
                    (SELECT 1 FROM a2a_grants g WHERE g.caller_id=%s AND g.target_id=a.agent_id) AS can_call
             FROM agents a
@@ -3799,6 +5156,8 @@ def self_directory(authorization: str = Header(default="")) -> dict:
     return {"caller": caller, "agents": [
         {"agent_id": r["agent_id"], "name": r["name"], "owner": r["owner"],
          "status": r["status"], "squad": r["squad"], "skills": r["skills"],
+         "capabilities": r["capabilities"], "usage_guide": r["usage_guide"],
+         "lark_bot_name": r["lark_bot_name"],
          "can_call": bool(r["can_call"]), "is_self": r["agent_id"] == caller}
         for r in rows]}
 
@@ -3850,11 +5209,17 @@ def a2a_call(target_id: str, body: dict, authorization: str = Header(default="")
     if not task:
         raise HTTPException(status_code=400, detail="thiếu 'task'")
     with _db() as conn:
+        # A2A chỉ giữa các agent ĐÃ được admin activate — cả hai chiều.
+        cstatus = _agent_status(conn, caller)
+        if cstatus != "active":
+            raise HTTPException(status_code=403,
+                                detail=f"agent của bạn đang '{cstatus}' — cần admin ACTIVATE mới gọi A2A được")
         tstatus = _agent_status(conn, target_id)
         if not tstatus:
             raise HTTPException(status_code=404, detail="target không tồn tại")
-        if tstatus == "deactivated":
-            raise HTTPException(status_code=409, detail="target inactive — không enqueue")
+        if tstatus != "active":
+            raise HTTPException(status_code=409,
+                                detail=f"target đang '{tstatus}' — chưa được admin activate, không enqueue")
         if not conn.execute("SELECT 1 FROM a2a_grants WHERE caller_id=%s AND target_id=%s",
                             (caller, target_id)).fetchone():
             _audit(conn, caller, "a2a_denied", "a2a", f"{caller}->{target_id}", {"task": task[:80]})
@@ -3917,7 +5282,8 @@ def a2a_result(req_id: str, authorization: str = Header(default="")) -> dict:
 # Platform agent quan sát & ĐỀ XUẤT; người DUYỆT (rủi ro cao) hoặc hệ thống tự chạy
 # (rủi ro thấp, vẫn ghi log). Không ai tự duyệt việc mình đề xuất.
 
-_ACTION_OK = {"alert", "replay_dlq", "deactivate_agent", "rollback_version",
+_ACTION_OK = {"alert", "replay_dlq", "deactivate_agent", "activate_agent",
+              "rollback_version", "prune_docker",
               "cooldown_credential", "pause_routing", "publish_version"}
 
 # --- Kênh admin: Telegram (dùng được ngay) + Lark DM (khi app mở available-range) ---
@@ -4065,7 +5431,36 @@ def _execute_action(conn, action: str, params: dict, actor: str) -> dict:
     if action == "deactivate_agent":
         aid = params.get("agent_id")
         conn.execute("UPDATE agents SET status='deactivated' WHERE agent_id=%s", (aid,))
-        return {"deactivated": aid}
+        # Kill switch: agent tắt thì cắt luôn quyền hành động dưới danh nghĩa người thật,
+        # không để token còn dùng được qua một tiến trình sót lại.
+        off = conn.execute("UPDATE agent_user_identity_grants SET active=false "
+                           "WHERE agent_id=%s AND active", (aid,)).rowcount
+        if off:
+            _audit(conn, actor, "lark_user_grants_off", "agent", aid,
+                   {"n": off, "reason": "agent bị deactivate"})
+        return {"deactivated": aid, "lark_user_grants_off": off}
+    if action == "activate_agent":
+        # Admin duyệt golive (checklist đã đủ ở bước nộp). Vẫn kiểm lại lần cuối để
+        # không bật agent bị xoá checklist sau khi trình duyệt.
+        aid = params.get("agent_id")
+        row = conn.execute(
+            "SELECT payload FROM agent_golive_checklist WHERE agent_id=%s", (aid,)).fetchone()
+        miss = missing_checklist((row or {}).get("payload") or {})
+        if miss:
+            _notify_owner_checklist(conn, aid, miss)
+            return {"error": "checklist thiếu lại khi duyệt — đã nhắc owner", "missing": miss}
+        n = conn.execute("UPDATE agents SET status='active', golive_at=coalesce(golive_at, now()) "
+                         "WHERE agent_id=%s RETURNING agent_id", (aid,)).fetchone()
+        if not n:
+            return {"error": "agent không tồn tại", "agent_id": aid}
+        lark = _sync_lark_status(conn, aid, activate=True)
+        vm = _agent_vm_action(aid, "start")
+        owner = (conn.execute("SELECT owner FROM agents WHERE agent_id=%s", (aid,)).fetchone()
+                 or {}).get("owner")
+        if owner:
+            _send_lark(owner, f"🎉 Agent {aid} đã được {actor} DUYỆT GOLIVE và đang chạy. "
+                              f"Kênh Lark/Telegram + A2A đã mở.")
+        return {"activated": aid, "lark_sync": lark, "vm": vm}
     if action == "publish_version":
         aid, ver, env = params.get("agent_id"), params.get("version"), params.get("env", "prod")
         gate = _eval_gate(conn, aid, ver)
@@ -4107,6 +5502,39 @@ def _execute_action(conn, action: str, params: dict, actor: str) -> dict:
                      "cooldown_until=now()+make_interval(secs=>%s), updated_at=now() WHERE id=%s",
                      (COOLDOWN_SECS, cid))
         return {"cooldown": cid}
+    if action == "prune_docker":
+        # Dọn image Docker để cứu đĩa. Hai mức, do người gọi chọn:
+        #   scope=dangling → images.prune() = `docker image prune -f` (chỉ image mồ côi)
+        #   scope=unused   → thêm dangling:false + until = `prune -a --filter until=...`
+        # Đo thật trên VM (19/08): dangling chỉ 0.4GB, còn image có tag nhưng không ai
+        # dùng tới 25GB — nên mức 'dangling' KHÔNG cứu nổi đĩa, phải dùng 'unused'.
+        # An toàn: Docker không xoá image nào còn container trỏ vào, KỂ CẢ container đã
+        # stop — nên agent đang tắt vẫn giữ được image, chỉ mất bản cũ sau khi build lại.
+        # 'until' là chốt chặn thêm: không đụng image mới build (mặc định 7 ngày).
+        scope = params.get("scope") or "dangling"
+        if scope not in ("dangling", "unused"):
+            return {"error": "scope phải là 'dangling' hoặc 'unused'"}
+        hours = int(params.get("older_than_hours") or 168)
+        filters = None if scope == "dangling" else {"dangling": False, "until": f"{hours}h"}
+        before = _disk_usage()
+        try:
+            import docker  # type: ignore
+            pr = docker.DockerClient(base_url=AGENT_DOCKER_HOST).images.prune(filters) or {}
+        except Exception as exc:
+            return {"error": f"không dọn được: {exc}", "disk": before}
+        freed_gb = round(int(pr.get("SpaceReclaimed") or 0) / 1e9, 1)
+        n = len(pr.get("ImagesDeleted") or [])
+        after = _disk_usage()
+        res = {"scope": scope, "older_than_hours": hours, "freed_gb": freed_gb,
+               "layers_deleted": n, "disk_before": before, "disk_after": after}
+        # Chỉ báo admin khi thật sự dọn được — tránh spam "đã dọn 0GB" mỗi giờ khi đĩa
+        # cao vì lý do khác (log, volume) chứ không phải image rác.
+        if freed_gb > 0:
+            _notify_admins(conn, f"🧹 *[{actor}]* Đã dọn image Docker ({scope}, quá "
+                                 f"{hours}h): giải phóng *{freed_gb}GB* ({n} lớp image). "
+                                 f"Đĩa {before.get('used_pct')}% → {after.get('used_pct')}% "
+                                 f"(còn {after.get('free_gb')}GB).")
+        return res
     if action == "pause_routing":
         n = conn.execute("UPDATE routing_binding SET active=false WHERE agent_id=%s",
                          (params.get("agent_id"),)).rowcount
@@ -4141,6 +5569,14 @@ def action_propose(body: dict, authorization: str = Header(default="")) -> dict:
                    {"action": action, "result": res})
             conn.commit()
             return {"id": row["id"], "status": "auto", "result": res}
+        # Cùng một việc đang chờ duyệt thì đừng đẻ thêm phiếu mỗi giờ — admin thấy
+        # 10 phiếu giống nhau sẽ bỏ qua cả 10.
+        dup = conn.execute(
+            "SELECT id FROM pending_actions WHERE status='pending' AND action=%s "
+            "AND params = %s::jsonb AND (expires_at IS NULL OR expires_at > now()) "
+            "ORDER BY id LIMIT 1", (action, Json(params))).fetchone()
+        if dup:
+            return {"id": dup["id"], "status": "pending", "action": action, "duplicate": True}
         row = conn.execute(
             "INSERT INTO pending_actions(proposed_by, action, params, risk, reason, expires_at) "
             "VALUES (%s,%s,%s,'high',%s, now() + make_interval(hours => %s)) RETURNING id",
@@ -4261,6 +5697,23 @@ def ops_snapshot(authorization: str = Header(default="")) -> dict:
             "GROUP BY connector_id ORDER BY n DESC LIMIT 5").fetchall()
         pending = conn.execute(
             "SELECT count(*) n FROM pending_actions WHERE status='pending'").fetchone()["n"]
+        # Binding "bắt tất": không khai app_id lẫn chat_id → hứng MỌI sự kiện của kênh
+        # đó khi không có binding cụ thể hơn. Rất dễ đẩy tin sang nhầm agent.
+        catchall = [dict(r) for r in conn.execute(
+            "SELECT id, channel, agent_id, created_by, created_at FROM routing_binding "
+            "WHERE active AND app_id IS NULL AND chat_id IS NULL ORDER BY id").fetchall()]
+        lark_gaps = _lark_gateway_gaps(conn)
+        # C8: refresh token Lark sống ~30 ngày. Hết mà không ai authorize lại thì agent
+        # degrade âm thầm (AG-LEGAL mất 1 tháng mới phát hiện) — báo trước.
+        user_ids = [dict(r) for r in conn.execute(
+            "SELECT i.subject_email, i.app_id, "
+            "  floor(extract(epoch from (i.refresh_expires_at - now()))/86400)::int AS days_left, "
+            "  array_remove(array_agg(g.agent_id) FILTER (WHERE g.active), NULL) AS agents "
+            "FROM lark_user_identities i "
+            "LEFT JOIN agent_user_identity_grants g ON g.subject_email=i.subject_email "
+            "WHERE i.refresh_expires_at < now() + make_interval(days => %s) "
+            "GROUP BY i.subject_email, i.app_id, i.refresh_expires_at "
+            "ORDER BY days_left", (LARK_USER_REFRESH_WARN_DAYS,)).fetchall()]
         expiring = conn.execute(
             "SELECT id, kind, owner_email, "
             "floor(extract(epoch from (expires_at - now()))/86400)::int AS days_left "
@@ -4274,7 +5727,28 @@ def ops_snapshot(authorization: str = Header(default="")) -> dict:
         "connector_errors_24h": [dict(r) for r in errs],
         "credentials_expiring": [dict(r) for r in expiring],
         "pending_actions": pending,
+        "disk": _disk_usage(),
+        "catchall_routes": catchall,
+        "lark_gateway_gaps": lark_gaps,
+        "lark_user_identities_expiring": user_ids,
     }
+
+
+def _disk_usage() -> dict:
+    """Dung lượng ổ của VM. Hết đĩa = build/deploy/DB chết đứng — phải cảnh báo sớm.
+
+    (Sự cố 08-14: ổ đầy 100% do image Docker cũ tích tụ, deploy fail giữa chừng.)
+    """
+    try:
+        st = os.statvfs("/")
+        total = st.f_blocks * st.f_frsize
+        free = st.f_bavail * st.f_frsize
+        if not total:
+            return {}
+        return {"total_gb": round(total / 1e9, 1), "free_gb": round(free / 1e9, 1),
+                "used_pct": round((total - free) / total * 100)}
+    except Exception:
+        return {}
 
 
 # -------- Mart: rollup KPI (nguồn cho dashboard + đối soát) --------
@@ -4862,11 +6336,58 @@ def missing_checklist(payload: dict) -> list[str]:
     return miss
 
 
+def _notify_owner_checklist(conn, agent_id: str, miss: list[str]) -> None:
+    """Nhắc OWNER những mục checklist còn thiếu (Lark DM, fallback nhóm chung)."""
+    row = conn.execute("SELECT owner, name FROM agents WHERE agent_id=%s", (agent_id,)).fetchone()
+    owner = (row or {}).get("owner") or ""
+    text = (f"📋 Agent {agent_id} ({(row or {}).get('name') or '?'}) chưa golive được: "
+            f"còn thiếu {len(miss)} mục checklist.\n"
+            f"Thiếu: {', '.join(miss)}\n"
+            f"Bổ sung tại Console → Agent → Golive checklist. Đủ mục là hệ thống tự trình "
+            f"admin duyệt, anh/chị không cần xin riêng.")
+    _audit(conn, "system", "golive_blocked", "agent", agent_id,
+           {"missing": miss, "owner_notified": owner})
+    if owner:
+        _send_lark(owner, text)
+
+
+def _request_golive_approval(conn, agent_id: str, actor: str) -> int | None:
+    """Checklist đã đủ → tạo đề xuất ACTIVATE cho admin duyệt (HITL, tách vai).
+
+    Người nộp checklist (owner) là bên đề xuất; admin là bên duyệt — owner không tự
+    bật agent của mình. Trả id đề xuất, hoặc None nếu đã có đề xuất đang chờ.
+    """
+    st = conn.execute("SELECT status, name, owner FROM agents WHERE agent_id=%s",
+                      (agent_id,)).fetchone() or {}
+    if st.get("status") == "active":
+        return None
+    dup = conn.execute(
+        "SELECT id FROM pending_actions WHERE status='pending' AND action='activate_agent' "
+        "AND params->>'agent_id'=%s", (agent_id,)).fetchone()
+    if dup:
+        return dup["id"]
+    row = conn.execute(
+        "INSERT INTO pending_actions(action, params, risk, reason, proposed_by, status) "
+        "VALUES ('activate_agent', %s, 'high', %s, %s, 'pending') RETURNING id",
+        (Json({"agent_id": agent_id}),
+         f"checklist golive ĐỦ — {actor} xin duyệt golive cho {agent_id}", actor)).fetchone()
+    _notify_admins(conn,
+                   f"✅ Agent {agent_id} ({st.get('name') or '?'}) đã ĐỦ golive checklist.\n"
+                   f"Owner: {st.get('owner') or '?'} · người nộp: {actor}\n"
+                   f"Duyệt để agent chạy kênh thật: {APP_PUBLIC_URL}/approvals",
+                   action_id=row["id"])
+    return row["id"]
+
+
 @app.post("/v1/agents/{agent_id}/golive-checklist")
 def submit_checklist(agent_id: str, body: dict, authorization: str = Header(default="")) -> dict:
-    """Owner nộp checklist; dữ liệu team/KPI chảy thẳng vào second brain."""
+    """Owner nộp checklist; đủ mục thì TỰ trình admin duyệt golive.
 
-    _require_admin(authorization)
+    Owner/moderator của agent nộp được (không cần admin platform) — đúng người làm
+    đúng việc; quyền BẬT agent vẫn nằm ở admin.
+    """
+
+    p = _require_role(authorization, "moderator", agent_id)
     _ensure_schema()
     payload = body.get("payload") or body
     miss = missing_checklist(payload)
@@ -4915,12 +6436,25 @@ def submit_checklist(agent_id: str, body: dict, authorization: str = Header(defa
                          k.get("data_source"), k.get("target"), k.get("period"),
                          k.get("weight", 1)),
                     )
+        req_id = None if miss else _request_golive_approval(
+            conn, agent_id, p["actor"] or "owner")
         conn.commit()
-    return {"agent_id": agent_id, "complete": not miss, "missing": miss}
+    if miss:
+        return {"agent_id": agent_id, "complete": False, "missing": miss,
+                "next": "bổ sung các mục còn thiếu rồi nộp lại"}
+    return {"agent_id": agent_id, "complete": True, "missing": [],
+            "approval_request_id": req_id,
+            "next": "đã trình admin duyệt golive — chờ admin bấm Duyệt ở Console → Duyệt việc"}
 
 
 @app.get("/v1/agents/{agent_id}/golive-checklist")
-def get_checklist(agent_id: str) -> dict:
+def get_checklist(agent_id: str, authorization: str = Header(default="")) -> dict:
+    """Xem checklist. CẦN quyền trên agent — payload chứa email, KPI, nguồn dữ liệu nội bộ.
+
+    (Trước 18/08 endpoint này không kiểm quyền; khi mở path qua Caddy cho owner nộp từ
+    máy dev thì hở ra ngoài internet, nên siết lại.)
+    """
+    _require_role(authorization, "user", agent_id)
     _ensure_schema()
     with _db() as conn:
         row = conn.execute(
