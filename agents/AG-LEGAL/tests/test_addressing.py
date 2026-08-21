@@ -211,3 +211,39 @@ def test_answering_when_called_needs_no_approval(tmp_path):
     gates = store.query("SELECT * FROM legal_gates")
     assert gates and all(x["level"] == "observe" for x in gates)
     assert not [x for x in gates if x["level"] == "gate"]
+
+
+# ==================== bot được add vào nhóm mới thì nhận ra ngay ====================
+
+def test_group_discovered_at_runtime_needs_no_env_change(monkeypatch):
+    """`/v1/lark/chats` của platform chỉ trả NHÓM (core: "liệt kê các nhóm mà bot đang
+    tham gia"), nên add bot vào nhóm mới là dùng được ngay — không phải sửa
+    `AGENT_GROUP_CHAT_IDS` rồi deploy lại."""
+    monkeypatch.delenv("AGENT_GROUP_CHAT_IDS", raising=False)
+    addressing.set_discovered_groups([])
+    payload = {"chat_id": "oc_moi", "text": "trưa nay ăn gì"}
+    assert addressing.is_group(payload) is False        # chưa biết → coi là chat riêng
+
+    addressing.set_discovered_groups(["oc_moi"])
+    assert addressing.is_group(payload) is True
+    ok, why = addressing.should_answer(payload)
+    assert ok is False and "không gọi tên" in why      # nhóm → phải gọi tên
+    ok, _ = addressing.should_answer({"chat_id": "oc_moi", "text": "Ann xem giúp mình"})
+    assert ok is True
+    addressing.set_discovered_groups([])
+
+
+def test_env_groups_still_work_when_discovery_empty(monkeypatch):
+    """Khai tay vẫn dùng được: nhóm biết trước mà bot chưa join, hoặc khi `/v1/lark/chats`
+    lỗi (nạp lại thất bại thì `_discovered` rỗng, không được làm mất cấu hình tay)."""
+    monkeypatch.setenv("AGENT_GROUP_CHAT_IDS", "oc_khai_tay")
+    addressing.set_discovered_groups([])
+    assert addressing.is_group({"chat_id": "oc_khai_tay", "text": "x"}) is True
+
+
+def test_chat_type_from_gateway_wins_over_both(monkeypatch):
+    """Khi core truyền `chat_type` (C12) thì tin nó, khỏi phải suy luận."""
+    monkeypatch.setenv("AGENT_GROUP_CHAT_IDS", "oc_a")
+    addressing.set_discovered_groups(["oc_a"])
+    assert addressing.is_group({"chat_id": "oc_a", "chat_type": "p2p"}) is False
+    addressing.set_discovered_groups([])

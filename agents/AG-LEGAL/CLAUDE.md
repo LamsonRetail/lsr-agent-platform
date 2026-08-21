@@ -79,7 +79,7 @@ legalkb/
 | S4 | **Lưu bản gốc + index TRƯỚC gate**, chỉ digest mới chờ duyệt | Bản gốc là tài liệu nhà nước, không phải nội dung AI — cần tra được ngay khi phát sinh việc |
 | S4 | Nguồn chưa kiểm được → **inactive + `note`** | Để active thì mỗi tuần báo lỗi mà không ai biết là do seed sai (3/4 nguồn seed đầu đã chết) |
 | S4 | Nguồn `html` **bắt buộc** có `link_pattern` | Parse HTML tuỳ ý sẽ ra rác mà vẫn "thành công" |
-| S4 | Văn bản người **bỏ tay** vào kho Drive cũng phải vào index | Có nước không crawl tự động được (Thái Lan: 9 nguồn đã đo, WAF hoặc render JS) — kho có văn bản mà agent không biết thì vô ích |
+| S4 | Văn bản người **bỏ tay** vào kho Drive cũng phải vào index | Nước chưa có nguồn tự động (Thái Lan bỏ khỏi scope 21/08, thêm trên console sau) — kho có văn bản mà agent không biết thì vô ích |
 | S4 | Số hiệu đọc lại từ **tên file** khi nạp tay | `_safe_name()` làm phẳng dấu `/` khi upload ⇒ `doc_no` NULL ⇒ dedupe không chạy ⇒ Bộ luật Lao động đã vào kho 2 lần thật |
 | S4 | Số hiệu do **nguồn cấp** > regex dò tiêu đề | Trích yếu "Quy định về định danh địa điểm" (326/2026/NĐ-CP) không có chữ số nào ⇒ regex trượt ⇒ dedupe liên nguồn vỡ |
 | S4 | Bản gốc **tốt hơn tới sau thì đổi** (`file_urls`) | RSS chạy trước chỉ có link trang tin; chinhphu.vn có PDF ký số |
@@ -95,7 +95,11 @@ legalkb/
 | Danh tính | `refresh_token` 7 ngày; còn ≤2 ngày thì **nhắc group** | Im lặng hết hạn = S5 chết âm thầm (đã xảy ra 17/07, 19/08 mới phát hiện) |
 | S5 | Tối đa 2 lần quay lại Bước 4, lần 3 escalate | Chống vòng lặp vô hạn |
 | Mọi gate | Quá hạn chỉ **NHẮC**, không tự thông qua (trừ `observe`) | Điểm an toàn cốt lõi |
+| Mọi kênh | **Không có bước phê duyệt** khi ai chat lần đầu hay khi bot được add vào nhóm — trả lời luôn, cho tất cả mọi người | Chốt 21/08. Đổi lại: audit event trên job + ghi lượt vào bộ nhớ + một dòng `s1_answer` để `#ds`/`tham gia` gọi tới |
+| Mọi kênh | Lượt đầu **không gửi card** vào group, kể cả khi tính là rủi ro cao | "chào bạn" cũng bị tính rủi ro cao (không trích dẫn) ⇒ bắn card đỏ cho một câu chào. Chống bịa nguồn đã có 2 lớp mạnh hơn: lọc citation khỏi câu trả lời + `golden_run.py` FAIL |
+| Mọi kênh | Hội thoại **đang chạy mới chuyển** sang rủi ro cao → @ người trực | Báo động an toàn, không chặn ai |
 | Nhóm | Chỉ trả lời khi **được gọi tên/@mention**; tin khác vẫn **ghi lượt** | Nhảy vào mọi câu là cách nhanh nhất để bị đá khỏi nhóm; nhưng vẫn cần ngữ cảnh khi được gọi |
+| Nhóm | Nhóm **tự phát hiện** qua `/v1/lark/chats` mỗi chu kỳ `gate_loop` | Core nói rõ endpoint này chỉ trả **nhóm** ⇒ add bot vào nhóm mới là dùng được ngay, không phải sửa env rồi deploy lại |
 | Phiên | Khoá theo **chat_id**, KHÔNG theo job id | Gateway không set `session_id`; khoá theo job = mỗi tin một phiên = không có bộ nhớ |
 | Nhóm/riêng | Phân biệt bằng `chat_type` nếu có, không thì `AGENT_GROUP_CHAT_IDS` | Lark dùng `oc_` cho **cả** p2p lẫn group — đoán theo tiền tố là sai |
 | Thoại | Tin thoại có `file_key` nhưng **không** tính là file đính kèm | Nếu tính thì router đẩy sang S3 "rà soát hợp đồng" |

@@ -49,9 +49,12 @@ DEGRADE_MSG = ("Hiện không truy cập được kho tài liệu pháp chế, �
                + DISCLAIMER)
 # Nghĩa vụ thông báo giám sát — nói ở lượt ĐẦU của mỗi hội thoại, đầy đủ một lần,
 # thay vì để người dùng tự suy ra từ dòng footer nhỏ.
+# Chốt 21/08: **không có bước phê duyệt nào** khi ai đó chat lần đầu hay khi bot được add
+# vào nhóm — cứ trả lời. Vẫn nói rõ một câu là có lưu log, vì đó là sự thật và là điều kiện
+# golive (`team_notified`), không phải là cái cổng chặn.
 GREETING = ("Mình là **Legal Agent** — trợ lý pháp chế nội bộ của LSR.\n"
-            "Trước khi bắt đầu: nội dung trao đổi này **được bộ phận Pháp chế giám sát** "
-            "để bảo đảm chất lượng tư vấn, và Pháp chế có thể tham gia trực tiếp khi cần.\n\n"
+            "Nội dung trao đổi được **ghi log và lưu vào bộ nhớ** để tra lại và để Pháp chế "
+            "soát chất lượng; Pháp chế có thể tham gia trực tiếp khi cần.\n\n"
             "---\n")
 GROUP_CHAT_ID = os.environ.get("LEGAL_GROUP_CHAT_ID", DEFAULT_GROUP)
 # Hồ sơ trình ký không tới theo giây; 5 phút là đủ nhanh mà không nện API Lark.
@@ -367,15 +370,39 @@ def handle(job, b):
         reply = GREETING + reply
     record_turns(pf, sid, q, reply, uref, job.get("channel"), model=ctx.get("model"))
 
-    # N1 Observe: báo Pháp chế MỌI lượt, gom theo hội thoại, không chặn người dùng.
-    # S2/S3/S5 đã tự mở gate riêng nên không mở thêm card S1 cho đỡ trùng.
+    # Audit, KHÔNG phải phê duyệt: ghi dấu để tra lại, không gửi card cho từng hội thoại.
+    # S2/S3/S5 vẫn có gate riêng của chúng — đó là những chỗ THẬT cần người quyết.
     if intent in ("s1_qa", "s4_news", "other"):
-        open_observe(g, sid, chat_id, uref, q, reply, risk, intent, job.get("channel"))
+        audit_conversation(b, job, sid, chat_id, uref, q, reply, risk, intent,
+                           job.get("channel"))
     return reply
 
 
-def open_observe(g, sid, chat_id, uref, q, reply, risk, intent, channel):
-    """Một hội thoại một gate observe; lượt sau chỉ nhắc khi rủi ro tăng lên high."""
+def audit_conversation(b, job, sid, chat_id, uref, q, reply, risk, intent, channel):
+    """Ghi nhận hội thoại để **audit + tra lại** — KHÔNG phải bước phê duyệt.
+
+    Chốt 21/08: bỏ hẳn việc phải được duyệt khi ai đó chat lần đầu hoặc khi bot được add
+    vào nhóm. Mặc định là **trả lời, cho tất cả mọi người**. Đổi lại, mọi hội thoại đều để
+    lại dấu ở ba chỗ:
+
+      1. **Bộ nhớ platform** — `record_turns()` ghi từng lượt (`/v1/self/session/turn`),
+         nên hỏi tiếp câu phụ thuộc ngữ cảnh vẫn hiểu, kể cả sau restart.
+      2. **Audit của platform** — event trên job, xem được ở Console → traces.
+      3. **Bảng `legal_gates`** — một dòng mỗi hội thoại, mức `observe`. Giữ dòng này vì
+         `#ds` và `#<id> tham gia` (Pháp chế thay Agent) cần một mã để gọi tới; **không**
+         gửi card cho từng hội thoại nữa.
+
+    Chỉ còn MỘT trường hợp gửi thông báo: hội thoại **đang chạy rồi mới chuyển** sang rủi
+    ro cao. Lượt đầu thì không, kể cả rủi ro cao — vì "chào bạn" cũng bị tính là rủi ro cao
+    (trả lời không có trích dẫn) và bắn card đỏ vào group cho một câu chào đúng là cái mà
+    chốt 21/08 muốn bỏ. Chống bịa nguồn đã có hai lớp mạnh hơn ở chỗ khác: citation không
+    map được về `legal_sources` thì **bị lọc khỏi câu trả lời**, và `golden_run.py` FAIL
+    khi phát hiện nguồn bịa.
+    """
+    g = b.gates
+    b.pf.event(job["id"], "audit", {"session": sid, "chat_id": chat_id, "user": uref,
+                                    "intent": intent, "risk": risk,
+                                    "q": (q or "")[:200]})
     cur = g.store.one(
         "SELECT * FROM legal_gates WHERE session_id=? AND kind='s1_answer' "
         "ORDER BY id DESC LIMIT 1", (sid,))
@@ -389,7 +416,7 @@ def open_observe(g, sid, chat_id, uref, q, reply, risk, intent, channel):
                   f"- **Câu hỏi:** {q[:300]}\nVào hỗ trợ: `#{cur['id']} tham gia`"))
         return cur["id"]
     return g.open("s1_answer", OBSERVE, risk=risk, session_id=sid, channel=channel,
-                  requester_ref=uref, title=None,
+                  requester_ref=uref, title=None, notify=False,
                   payload={"chat_id": chat_id, "question": q[:500],
                            "summary": reply[:300], "intent": intent})
 
@@ -551,6 +578,22 @@ def _handle_pending_task(b, task):
     print(f"[approval] báo hồ sơ {inst or tid} vào group", flush=True)
 
 
+def refresh_groups(pf):
+    """Nạp lại danh sách NHÓM bot đang tham gia.
+
+    Nhờ vậy bot được add vào nhóm mới là dùng được ngay — không phải sửa
+    `AGENT_GROUP_CHAT_IDS` rồi deploy lại. `/v1/lark/chats` của platform chỉ trả nhóm
+    (`im/v1/chats` không liệt kê chat 1-1), nên đây là tín hiệu đáng tin, thay cho việc
+    đoán theo tiền tố `oc_` (Lark dùng `oc_` cho cả hai).
+    """
+    try:
+        ids = [c["chat_id"] for c in (pf.lark_chats() or []) if c.get("chat_id")]
+    except Exception as exc:
+        print(f"[groups] không nạp được danh sách nhóm: {exc}", file=sys.stderr, flush=True)
+        return 0
+    return addressing.set_discovered_groups(ids)
+
+
 def gate_loop(b):
     """Nhắc SLA + nạp lại instruction khi có version mới publish."""
     while True:
@@ -558,6 +601,7 @@ def gate_loop(b):
             for what, gid in b.gates.sla_tick():
                 print(f"[gate] #{gid} → {what}", flush=True)
             apply_instruction(b.pf, b.engine, b.store)
+            refresh_groups(b.pf)
         except Exception as exc:
             print(f"[gate] lỗi: {exc}", file=sys.stderr, flush=True)
         time.sleep(float(os.environ.get("GATE_TICK_MIN", "10")) * 60)
@@ -572,6 +616,9 @@ def main():
     if not b.gates.roles():
         print("⚠️  legal_roles TRỐNG — chưa ai duyệt được. Chạy: python3 seed_roles.py",
               file=sys.stderr, flush=True)
+    n_groups = refresh_groups(b.pf)
+    print(f"nhóm bot đang tham gia: {n_groups}"
+          + ("" if n_groups else " — bot chưa ở trong nhóm nào"))
     check_group(b.pf)
     if not brain.available():
         print("⚠️  KHÔNG tìm thấy CLI `claude` trong PATH — router sẽ dùng mặc định và "

@@ -94,36 +94,42 @@ Chốt 17/08/2026: dùng **một group Lark** cho cả thông báo và phê duy�
 
 > Telegram: **bỏ khỏi scope** (chốt 17/08/2026) — không tạo bot, không cấu hình.
 
-## 3b. Add bot Lark vào group  ⛔ ĐANG CHẶN (đo lại 20/08)
+## 3b. Add bot Lark vào group  ✅ XONG 21/08 — nhưng đọc kỹ chỗ app_id
 
-**Đây là việc chặn nhiều nhất còn lại.** Đo bằng token agent, không phải phỏng đoán:
+Bot **đã ở trong group** `LSR Legal - admin group` (`oc_2c44…4efb`). Đo 21/08:
 
 ```
-GET /v1/lark/chats?app_id=cli_aaff13891ff85ee6  →  {"chats": []}          # 0 chat
-POST /v1/lark/send  →  502 "Lark từ chối: Bot/User can NOT be out of the chat."
+GET  /v1/lark/chats?app_id=cli_aa0f9ac50cf8dee9  →  LSR Legal - admin group
+POST /v1/lark/send  (app_id đó)                  →  {"ok": true}
 ```
 
-Kiểm cả 4 app Lark có secret trên VM: **không app nào ở trong group
-`oc_2c44…4efb`**, cũng không ở trong `oc_7323f980…` (chat của account Ann). Nên việc
-"đã add bot" trước đó chưa có hiệu lực — có thể add app khác, hoặc add vào group khác.
+⚠️ **Cái bẫy đã mất một ngày để tìm ra**: bot trong group là **app RIÊNG của AG-LEGAL**
+`cli_aa0f9ac50cf8dee9`, KHÔNG phải app Admin dùng chung `cli_aaff13891ff85ee6`. Agent để
+`LARK_BOT_APP_ID` rỗng thì broker gửi bằng app Admin — app đó **không ở trong group nào**
+(`chats: []`) nên mọi lời gọi trả 502 *"Bot/User can NOT be out of the chat"* và **toàn bộ
+thông báo mất im lặng**. Đã set `LARK_BOT_APP_ID=cli_aa0f9ac50cf8dee9`.
 
-Cách làm (người có quyền quản group, trên Lark):
+Cách tự kiểm khi nghi kênh Lark không chạy — chạy 3 lệnh này, đúng thứ tự:
 
-1. Mở group → **Settings → Bots → Add bot** → chọn bot của **app Admin platform**
-   `cli_aaff13891ff85ee6`.
-2. Kiểm lại bằng chính lệnh trên: `GET /v1/lark/chats` phải thấy `chat_id` của group.
-3. Console → **Ingress** → routing binding `channel=lark` → **điền cả `app_id` và
-   `chat_id`** (để trống cả hai = binding "bắt tất", AG-OPS sẽ cảnh báo) → AG-LEGAL.
+```bash
+set -a; . ./.env; set +a
+curl -s -H "Authorization: Bearer $LSR_AGENT_TOKEN" \
+     "$LSR_PLATFORM_URL/v1/lark/chats?app_id=$LARK_BOT_APP_ID"      # phải thấy group
+curl -s -H "Authorization: Bearer $LSR_AGENT_TOKEN" \
+     "$LSR_PLATFORM_URL/v1/lark/chats"                              # app mặc định thấy gì
+```
 
-Chưa có bước này thì: **không có thông báo, không duyệt được bằng lệnh `#12 duyệt`,
-S4 digest không gửi được, S5 không báo được hồ sơ**. Mọi thứ khác vẫn chạy.
+`chats: []` **không** chắc là bot ngoài group (có thể app thiếu scope `im:chat:readonly`) —
+phép thử dứt khoát luôn là **gửi thử một tin**.
 
-> Muốn bot mang **danh tính riêng** (tên "Ann"/AG-LEGAL thay vì bot dùng chung): core đã
-> mở sẵn chỗ `LEGAL_*` trong compose (C9, commit `7f6f7f1`), chỉ còn tạo custom app mới
-> trong Lark Developer Console rồi nạp `LEGAL_LARK_APP_ID/SECRET` bằng
-> `bash scripts/add-lark-app.sh LEGAL cli_xxx platform_api`. **Không** được trỏ `LEGAL_*`
-> vào app đang dùng của agent khác — hai long-connection trên cùng một app làm Lark chỉ
-> đẩy event cho một container, tin nhắn rơi rụng ngẫu nhiên (script đã chặn).
+Còn lại: Console → **Ingress** → routing binding `channel=lark` → điền cả `app_id`
+(`cli_aa0f9ac50cf8dee9`) và `chat_id` → AG-LEGAL. Để trống cả hai = binding "bắt tất",
+AG-OPS sẽ cảnh báo.
+
+> **Nhóm mới không cần cấu hình gì.** Từ 21/08 agent tự nạp danh sách nhóm qua
+> `/v1/lark/chats` mỗi chu kỳ `gate_loop` (core: endpoint này chỉ trả **nhóm**), nên add
+> bot vào nhóm nào là nhận ra nhóm đó ngay. `AGENT_GROUP_CHAT_IDS` chỉ còn dùng khi muốn
+> coi một chat là nhóm **trước khi** bot join.
 
 ## 3c. Danh tính Lark của agent (C8)  ✅ XONG 20/08
 
@@ -259,7 +265,7 @@ Lưu ý vận hành:
 
 - [x] Bot vào được wiki space (mục 1) — ✅ 18/08, đọc được 56 node
 - [x] `storage_state.json` (mục 2) — ✅ login lại 19/08, sync **32/32, 0 lỗi**. Phiên xoay cookie nên sẽ hết hạn lại: dấu hiệu là `Authentication expired` cho MỌI tài liệu
-- [ ] Bot ở trong group `oc_2c44…4efb` (mục **3b**) — ⛔ **đo lại 20/08: 0 app nào ở trong group**
+- [x] Bot ở trong group `oc_2c44…4efb` (mục **3b**) — ✅ 21/08, gửi thật OK. Bot là app riêng `cli_aa0f9ac50cf8dee9`, phải set `LARK_BOT_APP_ID`
 - [x] **Email của Nguyễn Thị Anh** — ✅ `anhnt1@hapas.vn`, đã nạp `legal_roles`
 - [x] Danh tính Lark của agent (C8, mục 3c) — ✅ connected 20/08
 - [ ] Thông báo minh bạch "Ann Nguyen là account máy" (mục 3c)
@@ -267,6 +273,6 @@ Lưu ý vận hành:
 - [ ] `instruction_block` đã publish (mục **3d** — chỉ làm trên Console) — **điều kiện golive thật**
 - [x] Sync lần đầu thành công (mục 5) — ✅ 19/08: 32 tài liệu nạp, 18 mục rỗng bị loại đúng
 - [ ] (Phase 3) **Nội dung 8 mẫu hợp đồng trong Wiki** — hiện rỗng (12 ký tự/node). Mẫu lấy từ Wiki được (export Lark Doc → docx đã kiểm OK), không cần Drive folder riêng
-- [x] (Phase 5) Danh sách nguồn luật — ✅ **3 nguồn VN đang bật** (chinhphu.vn · thuvienphapluat · LuatVietnam RSS), đã lưu thật PDF ký số + toàn văn. **Thái Lan còn 0 nguồn** — 3 nguồn thử đều không lấy được tự động, cần URL trang danh sách thật từ nhóm pháp chế
+- [x] (Phase 5) Danh sách nguồn luật — ✅ **3 nguồn VN đang bật** (chinhphu.vn · thuvienphapluat · LuatVietnam RSS), đã lưu thật PDF ký số + toàn văn. Nước khác **thêm trên console agent** (chốt 21/08); văn bản bỏ tay vào folder con theo nước vẫn được index
 - [x] (Phase 6) Quy trình trình ký — ✅ `approval_code=0338BCF9…`, 4 node, 4 field form đã ghim vào `signing.py`; checklist đầu mục đã nạp (`seed_news.py`)
 - [ ] (Phase 6) **C5 — passthrough tenant token** để đọc form/file hồ sơ + ghi comment vào instance (`requests/C5-lark-tenant-passthrough.md`)

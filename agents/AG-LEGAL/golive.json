@@ -1,5 +1,5 @@
 {
-  "_trang_thai": "BẢN NHÁP — chưa nộp. Còn 5 mục CHỜ người (add bot vào group · nội dung mẫu HĐ · publish instruction · thông báo phòng ban · minh bạch account máy). Nộp bằng: bash ../../scripts/submit-golive.sh AG-LEGAL",
+  "_trang_thai": "BẢN NHÁP — chưa nộp. Còn 4 mục CHỜ người (nội dung mẫu HĐ · publish instruction · thông báo phòng ban · minh bạch account máy). Kênh Lark đã thông 21/08. Nộp bằng: bash ../../scripts/submit-golive.sh AG-LEGAL",
 
   "owner_email": "thint@hapas.vn",
   "backup_owner": "anhnt1@hapas.vn — Nguyễn Thị Anh (Pháp chế). Đã nạp vào legal_roles, open_id ou_41b21c59… resolve qua broker 19/08",
@@ -41,7 +41,7 @@
     "Lark Drive folder mẫu hợp đồng T8DzfOysElvbf4dMHB7lomb7grc (đọc+ghi được; CHỜ legal team ĐIỀN NỘI DUNG mẫu — hiện trống)",
     "Lark Drive folder bản thảo DRAFT NHe5fRCSclUMvNdDmhul5njvg7c (đọc+ghi được)",
     "NotebookLM: notebook 'LSR Legal KB' + 'Legal Updates' (nguồn đã sync từ 2 mục trên)",
-    "Nguồn luật public: thuvienphapluat.vn, luatvietnam.vn, chinhphu.vn, congbao.chinhphu.vn",
+    "Nguồn luật public: chinhphu.vn (PDF ký số bản gốc), thuvienphapluat.vn, luatvietnam.vn (RSS + tra cứu theo tên). Nước khác thêm trên console agent",
     "file hợp đồng do chính người dùng đính kèm trong chat (tải qua /v1/lark/resource)"
   ],
   "data_forbidden": [
@@ -61,7 +61,7 @@
   ],
 
   "auth_mode": "subscription của owner (claude setup-token) — KHÔNG dùng API key chung",
-  "lark_connect": "app Lark của platform (gửi/nhận qua broker /v1/lark/*, agent không cầm app_secret). ⛔ CHẶN — ĐO LẠI 20/08: app Admin cli_aaff13891ff85ee6 thấy 0 chat, gửi vào group trả 'Bot/User can NOT be out of the chat'. Không app nào của platform ở trong group oc_2c44821d37e5e12a2c1651251cfd4efb. CHỜ: admin add bot vào group đó và cấp scope wiki:wiki:readonly, drive:drive:readonly, docx:document:readonly, drive:file:upload, im:resource. Ngoại lệ đã ghi nhận: đọc/ghi Wiki-Drive còn dùng tenant token trực tiếp vì broker chưa có nhóm endpoint này (yêu cầu core C1)",
+  "lark_connect": "app Lark của platform (gửi/nhận qua broker /v1/lark/*, agent không cầm app_secret). ✅ ĐÃ THÔNG 21/08: bot trong group là app RIÊNG của AG-LEGAL cli_aa0f9ac50cf8dee9 (KHÔNG phải app Admin dùng chung), đã set LARK_BOT_APP_ID và gửi thật trả ok:true. Còn lại: Console → Ingress điền routing binding channel=lark với app_id + chat_id và cấp scope wiki:wiki:readonly, drive:drive:readonly, docx:document:readonly, drive:file:upload, im:resource. Ngoại lệ đã ghi nhận: đọc/ghi Wiki-Drive còn dùng tenant token trực tiếp vì broker chưa có nhóm endpoint này (yêu cầu core C1)",
   "telemetry_verified": "ĐÃ XÁC NHẬN 20/08: GET /v1/self → status=active, 29 run, golive_at=2026-08-14. Đọc bằng token agent, không cần vào Console",
   "deployment": "self_hosted: docker compose service AG-LEGAL trên VM platform /opt/lsr-platform. MỘT tiến trình duy nhất chứa cả chat + kb-sync + news-crawl + gate worker, vì NotebookLM chỉ cho một phiên mỗi tài khoản",
 

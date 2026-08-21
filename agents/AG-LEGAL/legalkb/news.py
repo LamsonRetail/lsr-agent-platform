@@ -48,15 +48,16 @@ DEFAULT_SOURCES = [
      "(phân trang là ASP.NET postback)"),
     ("Công báo Chính phủ", "https://congbao.chinhphu.vn/rss",
      "rss", "VN", None, 0, "19/08: 200 nhưng 0 item và 0 link (trang render bằng JS)"),
-    # --- Thái Lan --- chưa tìm được nguồn nào lấy được tự động
-    ("ราชกิจจานุเบกษา — Royal Gazette", "https://ratchakitcha.soc.go.th/",
-     "html", "TH", None, 0,
-     "19/08: HTTP 403 kể cả với UA browser (WAF chặn bot) — cần nguồn khác hoặc thoả thuận truy cập"),
-    ("Krisdika — Council of State", "https://www.krisdika.go.th/web/guest/law",
-     "html", "TH", None, 0, "19/08: HTTP 404 — cần URL trang danh sách văn bản hiện hành"),
-    ("Thai Revenue Department", "https://www.rd.go.th/",
-     "html", "TH", None, 0,
-     "19/08: 200 nhưng là trang JS, chưa có link_pattern — cần URL trang danh sách + mẫu link"),
+    # --- Nước khác ---
+    # Chốt 21/08: **bỏ Thái Lan khỏi scope seed**, sẽ thêm nguồn trên console agent sau.
+    # Lý do bỏ chứ không để inactive: đã đo 9 nguồn (Royal Gazette http+https, Krisdika ×3,
+    # Revenue Dept, Nghị viện, Bộ Thương mại, DBD) — WAF 403 hoặc trang render JS, không
+    # cái nào đọc được bằng HTTP thuần. Để 3 dòng inactive kèm ghi chú chỉ làm bảng nguồn
+    # rối mà không ai định bật.
+    #
+    # Cơ chế theo NƯỚC vẫn còn nguyên: thêm nguồn nước nào cũng chỉ là thêm một dòng
+    # (`country`), và văn bản bỏ tay vào folder con theo nước vẫn được index —
+    # `ingest_drive_folder()`.
 ]
 
 # Số hiệu văn bản VN: 12/2026/NĐ-CP, 05/2026/TT-BTC, 1234/QĐ-TTg, 45/2019/QH14,
@@ -92,6 +93,10 @@ Nội dung: {body}
 RETIRED_SOURCES = [
     # thay bằng trang "Hệ thống văn bản" — feed RSS này 404 từ 19/08
     "https://chinhphu.vn/rss/van-ban-chi-dao-dieu-hanh.rss",
+    # Thái Lan: bỏ khỏi scope 21/08, sẽ thêm trên console sau (xem DEFAULT_SOURCES)
+    "https://ratchakitcha.soc.go.th/",
+    "https://www.krisdika.go.th/web/guest/law",
+    "https://www.rd.go.th/",
 ]
 
 

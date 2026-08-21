@@ -68,6 +68,20 @@ def session_for(job, payload):
     return f"job-{job['id']}"
 
 
+# Nhóm TỰ PHÁT HIỆN lúc chạy: `/v1/lark/chats` của platform — docstring của core nói rõ
+# endpoint này "liệt kê các NHÓM mà bot đang tham gia" (`im/v1/chats` không trả chat 1-1).
+# Nhờ vậy bot được add vào nhóm mới là nhận ra ngay, không phải sửa `AGENT_GROUP_CHAT_IDS`
+# rồi deploy lại. Vẫn giữ biến env làm nguồn khai tay (nhóm bot chưa join nhưng biết trước).
+_discovered = set()
+
+
+def set_discovered_groups(ids):
+    """Consumer gọi lúc khởi động và mỗi chu kỳ `gate_loop`."""
+    _discovered.clear()
+    _discovered.update(i for i in (ids or []) if i)
+    return len(_discovered)
+
+
 def group_ids():
     """Danh sách chat_id được coi là NHÓM (nơi phải gọi tên mới trả lời)."""
     raw = os.environ.get("AGENT_GROUP_CHAT_IDS", "")
@@ -94,7 +108,7 @@ def is_group(payload, job=None):
     if ctype:
         return ctype == "group"
     chat_id = payload.get("chat_id") or ((job or {}).get("reply_to") or {}).get("chat_id")
-    return bool(chat_id) and chat_id in group_ids()
+    return bool(chat_id) and (chat_id in group_ids() or chat_id in _discovered)
 
 
 def should_answer(payload, job=None, admin_group=None):

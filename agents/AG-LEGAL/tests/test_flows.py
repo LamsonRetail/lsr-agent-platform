@@ -564,11 +564,11 @@ def test_sources_carry_country_and_dead_ones_start_inactive(tmp_path):
     by_cc = {}
     for r in rows:
         by_cc.setdefault(r["country"], []).append(r)
-    assert set(by_cc) == {"VN", "TH"}
+    # Chốt 21/08: seed CHỈ có VN — Thái Lan bỏ khỏi scope, thêm trên console sau.
+    assert set(by_cc) == {"VN"}
     active = [r for r in rows if r["active"]]
     # 3 nguồn VN đã kiểm chạy được: RSS LuatVietnam, thuvienphapluat, chinhphu
     assert {r["kind"] for r in active} == {"rss", "tvpl", "chinhphu"}
-    assert all(r["country"] == "VN" for r in active), "TH chưa có nguồn nào lấy được"
     for r in rows:
         if not r["active"]:
             assert r["note"], f"{r['name']} tắt mà không nói vì sao"

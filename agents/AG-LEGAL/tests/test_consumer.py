@@ -229,13 +229,15 @@ def test_attachment_routes_to_review_even_if_router_fails(tmp_path, monkeypatch)
 
 # ---------------- Pháp chế in the loop ----------------
 
-def test_answer_opens_observe_gate_and_notifies_group(tmp_path):
+def test_answer_leaves_audit_row_without_notifying_group(tmp_path):
+    """Dòng `s1_answer` vẫn ghi — `#ds` và `#<id> tham gia` cần một mã để gọi tới — nhưng
+    KHÔNG gửi card. Chốt 21/08: audit, không phải phê duyệt."""
     store, pf, eng, g, b = make(tmp_path)
     job = {"id": 3, "channel": "lark", "session_id": "s3",
            "payload": {"text": "quy định pháp chế?", "chat_id": "oc_user",
                        "sender_open_id": "ou_emp"}}
     consumer.handle(job, b)
-    assert pf.sent and pf.sent[0][0] == consumer.GROUP_CHAT_ID
+    assert not [m for to, m in pf.sent if to == consumer.GROUP_CHAT_ID]
     gate = g.store.one("SELECT * FROM legal_gates WHERE session_id='s3'")
     assert gate["kind"] == "s1_answer" and gate["level"] == "observe"
 
@@ -257,15 +259,21 @@ def test_answer_without_citation_is_high_risk(tmp_path):
     assert g.store.one("SELECT * FROM legal_gates WHERE session_id='s4'")["risk"] == "high"
 
 
-def test_first_turn_greets_and_discloses_monitoring(tmp_path):
-    """Lượt đầu: nói rõ việc Pháp chế giám sát — nghĩa vụ thông báo, không để footer nhỏ."""
+def test_first_turn_answers_immediately_without_any_approval(tmp_path):
+    """Chốt 21/08: chat lần đầu **không cần ai duyệt** — trả lời luôn, cho mọi người.
+
+    Vẫn nói một câu là có ghi log (sự thật + điều kiện golive), nhưng đó là thông báo,
+    không phải cổng chặn.
+    """
     store, pf, eng, g, b = make(tmp_path, ctx={"n_turns": 0})
     out = consumer.handle({"id": 20, "channel": "lark", "session_id": "s-new",
                            "payload": {"text": "chào bạn", "chat_id": "oc_u"}}, b)
-    assert out.startswith("Mình là **Legal Agent**")
-    assert "được bộ phận Pháp chế giám sát" in out
-    # Không nói cùng một điều hai lần trong một tin nhắn.
-    assert out.count("Pháp chế giám sát") == 1
+    assert out and out.startswith("Mình là **Legal Agent**")
+    assert "ghi log" in out and "bộ nhớ" in out
+    # KHÔNG gửi card vào group ở lượt đầu — kể cả khi bị tính rủi ro cao ("chào bạn"
+    # không có trích dẫn nào). Đó chính là thứ chốt 21/08 bỏ.
+    assert not [m for to, m in pf.sent if to == consumer.GROUP_CHAT_ID], \
+        "lượt đầu không được gửi card vào group"
 
 
 def test_later_turns_do_not_repeat_greeting(tmp_path):
@@ -276,28 +284,41 @@ def test_later_turns_do_not_repeat_greeting(tmp_path):
     assert "Pháp chế giám sát" in out          # vẫn còn nhắc ở footer
 
 
-def test_high_risk_mentions_reviewers(tmp_path):
-    """Rủi ro cao thì phải @ người trực, không chỉ đổi màu icon."""
-    store, pf, eng, g, b = make(tmp_path,
-                             engine_answer=EngineAnswer(ok=True, text="chưa quy định"))
+def test_conversation_turning_high_risk_alerts_reviewers(tmp_path):
+    """Lượt đầu im, nhưng hội thoại ĐANG CHẠY mà chuyển sang rủi ro cao thì phải @ người
+    trực — đó là báo động an toàn, không phải cổng phê duyệt (nó không chặn ai)."""
+    store, pf, eng, g, b = make(tmp_path, engine_answer=EngineAnswer(
+        ok=True, text="ok", citations=[Citation("Quy chế", "https://x/wiki/a", "")]))
     store.write("INSERT INTO legal_roles (email, role, contract_type, open_id, active) "
                 "VALUES ('thint@hapas.vn','legal_reviewer','*','ou_thint',1)")
     consumer.handle({"id": 22, "channel": "lark", "session_id": "s-hr",
+                     "payload": {"text": "giờ làm việc?", "chat_id": "oc_u"}}, b)
+    assert not [m for to, m in pf.sent if to == consumer.GROUP_CHAT_ID], "lượt đầu im"
+
+    b.engine.result = EngineAnswer(ok=True, text="chưa quy định")   # lượt sau mất trích dẫn
+    consumer.handle({"id": 23, "channel": "lark", "session_id": "s-hr",
                      "payload": {"text": "crypto?", "chat_id": "oc_u"}}, b)
     card = next(m for to, m in pf.sent if to == consumer.GROUP_CHAT_ID)
-    assert "<at id=ou_thint></at>" in card and "cần xem ngay" in card
+    assert "<at id=ou_thint></at>" in card and "rủi ro cao" in card
 
 
-def test_low_risk_does_not_mention_anyone(tmp_path):
-    """@ mọi thứ là cách nhanh nhất để người ta tắt thông báo của group."""
+def test_low_risk_conversation_is_audited_not_announced(tmp_path):
+    """Rủi ro thấp: **không** gửi gì vào group, nhưng vẫn để lại dấu để tra lại.
+
+    Trước 21/08 mỗi hội thoại đẻ một card trong group — vừa giống một hàng chờ phê duyệt,
+    vừa là cách nhanh nhất để người ta tắt thông báo của group.
+    """
     store, pf, eng, g, b = make(tmp_path, engine_answer=EngineAnswer(
         ok=True, text="ok", citations=[Citation("Quy chế", "https://x/wiki/a", "")]))
     store.write("INSERT INTO legal_roles (email, role, contract_type, open_id, active) "
                 "VALUES ('thint@hapas.vn','legal_reviewer','*','ou_thint',1)")
     consumer.handle({"id": 23, "channel": "lark", "session_id": "s-lr",
                      "payload": {"text": "giờ làm việc?", "chat_id": "oc_u"}}, b)
-    card = next(m for to, m in pf.sent if to == consumer.GROUP_CHAT_ID)
-    assert "<at id=" not in card
+    assert not [m for to, m in pf.sent if to == consumer.GROUP_CHAT_ID]
+    # ba dấu vết audit: event trên job · lượt vào bộ nhớ · một dòng để `#ds`/`tham gia`
+    assert any(e[1] == "audit" for e in pf.events), pf.events
+    assert [t for t in pf.turns if t[0] == "s-lr"], "phải ghi lượt vào bộ nhớ"
+    assert store.one("SELECT level FROM legal_gates WHERE kind='s1_answer'")["level"] == "observe"
 
 
 def test_group_chatter_gets_no_reply(tmp_path):
