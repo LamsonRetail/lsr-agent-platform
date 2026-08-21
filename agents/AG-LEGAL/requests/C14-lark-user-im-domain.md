@@ -20,7 +20,44 @@ user account không có quyền `im:*`, còn agent thì nói chuyện qua bot c�
 ```python
 _LARK_USER_SCOPES = {
     "approval": [...],
-    "im": ["im:message", "im:message:send_as_user", "im:chat:readonly"],   # ← thêm
+    # Tên scope lấy từ jenny-bod-assistant — đang chạy thật, không phải đoán.
+    "im": ["im:chat:readonly", "im:message", "im:message:readonly", "im:resource"],
+}
+```
+
+Rồi admin cấp lại cho `ann_legal@hapas.vn` với `domains: "approval,im"` và mở
+`path_prefixes: ["/open-apis/approval/v4/", "/open-apis/im/v1/"]`.
+
+Tên scope **phải lấy từ user token đang chạy thật** trong tenant (`lark-cli auth status`),
+không đoán — đúng bài học đã ghi ở `docs/LARK_USER_BROKER.md` (đoán `approval:instance:readonly`
+thì nhận `invalid_scope`).
+
+## ✅ CÓ TIỀN LỆ CHẠY THẬT — `jenny-bod-assistant`
+
+Cập nhật 21/08. Owner chỉ ra dự án **`LamsonRetail/jenny-bod-assistant`** đang chạy đúng
+việc này. Đọc `agent/jenny/lark_user_bot.py` + `lark_user.py`:
+
+* Xin **user token** qua OAuth v2 với scope tường minh, trong đó phần chat là
+  **`im:chat:readonly im:message im:message:readonly im:resource`**.
+* `GET /open-apis/im/v1/chats` bằng **user token** trả về **mọi chat account tham gia, KỂ CẢ
+  chat 1-1**.
+* Rồi `GET /open-apis/im/v1/messages?container_id_type=chat&container_id=…&start_time=…`
+  để đọc tin mới, và `POST /messages?receive_id_type=chat_id` để trả lời.
+
+⚠️ **Tôi đã kết luận sai ở bản trước** của tài liệu này: nói "không liệt kê được chat 1-1
+nên không có cách nào biết ai nhắn". Sai vì đo bằng **tenant token** (bot vừa mở chat 1-1
+xong, gọi `im/v1/chats` vẫn chỉ thấy group). Với **user token** thì có. Đã sửa.
+
+⇒ Đường này **chạy được**, và AG-LEGAL đã code sẵn: `legalkb/userchat.py` +
+`consumer.userchat_loop`. Còn thiếu đúng hai thứ, cả hai đều ở phía core/admin.
+
+## Xin gì
+
+```python
+_LARK_USER_SCOPES = {
+    "approval": [...],
+    # Tên scope lấy từ jenny-bod-assistant — đang chạy thật, không phải đoán.
+    "im": ["im:chat:readonly", "im:message", "im:message:readonly", "im:resource"],
 }
 ```
 
@@ -85,6 +122,19 @@ phải **POLL**: liệt kê chat của Ann rồi đọc tin mới từng chat. N
 account riêng là **"để log Lark phân biệt được người và máy"**. Cho agent chat dưới danh
 tính đó làm mờ đúng ranh giới ấy — nên nếu làm, đề nghị buộc kèm điều kiện: agent luôn mở
 đầu hội thoại bằng một câu nói rõ đây là máy.
+
+## AG-LEGAL làm khác Jenny một chỗ: KHÔNG cầm token
+
+Jenny tự giữ user token (lưu DB của nó, tự refresh). AG-LEGAL gọi qua **C8**
+(`POST /v1/lark/user/call`) nên token do platform giữ — mã hoá, tự refresh, audit từng lời
+gọi, thu hồi được tức thì. Đúng chuẩn §2.3. Vì vậy xin core mở **grant**, không xin token:
+
+```bash
+curl -X POST "$P/v1/lark/user/grants" -H "X-Gateway-Token: $G" -H "Authorization: Bearer $ADMIN" \
+  -d '{"agent_id":"AG-LEGAL","subject":"ann_legal@hapas.vn",
+       "path_prefixes":["/open-apis/approval/v4/","/open-apis/im/v1/"],
+       "methods":["GET","POST"]}'
+```
 
 ## Cách rẻ hơn cho cùng mục tiêu (đề nghị làm trước)
 

@@ -4,6 +4,7 @@ Ba nhóm test tương ứng 3 nguyên tắc ở CLAUDE.md; nhóm "chuẩn platfo
 guard**: nếu ai đó thêm lại việc tự gửi Lark hay hard-code persona, test đỏ ngay.
 """
 import os
+import re
 import pathlib
 import sys
 
@@ -171,13 +172,23 @@ def _agent_sources():
 def test_no_direct_lark_messaging_outside_kb_reader():
     """Gửi/nhận tin Lark PHẢI qua platform. lark_kb.py chỉ được đọc Wiki/Drive.
 
-    Bắt theo đường dẫn API thật (`open-apis/im/...`) chứ không theo chữ trong tài liệu —
-    nếu không, chính câu ghi chú "không được gọi im/v1/messages" sẽ làm test đỏ.
+    Bắt cái đáng bắt là **tự mở HTTP tới Lark**, không phải bắt chuỗi đường dẫn: module
+    đi qua broker (`pf.lark_user_call`) cũng phải nêu đường dẫn `/open-apis/...` trong
+    payload, mà đó là dùng platform đúng cách. Bắt theo chuỗi thì `userchat.py` bị báo oan,
+    và tệ hơn: người sau sẽ "sửa" test bằng cách nới nó ra.
     """
+    lark_hosts = ("open.larksuite.com", "open.feishu.cn", "LARK_BASE", "LARK_DOMAIN")
     for path, src in _agent_sources():
         if path.name == "lark_kb.py":
-            continue                       # ngoại lệ C9, kiểm riêng bên dưới
-        assert "open-apis/im/" not in src, f"{path.name} tự gọi Lark IM API"
+            continue                       # ngoại lệ đã ghi chú, kiểm riêng bên dưới
+        if "open-apis/" not in src:
+            continue
+        for host in lark_hosts:
+            assert host not in src, f"{path.name} tự gọi Lark trực tiếp ({host})"
+        # Bắt việc DÙNG app_secret (gán / đọc dict), không bắt chữ "app_secret" trong
+        # ghi chú — `voice.py` có câu "không cần app_secret" và từng làm test đỏ oan.
+        assert not re.search(r"""app_secret\s*=|\[['"]app_secret['"]\]""", src), \
+            f"{path.name} cầm app_secret"
 
 
 def test_c9_exception_stays_narrow():

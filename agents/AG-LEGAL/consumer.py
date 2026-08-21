@@ -27,7 +27,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from legalkb import (addressing, approval, brain, contracts, flows,
-                     gates as gates_mod, news, voice)
+                     gates as gates_mod, news, userchat, voice)
 from legalkb.engine import NotebookLMEngine
 from legalkb.flows import Bundle
 from legalkb.gates import GATE, OBSERVE, Gates
@@ -601,6 +601,90 @@ def refresh_groups(pf):
     return addressing.set_discovered_groups(ids)
 
 
+def userchat_loop(b):
+    """Trả lời tin nhắn gửi tới **account của agent** (`ann_legal@hapas.vn`) — bằng poll.
+
+    Lark không đẩy event cho account người, nhưng user token liệt kê được **mọi chat của
+    account, kể cả chat 1-1** — nên poll là đường duy nhất, và là đường đang chạy thật ở
+    dự án `jenny-bod-assistant`. Chi tiết + 4 cái bẫy: `legalkb/userchat.py`.
+
+    Tin đi qua **đúng `handle()`** như mọi kênh khác, nên có đủ tính năng: S1–S5, bộ nhớ
+    theo chat, audit, luật "trong nhóm phải gọi tên". Không có nhánh xử lý riêng nào —
+    nhánh riêng là chỗ tính năng bị rơi lại mà không ai biết.
+    """
+    ok, why = userchat.available(b.pf)
+    print(("userchat: " + why) if ok else ("ℹ️  userchat chưa bật — " + why), flush=True)
+    if not ok:
+        return
+    cursors, chats, next_refresh = {}, [], 0.0
+    while True:
+        try:
+            now = time.time()
+            if now >= next_refresh:
+                next_refresh = now + userchat.CHAT_REFRESH_SECONDS
+                got, err = userchat.list_chats(b.pf)
+                if err:
+                    print(f"[userchat] không đọc được danh sách chat: {err}",
+                          file=sys.stderr, flush=True)
+                else:
+                    chats = got
+                    n_p2p = sum(1 for c in chats if not userchat.is_group_chat(c))
+                    print(f"[userchat] theo dõi {len(chats)} chat ({n_p2p} chat riêng)",
+                          flush=True)
+            for chat in chats:
+                cid = chat.get("chat_id")
+                if not cid:
+                    continue
+                # Chat mới thấy: bắt đầu từ BÂY GIỜ. Nếu lấy từ 0 thì lần chạy đầu agent
+                # trả lời lại toàn bộ lịch sử chat của cả công ty.
+                since = cursors.setdefault(cid, now)
+                msgs, err = userchat.list_messages(b.pf, cid, since)
+                if err:
+                    print(f"[userchat] đọc chat {cid[:14]} lỗi: {err}", file=sys.stderr,
+                          flush=True)
+                    continue
+                latest = since
+                for m in msgs:
+                    latest = max(latest, int(m.get("create_time", 0) or 0) / 1000 + 1)
+                    _userchat_message(b, chat, m)
+                cursors[cid] = max(latest, now)      # luôn tiến, không đọc lại mãi
+        except Exception as exc:
+            print(f"[userchat] vòng poll lỗi: {exc}", file=sys.stderr, flush=True)
+        time.sleep(userchat.POLL_SECONDS)
+
+
+def _userchat_message(b, chat, msg):
+    """Một tin → dựng job giả → `handle()` → gửi trả lời với tư cách account."""
+    mid = msg.get("message_id") or ""
+    if not mid:
+        return
+    # Tin của CHÍNH MÌNH: bỏ, không thì agent trả lời câu trả lời của nó, lặp vô hạn.
+    if b.store.get_meta(f"uc:sent:{mid}"):
+        return
+    if b.store.get_meta(f"uc:seen:{mid}"):        # poll gối đầu — không xử lý hai lần
+        return
+    b.store.set_meta(f"uc:seen:{mid}", str(int(time.time())))
+    text = userchat.text_of(msg)
+    if not text:
+        return
+    cid = chat.get("chat_id")
+    job = {"id": f"uc:{mid}", "channel": "lark_user",
+           "reply_to": {"chat_id": cid},
+           "payload": {"text": text, "chat_id": cid,
+                       "chat_type": "group" if userchat.is_group_chat(chat) else "p2p",
+                       "sender_open_id": ((msg.get("sender") or {}).get("id") or ""),
+                       "message_id": mid}}
+    reply = handle(job, b)
+    if not reply:
+        return
+    sent_id, err = userchat.send_text(b.pf, cid, reply)
+    if err:
+        print(f"[userchat] gửi trả lời lỗi: {err}", file=sys.stderr, flush=True)
+        return
+    if sent_id:
+        b.store.set_meta(f"uc:sent:{sent_id}", "1")
+
+
 def gate_loop(b):
     """Nhắc SLA + nạp lại instruction khi có version mới publish."""
     while True:
@@ -653,6 +737,9 @@ def main():
     elif not approval.subject():
         print(f"ℹ️  chưa đặt {approval.SUBJECT_ENV} — S5 không tự thấy hồ sơ trình ký",
               flush=True)
+    if os.environ.get("USERCHAT_WATCH", "1") == "1":
+        threading.Thread(target=userchat_loop, args=(b,), daemon=True,
+                         name="userchat").start()
     threading.Thread(target=gate_loop, args=(b,), daemon=True, name="gate").start()
 
     jobs_q = queue.Queue()

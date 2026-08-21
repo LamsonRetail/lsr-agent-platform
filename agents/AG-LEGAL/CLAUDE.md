@@ -61,6 +61,8 @@ legalkb/
   extract.py       trích text PDF/DOCX (không dùng /v1/extract vì nó đòi admin)
   addressing.py    gọi tên mới trả lời trong nhóm + khoá phiên theo chat (bộ nhớ nhóm)
   voice.py         nghe tin thoại; chưa có transcriber thì NÓI THẬT, không im lặng
+  userchat.py      chat dưới danh tính ACCOUNT của agent bằng POLL (Lark không đẩy event
+                   cho account người). Mẫu: jenny-bod-assistant. Token do platform giữ
   engine.py        NotebookLM (AnswerEngine — có thể swap sang Gemini File Search)
   lark_kb.py       đọc/ghi Wiki-Drive (ngoại lệ C1)
   sync.py store.py đồng bộ KB + SQLite (13 bảng)
@@ -93,6 +95,11 @@ legalkb/
 | S5 | Chưa đọc được nội dung hồ sơ → **vẫn báo**, nói rõ chưa đọc được | Một hồ sơ đã tới mà không ai biết còn tệ hơn một tin báo thiếu |
 | S5 | Form rỗng → **không** rà soát | Không sinh báo cáo từ không có gì |
 | Danh tính | `refresh_token` 7 ngày; còn ≤2 ngày thì **nhắc group** | Im lặng hết hạn = S5 chết âm thầm (đã xảy ra 17/07, 19/08 mới phát hiện) |
+| userchat | Chat mới thấy → cursor bắt đầu từ **now**, không phải 0 | Lấy từ 0 là lần chạy đầu trả lời lại toàn bộ lịch sử chat của cả công ty |
+| userchat | Bỏ tin của **chính mình** (nhớ `message_id` đã gửi) | Không thì agent trả lời câu trả lời của nó, lặp vô hạn |
+| userchat | Cursor **luôn tiến** (`max(latest, now)`) | Tin xử lý lỗi cũng không đọc lại mãi |
+| userchat | Tin đi qua **đúng `handle()`**, không có nhánh riêng | Nhánh riêng là chỗ tính năng rơi lại mà không ai biết |
+| Đo lường | Cùng một API, **tenant token và user token trả khác nhau** | `im/v1/chats`: tenant chỉ trả group, user trả cả chat 1-1. Đo sai loại token là kết luận sai kiến trúc (đã tự vấp 21/08) |
 | S5 | Tối đa 2 lần quay lại Bước 4, lần 3 escalate | Chống vòng lặp vô hạn |
 | Mọi gate | Quá hạn chỉ **NHẮC**, không tự thông qua (trừ `observe`) | Điểm an toàn cốt lõi |
 | Mọi kênh | **Không có bước phê duyệt** khi ai chat lần đầu hay khi bot được add vào nhóm — trả lời luôn, cho tất cả mọi người | Chốt 21/08. Đổi lại: audit event trên job + ghi lượt vào bộ nhớ + một dòng `s1_answer` để `#ds`/`tham gia` gọi tới |
