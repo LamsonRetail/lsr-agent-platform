@@ -1219,13 +1219,13 @@ def test_templates_scanned_from_every_configured_folder(tmp_path):
     không thấy mẫu nào mà vẫn báo thành công."""
     store, pf, eng, g, b = make(tmp_path)
     drive = MultiFolderDrive({
-        "fA": [{"token": "t1", "name": "HĐ thuê mặt bằng.docx", "type": "file"}],
-        "fB": [{"token": "t2", "name": "HĐ cung cấp dịch vụ.docx", "type": "file"}],
+        "fA": [{"token": "t1", "name": "[MAU]_HĐ thuê mặt bằng.docx", "type": "file"}],
+        "fB": [{"token": "t2", "name": "[MAU]_HĐ cung cấp dịch vụ.docx", "type": "file"}],
     })
     r = contracts.sync_templates(drive, store, "fA,fB", log=lambda m: None)
     assert r["templates"] == 2
     names = {t["name"] for t in contracts.templates(store)}
-    assert names == {"HĐ thuê mặt bằng", "HĐ cung cấp dịch vụ"}
+    assert names == {"[MAU]_HĐ thuê mặt bằng", "[MAU]_HĐ cung cấp dịch vụ"}
 
 
 def test_draft_subfolder_is_never_scanned_as_a_template(tmp_path):
@@ -1233,18 +1233,18 @@ def test_draft_subfolder_is_never_scanned_as_a_template(tmp_path):
     chính mình thành mẫu cho lần sau, sai lệch tích luỹ mà không ai thấy."""
     store, pf, eng, g, b = make(tmp_path)
     drive = MultiFolderDrive({
-        "fA": [{"token": "t1", "name": "HĐ mẫu thật.docx", "type": "file"},
+        "fA": [{"token": "t1", "name": "[MAU]_HĐ mẫu thật.docx", "type": "file"},
                {"token": "fDraft", "name": "BAN THAO DRAFT (agent xuat)",
                 "type": "folder"}],
-        "fDraft": [{"token": "d9", "name": "HĐ ABC DRAFT.docx", "type": "file"}],
+        "fDraft": [{"token": "d9", "name": "[MAU]_HĐ ABC DRAFT.docx", "type": "file"}],
     })
     contracts.sync_templates(drive, store, "fA", log=lambda m: None)
-    assert {t["name"] for t in contracts.templates(store)} == {"HĐ mẫu thật"}
+    assert {t["name"] for t in contracts.templates(store)} == {"[MAU]_HĐ mẫu thật"}
 
 
 def test_one_unreadable_folder_does_not_lose_the_other(tmp_path):
     store, pf, eng, g, b = make(tmp_path)
-    drive = MultiFolderDrive({"fA": [{"token": "t1", "name": "HĐ X.docx", "type": "file"}]})
+    drive = MultiFolderDrive({"fA": [{"token": "t1", "name": "[MAU]_HĐ X.docx", "type": "file"}]})
     logs = []
     r = contracts.sync_templates(drive, store, "fA,fKhongCoQuyen", log=logs.append)
     assert r["templates"] == 1
@@ -1257,4 +1257,117 @@ def test_empty_template_folders_say_so_instead_of_silent_success(tmp_path):
     drive = MultiFolderDrive({"fA": [], "fB": []})
     logs = []
     assert contracts.sync_templates(drive, store, "fA,fB", log=logs.append)["templates"] == 0
-    assert any("chưa bỏ mẫu vào" in m for m in logs)
+    assert any("chưa bỏ mẫu vào" in m or "[MAU]" in m for m in logs)
+
+
+# ============ mẫu THẬT: chỗ trống dạng "………", không phải {{...}} ============
+
+def _docx_real_style():
+    """Dựng docx giống mẫu thật của legal team: chỗ trống là dãy ba chấm giữa câu,
+    thông tin bên A trong bảng `nhãn | : | giá trị` có ô GỘP ở hàng đầu."""
+    from docx import Document
+    d = Document()
+    d.add_paragraph("Số: ………/2026/HDMBHH/…….- HTC")
+    d.add_paragraph("Thời gian giao hàng: …….. giờ ngày …………….;")
+    d.add_paragraph("Hàng hóa là hàng mới 100%... theo yêu cầu.")   # dấu lược, KHÔNG điền
+    t = d.add_table(rows=3, cols=3)
+    t.rows[0].cells[0].merge(t.rows[0].cells[2]).text = "BÊN A: ….."
+    t.rows[1].cells[0].text, t.rows[1].cells[1].text = "Mã số thuế", ":"
+    t.rows[1].cells[2].text = "….."
+    t.rows[2].cells[0].text, t.rows[2].cells[1].text = "Địa chỉ trụ sở", ":"
+    t.rows[2].cells[2].text = "….."
+    out = io.BytesIO()
+    d.save(out)
+    return out.getvalue()
+
+
+def test_blanks_detected_from_real_style_template():
+    raw = _docx_real_style()
+    bl = contracts.blanks_in_docx(raw)
+    labels = [b["label"] for b in bl]
+    # 2 (số HĐ) + 2 (giờ/ngày) + 1 (BÊN A) + 2 (bảng) = 7; dấu lược "100%..." KHÔNG tính
+    assert len(bl) == 7, labels
+    assert any("Mã số thuế" in l for l in labels)
+    assert any("Địa chỉ trụ sở" in l for l in labels)
+    assert any("Thời gian giao hàng" in l for l in labels)
+
+
+def test_merged_cell_counted_once():
+    """python-docx trả ô GỘP nhiều lần. Không lọc thì một chỗ trống đếm thành ba ⇒ lệch
+    số thứ tự ⇒ MỌI giá trị phía sau rơi sai ô."""
+    bl = contracts.blanks_in_docx(_docx_real_style())
+    assert sum(1 for b in bl if "BÊN A" in b["label"]) == 1
+
+
+def test_plain_ellipsis_is_punctuation_not_a_blank():
+    """"..." trong "hàng mới 100%..." là dấu lược. Điền vào đó là làm hỏng câu."""
+    from docx import Document
+    d = Document()
+    d.add_paragraph("Hàng hóa là hàng mới 100%... theo yêu cầu.")
+    out = io.BytesIO(); d.save(out)
+    assert contracts.blanks_in_docx(out.getvalue()) == []
+
+
+def test_fill_uses_same_order_as_detect_and_keeps_unfilled_blanks():
+    """Dò và điền phải đi CÙNG một đường. Và chỗ trống không có giá trị thì để nguyên —
+    xoá âm thầm là tạo hợp đồng thiếu điều khoản mà trông như đã hoàn chỉnh."""
+    from docx import Document
+    raw = _docx_real_style()
+    bl = contracts.blanks_in_docx(raw)
+    by_label = {b["label"]: b["key"] for b in bl}
+    mst = next(k for l, k in by_label.items() if "Mã số thuế" in l)
+    filled = contracts.fill_docx(raw, {mst: "0108240335"})
+    doc = Document(io.BytesIO(filled))
+    cells = [c.text for t in doc.tables for r in t.rows for c in r.cells]
+    assert "0108240335" in " ".join(cells)
+    body = "\n".join(p.text for p in doc.paragraphs)
+    assert "………" in body, "chỗ trống chưa điền phải còn nguyên"
+    assert "100%..." in body, "dấu lược không được thay"
+    assert contracts.DRAFT_MARK in body
+
+
+def test_only_marked_templates_are_registered(tmp_path):
+    """Trong folder mẫu còn báo giá, đề nghị thanh toán, biên bản nghiệm thu — tên đều có
+    chữ "hợp đồng". Lấy bừa theo từ khoá là agent đem biên bản nghiệm thu ra soạn HĐ."""
+    store, pf, eng, g, b = make(tmp_path)
+    drive = MultiFolderDrive({
+        "root": [{"token": "fMB", "name": "BỘ MẪU HỢP ĐỒNG_Mua bán", "type": "folder"},
+                 {"token": "fHF", "name": "MẪU_Header_Footer", "type": "folder"}],
+        "fMB": [{"token": "t1", "name": "2. [MAU]_Hop dong mua ban_Hapas.docx", "type": "file"},
+                {"token": "t2", "name": "4. Biên bản nghiệm thu thanh lý Hợp đồng.docx",
+                 "type": "file"},
+                {"token": "t3", "name": "1. Bao gia_AGRI.docx", "type": "file"}],
+        "fHF": [{"token": "t9", "name": "Header_Footer_HPAS.docx", "type": "file"}],
+    })
+    logs = []
+    assert contracts.sync_templates(drive, store, "root", log=logs.append)["templates"] == 1
+    assert contracts.templates(store)[0]["name"].startswith("Mua bán · ")
+    assert any("bỏ qua" in m for m in logs), "phải NÓI ra file nào bị bỏ, không im lặng"
+
+
+def test_review_card_shows_labels_not_field_keys(tmp_path):
+    """Card ghi `cho_trong_1=015` thì người duyệt không biết đó là số hợp đồng hay tên
+    bên A. Nhãn lấy từ mảnh câu quanh chỗ trống."""
+    t = {"name": "Mua bán · X", "fields": [
+        {"key": "cho_trong_1", "label": "Số: ___ /2026/HDMBHH"},
+        {"key": "cho_trong_8", "label": "BÊN A: ….. — BÊN A:"},
+        {"key": "cho_trong_9", "label": "Mã số thuế"},
+        {"key": "cho_trong_20", "label": "2 — – Bên B"}]}
+    v = {"cho_trong_1": "015", "cho_trong_8": "CÔNG TY ABC", "cho_trong_9": ""}
+    out = flows._values_summary(t, v)
+    assert "Số: ___ /2026/HDMBHH: 015" in out
+    assert "BÊN A" in out and "CÔNG TY ABC" in out
+    assert "cho_trong" not in out
+    assert "Mã số thuế" not in out, "field rỗng không đưa vào tóm tắt"
+    # 3 field chưa điền: cho_trong_9 (rỗng), cho_trong_20 (thiếu hẳn)
+    assert flows._n_unfilled(t, v) == 2
+
+
+def test_card_warns_about_unfilled_blanks(tmp_path):
+    """Người duyệt mở file thấy dấu ……… mà không được báo trước sẽ tưởng agent làm thiếu."""
+    store, pf, eng, g, b = make(tmp_path)
+    gid = g.open("s2_draft", GATE, risk="medium", title="HĐ mua bán",
+                 payload={"summary": "Số HĐ: 015", "n_blank": 8,
+                          "file": "https://tenant/file/x"})
+    card = g.render(g.get(gid))
+    assert "Còn trống:** 8 chỗ" in card and "không xoá" in card

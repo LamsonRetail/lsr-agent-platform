@@ -57,12 +57,68 @@ def available():
     return shutil.which("claude") is not None
 
 
+# ===== Credential model: LEASE từ platform, agent không giữ secret trong code/env =====
+#
+# `POST /v1/self/model-auth/lease` trả về **tham chiếu**, không trả secret:
+#   {"mode":"subscription","credential_id":"sub-thi-canhan",
+#    "secret_ref":"model/sub-thi-canhan.env","env_var":"CLAUDE_CODE_OAUTH_TOKEN"}
+# Secret nằm ở file `/secrets/<secret_ref>` trên VM (mount read-only, chmod 600). Agent
+# đọc file đó và truyền vào env của tiến trình con `claude`. Nhờ vậy:
+#   - không ai phải dán token vào `.env` của agent hay vào git
+#   - platform đổi/thu hồi credential thì agent theo ngay, không cần deploy lại
+#   - audit nằm ở platform (mỗi lease được ghi lại)
+SECRETS_DIR = os.environ.get("LSR_SECRETS_DIR", "/secrets")
+_lease = {"env": None, "note": "chưa thử lease"}
+
+
+def lease_model_auth(pf):
+    """Xin credential model từ platform → nạp vào `_lease["env"]`. Trả câu mô tả để log.
+
+    Gọi một lần lúc khởi động. Thất bại thì **nói rõ**, không im lặng: model không gọi
+    được nghĩa là router rơi về mặc định và S2–S5 chỉ trả "chưa rà soát được" — degrade
+    âm thầm là thứ khó phát hiện nhất.
+    """
+    if os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+        _lease["env"] = {}          # đã có trong env sẵn, không cần lease
+        _lease["note"] = "dùng CLAUDE_CODE_OAUTH_TOKEN có sẵn trong môi trường"
+        return _lease["note"]
+    r = pf.model_auth_lease() if hasattr(pf, "model_auth_lease") else None
+    if not r:
+        _lease["note"] = "platform không cấp được credential model"
+        return _lease["note"]
+    ref, var = r.get("secret_ref"), r.get("env_var") or "CLAUDE_CODE_OAUTH_TOKEN"
+    if not ref:
+        _lease["note"] = f"lease trả về thiếu secret_ref ({r.get('mode')})"
+        return _lease["note"]
+    path = os.path.join(SECRETS_DIR, ref)
+    try:
+        with open(path) as f:
+            secret = f.read().strip()
+    except OSError as exc:
+        _lease["note"] = (f"không đọc được {path} ({exc.strerror}) — kiểm mount "
+                          f"{SECRETS_DIR} vào container")
+        return _lease["note"]
+    if not secret:
+        _lease["note"] = f"{path} rỗng"
+        return _lease["note"]
+    _lease["env"] = {var: secret}
+    _lease["note"] = (f"credential model: {r.get('credential_id')} "
+                      f"({r.get('mode')}) qua {var}")
+    return _lease["note"]
+
+
+def auth_note():
+    return _lease["note"]
+
+
 def call_claude(prompt, model=None, timeout=None):
     """Một lần gọi model. Trả text; lỗi trả chuỗi rỗng (caller phải degrade rõ ràng)."""
+    env = dict(os.environ)
+    env.update(_lease["env"] or {})
     try:
         r = subprocess.run(
             ["claude", "-p", prompt, "--model", model or DEFAULT_MODEL],
-            capture_output=True, text=True, timeout=timeout or CALL_TIMEOUT)
+            capture_output=True, text=True, timeout=timeout or CALL_TIMEOUT, env=env)
         return (r.stdout or "").strip() or (r.stderr or "").strip()
     except Exception as exc:
         print(f"[claude] lỗi gọi model: {exc}", file=sys.stderr, flush=True)

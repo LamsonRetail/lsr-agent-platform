@@ -186,6 +186,11 @@ class Gates:
                            ("Nội dung", "summary"), ("Tệp", "file")):
             if p.get(key):
                 lines.append(f"- **{label}:** {p[key]}")
+        if p.get("n_blank"):
+            # Phải nói ra: bản thảo vẫn còn dấu `………` ở những chỗ chưa có thông tin.
+            # Người duyệt mở file mà không được báo trước sẽ tưởng agent làm thiếu.
+            lines.append(f"- **Còn trống:** {p['n_blank']} chỗ chưa có thông tin "
+                         f"(giữ nguyên dấu `………` trong file, không xoá)")
         if p.get("sources"):
             lines.append("- **📎 Nguồn:** " + " · ".join(p["sources"][:5]))
         if gate["level"] == GATE:

@@ -627,6 +627,7 @@ def main():
     print(f"nhóm bot đang tham gia: {n_groups}"
           + ("" if n_groups else " — bot chưa ở trong nhóm nào"))
     check_group(b.pf)
+    print("model auth: " + brain.lease_model_auth(b.pf), flush=True)
     if not brain.available():
         print("⚠️  KHÔNG tìm thấy CLI `claude` trong PATH — router sẽ dùng mặc định và "
               "S2–S5 (tạo/rà soát hợp đồng, digest, trình ký) chỉ trả thông báo không rà "

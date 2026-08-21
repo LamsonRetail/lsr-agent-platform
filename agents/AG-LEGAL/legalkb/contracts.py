@@ -19,6 +19,27 @@ import zipfile
 
 DRAFT_MARK = "DRAFT — CHƯA CÓ HIỆU LỰC PHÁP LÝ"
 PLACEHOLDER = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
+
+# Mẫu THẬT của legal team không dùng `{{...}}` — kiểm mẫu "Hop dong mua ban_Hapas"
+# ngày 21/08: chỗ cần điền là **dãy dấu ba chấm chèn giữa câu**:
+#   "Số: ………/2026/HDMBHH/…….- HTC"
+#   "Thời gian giao hàng: …….. giờ ngày …………….;"
+# Nên phải nhận cả kiểu này, nếu không S2 dò ra 0 field và không điền được gì.
+#
+# KHÔNG nhận `___` (gạch dưới dài): trong mẫu đó là **dòng ký tên**, không phải chỗ điền.
+#
+# Bắt cả dãy TRỘN `…….. ` (vừa ký tự … vừa dấu chấm) làm MỘT chỗ trống. Nếu chỉ bắt riêng
+# từng loại thì "Thời gian giao hàng: …….. giờ" điền xong còn sót ".." lơ lửng giữa câu.
+BLANK = re.compile(r"[…\.]{2,}")
+
+
+def _is_blank(tok):
+    """Dãy dấu này là CHỖ TRỐNG hay chỉ là dấu câu?
+
+    "…" hoặc "…." → chỗ trống. "..." (3 dấu chấm thường) → dấu lược, để nguyên. Cùng một
+    phép kiểm dùng cho cả hàm dò và hàm điền, nếu lệch nhau thì giá trị rơi sai chỗ.
+    """
+    return "…" in tok or len(tok) >= 4
 CANCEL_WORDS = ("huỷ", "huy", "thôi", "thoi", "dừng", "dung", "cancel")
 
 
@@ -41,6 +62,82 @@ def placeholders_in_docx(data):
         if k not in seen:
             seen.add(k)
             out.append(k)
+    return out
+
+
+def _iter_paragraphs(doc):
+    """Đi qua mọi paragraph theo MỘT thứ tự cố định, kèm ngữ cảnh → `(paragraph, ctx)`.
+
+    Không phải thứ tự đọc thật (python-docx không cho biết bảng nằm giữa đoạn nào), nhưng
+    **ổn định** — và ổn định là điều kiện duy nhất cần: hàm dò và hàm điền phải đi cùng
+    một đường, nếu lệch thì giá trị rơi vào chỗ trống khác. Với hợp đồng thì đó là lỗi
+    nguy hiểm nhất có thể có.
+
+    Hai chi tiết của bảng, cả hai đều đã gây lỗi thật khi thử mẫu Mua bán:
+
+    1. **Ô GỘP bị python-docx trả về NHIỀU LẦN** (`row.cells` lặp lại cùng một ô cho mỗi
+       cột nó trải qua). Không lọc thì một chỗ trống bị đếm thành ba ⇒ lệch số thứ tự và
+       **mọi giá trị phía sau rơi sai ô**.
+    2. Bảng thông tin bên A/B theo layout `nhãn | : | giá trị`, nên ngữ cảnh đúng của một
+       ô là **ô đầu hàng** ("Mã số thuế", "Địa chỉ trụ sở") — không có nó thì nhãn chỉ là
+       "chỗ trống 11", người điền không biết điền gì.
+    """
+    for p in doc.paragraphs:
+        yield p, ""
+    for t in doc.tables:
+        for row in t.rows:
+            seen = set()
+            head = ""
+            for cell in row.cells:
+                if id(cell._tc) in seen:
+                    continue                       # ô gộp — đã đi qua rồi
+                seen.add(id(cell._tc))
+                if not head:
+                    head = re.sub(r"\s+", " ", cell.text).strip()[:60]
+                for p in cell.paragraphs:
+                    yield p, head
+
+
+def _blank_label(text, start, end, n):
+    """Nhãn cho một chỗ trống = mảnh câu quanh nó, để người điền biết đang điền cái gì.
+
+    Cắt theo BIÊN TỪ: cắt cứng 60 ký tự cho ra nhãn kiểu "ợp Đồng Mua Bán Hàng hóa…",
+    đọc lên tưởng lỗi font. Thà nhãn ngắn hơn mà đọc được.
+    """
+    cut = max(0, start - 60)
+    before = re.sub(r"\s+", " ", text[cut:start]).strip()
+    if cut > 0:
+        before = re.sub(r"^\S+\s+", "", before, count=1) or before
+    after = re.sub(r"\s+", " ", text[end:end + 25]).strip()
+    label = f"{before} ___ {after}".strip(" _")
+    return label[:110] or f"chỗ trống {n}"
+
+
+def blanks_in_docx(data):
+    """Dò chỗ trống dạng `………` → list field theo thứ tự tài liệu.
+
+    Trả `[{"key": "cho_trong_1", "label": "<mảnh câu quanh chỗ trống>", ...}]`. Nhãn quan
+    trọng hơn key: "Thời gian giao hàng: ___ giờ ngày" thì người điền hiểu ngay, còn
+    "cho_trong_7" thì không.
+    """
+    from docx import Document
+    out = []
+    try:
+        doc = Document(io.BytesIO(data))
+    except Exception:
+        return []
+    for p, ctx in _iter_paragraphs(doc):
+        text = p.text
+        if not text:
+            continue
+        for m in BLANK.finditer(text):
+            if not _is_blank(m.group(0)):
+                continue
+            n = len(out) + 1
+            lbl = _blank_label(text, m.start(), m.end(), n)
+            if ctx and ctx not in lbl:
+                lbl = f"{ctx} — {lbl}" if lbl != f"chỗ trống {n}" else ctx
+            out.append({"key": f"cho_trong_{n}", "required": False, "label": lbl[:130]})
     return out
 
 
@@ -70,13 +167,33 @@ def fill_docx(data, values, mark=DRAFT_MARK):
         else:
             p.add_run(new)
 
-    for p in doc.paragraphs:
+    # Chỗ trống dạng `………`: đánh số theo ĐÚNG thứ tự `blanks_in_docx()` đã dò.
+    # Field nào không có giá trị thì **để nguyên dấu ba chấm** — cùng luật với `{{...}}`:
+    # xoá âm thầm là tạo ra hợp đồng thiếu điều khoản mà trông như đã hoàn chỉnh.
+    counter = [0]
+
+    def fix_blanks(p):
+        if not BLANK.search(p.text):
+            return
+        def one(m):
+            if not _is_blank(m.group(0)):
+                return m.group(0)          # dấu lược, không phải chỗ trống
+            counter[0] += 1
+            v = values.get(f"cho_trong_{counter[0]}")
+            return str(v) if v not in (None, "") else m.group(0)
+        new = BLANK.sub(one, p.text)
+        if new == p.text:
+            return
+        for r in p.runs[1:]:
+            r.text = ""
+        if p.runs:
+            p.runs[0].text = new
+        else:
+            p.add_run(new)
+
+    for p, _ctx in _iter_paragraphs(doc):
         fix_paragraph(p)
-    for t in doc.tables:
-        for row in t.rows:
-            for cell in row.cells:
-                for p in cell.paragraphs:
-                    fix_paragraph(p)
+        fix_blanks(p)
     if mark:
         doc.add_paragraph("")
         doc.add_paragraph(f"[{mark}]")
@@ -87,38 +204,82 @@ def fill_docx(data, values, mark=DRAFT_MARK):
 
 # ---------------- registry ----------------
 
+# Legal team đánh dấu bản MẪU bằng `[MAU]` / `[MẪU]` trong tên file. Dùng đúng quy ước
+# của họ thay vì tự đoán: trong cùng folder còn có báo giá, đề nghị thanh toán, biên bản
+# nghiệm thu thanh lý — toàn bộ đều có chữ "hợp đồng" trong tên. Lấy bừa theo từ khoá
+# "hợp đồng" là agent đem *biên bản nghiệm thu* ra soạn thành hợp đồng.
+TEMPLATE_MARK = ("[mau]", "[mẫu]")
+# Folder KHÔNG phải kho mẫu, dù nằm trong folder mẫu.
+SKIP_FOLDERS = ("ban thao", "bản thảo", "draft", "header", "footer")
+
+
+def _is_template(name):
+    low = (name or "").lower()
+    return low.endswith(".docx") and any(m in low for m in TEMPLATE_MARK)
+
+
+def _kind_of(folder_name):
+    """"BỘ MẪU HỢP ĐỒNG_Mua bán" → "Mua bán". Dùng làm nhãn loại hợp đồng."""
+    n = (folder_name or "").strip()
+    return n.split("_", 1)[1].strip() if "_" in n else n
+
+
+def _collect(lark, tokens, log):
+    """File mẫu trong các folder đã khai **và một tầng folder con**.
+
+    Vì sao phải xuống một tầng: legal team xếp mẫu theo loại
+    (`BỘ MẪU HỢP ĐỒNG_Mua bán`, `_Dịch vụ`, `_Thuê nhà`…), nên ở tầng gốc không có file
+    nào. Chỉ **một** tầng, không đệ quy sâu — và bỏ hẳn các folder ở `SKIP_FOLDERS`,
+    quan trọng nhất là folder bản thảo agent tự xuất: quét vào đó là bản thảo của chính
+    mình thành mẫu cho lần sau.
+    """
+    out, seen, skipped = [], set(), []
+
+    def scan(tok, label, depth):
+        try:
+            entries = lark.drive_files(tok)
+        except Exception as exc:
+            log(f"[template] không đọc được folder {label or tok[:12]}: {exc}")
+            return
+        for f in entries:
+            name = f.get("name") or ""
+            if f.get("type") == "folder":
+                if any(k in name.lower() for k in SKIP_FOLDERS):
+                    continue
+                if depth == 0:
+                    scan(f["token"], _kind_of(name), 1)
+                continue
+            if f.get("token") in seen:
+                continue
+            seen.add(f["token"])
+            if _is_template(name):
+                out.append((f, label))
+            elif name.lower().endswith((".docx", ".doc")):
+                skipped.append(f"{label}/{name}" if label else name)
+    for tok in tokens:
+        scan(tok, "", 0)
+    if skipped:
+        log(f"[template] bỏ qua {len(skipped)} file không có dấu [MAU]: "
+            + "; ".join(skipped[:4]) + ("…" if len(skipped) > 4 else ""))
+    return out
+
+
 def sync_templates(lark, store, folder_token, log=print):
     """Nạp registry template từ Drive → bảng contract_templates.
 
-    `folder_token` nhận **nhiều folder**, cách nhau bằng dấu phẩy. Lý do: trong Drive pháp
-    chế có hai folder tên đều hợp lý cho mẫu hợp đồng ("Hop dong mau" và "Legal - standard
-    agreements"), và đoán sai một cái là S2 không thấy mẫu nào mà vẫn báo thành công. Quét
-    cả hai thì mẫu bỏ vào đâu cũng nhận được.
-
-    **Không quét đệ quy vào folder con** — có chủ ý: folder bản thảo agent tự xuất
-    ("BAN THAO DRAFT") nằm TRONG folder mẫu, quét đệ quy là bản thảo của chính mình thành
-    mẫu cho lần sau, sai lệch tích luỹ mà không ai thấy.
+    `folder_token` nhận **nhiều folder**, cách nhau bằng dấu phẩy: trong Drive pháp chế có
+    hai folder tên đều hợp lý cho mẫu hợp đồng, đoán sai một cái là S2 không thấy mẫu nào
+    mà vẫn báo thành công.
     """
     tokens = [t.strip() for t in (folder_token or "").split(",") if t.strip()]
     if not tokens:
         return {"templates": 0, "skipped": "chưa cấu hình LEGAL_TEMPLATE_FOLDER"}
-    files, seen = [], set()
-    for tok in tokens:
-        try:
-            for f in lark.drive_files(tok):
-                if f.get("type") == "folder" or f.get("token") in seen:
-                    continue
-                seen.add(f.get("token"))
-                files.append(f)
-        except Exception as exc:
-            log(f"[template] không đọc được folder {tok[:12]}…: {exc}")
-    specs = {f["name"]: f for f in files if f["name"].endswith(".fields.json")}
+    found = _collect(lark, tokens, log)
+    specs = {}      # <tên>.fields.json nằm cạnh file mẫu
     n = 0
-    for f in files:
+    for f, kind in found:
         name = f.get("name", "")
-        if not name.endswith(".docx"):
-            continue
-        tok, stem = f.get("token"), name[:-5]
+        tok, stem = f.get("token"), name.rsplit(".", 1)[0]
         fields = None
         spec = specs.get(stem + ".fields.json")
         if spec:
@@ -127,20 +288,33 @@ def sync_templates(lark, store, folder_token, log=print):
             except Exception as exc:
                 log(f"[template] {name}: .fields.json lỗi ({exc}) → dò placeholder")
         if fields is None:
-            keys = placeholders_in_docx(lark.drive_download(tok))
-            fields = [{"key": k, "label": k.replace("_", " "), "required": True}
-                      for k in keys]
+            try:
+                raw = lark.drive_download(tok)
+            except Exception as exc:
+                log(f"[template] {name}: không tải được ({exc}) → bỏ qua")
+                continue
+            keys = placeholders_in_docx(raw)
+            if keys:
+                fields = [{"key": k, "label": k.replace("_", " "), "required": True}
+                          for k in keys]
+            else:
+                # Mẫu thật của legal team không có `{{...}}` — chỗ cần điền là dãy `………`
+                # giữa câu. Không rơi về nhánh này thì mọi mẫu đều 0 field và S2 không
+                # điền được gì, mà vẫn báo "đã nạp 9 mẫu".
+                fields = blanks_in_docx(raw)
+        label = f"{kind} · {stem}" if kind else stem
         store.write(
             "INSERT INTO contract_templates (key, name, file_token, lark_url, fields, "
             "edit_ts, status, updated_at) VALUES (?,?,?,?,?,?,'active',?) "
             "ON CONFLICT(key) DO UPDATE SET name=excluded.name, fields=excluded.fields, "
             "edit_ts=excluded.edit_ts, status='active', updated_at=excluded.updated_at",
-            (f"drive:{tok}", stem, tok, f.get("url") or lark.drive_file_url(tok),
+            (f"drive:{tok}", label, tok, f.get("url") or lark.drive_file_url(tok),
              json.dumps(fields, ensure_ascii=False), f.get("modified_time"), time.time()))
         n += 1
-        log(f"[template] {stem}: {len(fields)} field")
+        log(f"[template] {label}: {len(fields)} field")
     if not n:
-        log(f"[template] {len(tokens)} folder, 0 file .docx — legal team chưa bỏ mẫu vào")
+        log(f"[template] {len(tokens)} folder, 0 file mẫu có dấu [MAU] — legal team chưa "
+            f"bỏ mẫu vào, hoặc mẫu không đánh dấu [MAU] trong tên file")
     return {"templates": n}
 
 

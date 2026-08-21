@@ -208,6 +208,44 @@ curl -s -H "Authorization: Bearer $LSR_AGENT_TOKEN" \
 Phải thấy `version` ≠ null. Hiện trả `"note": "chưa publish version nào"`.
 Agent nạp lại trong ≤10 phút (`gate_loop`), không cần deploy lại.
 
+## 3e. Mẫu hợp đồng — quy ước `[MAU]` và cách agent đọc mẫu
+
+Legal team xếp mẫu theo LOẠI, mỗi loại một folder con trong `Hop dong mau`:
+
+```
+Hop dong mau/  (B9jvfFfYwlMG16d9Pchlm5npgKc)
+├── BỘ MẪU HỢP ĐỒNG_Mua bán/         2. [MAU]_Hop dong mua ban_Hapas.docx  ← mẫu
+│                                     1. Bao gia…  3. ĐNTT…  4. Biên bản nghiệm thu…
+├── BỘ MẪU HỢP ĐỒNG_Dịch vụ/         [MAU]_… ×2  (+ Phụ lục, BBNTTL…)
+├── BỘ MẪU HỢP ĐỒNG_Dịch vụ IT/ · _Livestream/ · _Thuê nhà/ · _Nguyên tắc_In ấn/
+└── MẪU_Header_Footer/               (không phải hợp đồng)
+```
+
+Hai quy tắc agent dùng — **theo quy ước của legal team, không tự đoán**:
+
+1. **Chỉ file có `[MAU]` trong tên là mẫu.** Trong cùng folder còn báo giá, đề nghị thanh
+   toán, biên bản nghiệm thu thanh lý — tên đều có chữ "hợp đồng". Lấy bừa theo từ khoá là
+   agent đem *biên bản nghiệm thu* ra soạn thành hợp đồng. File bị bỏ qua đều được **ghi
+   log**, không im lặng.
+2. **Quét một tầng folder con**, bỏ `Header_Footer` và folder bản thảo agent tự xuất. Không
+   đệ quy sâu: quét vào folder bản thảo là bản thảo của chính mình thành mẫu cho lần sau.
+
+### Chỗ cần điền: mẫu thật dùng `………`, không dùng `{{...}}`
+
+Kiểm mẫu Mua bán 21/08: chỗ điền là **dãy ba chấm chèn giữa câu** —
+`"Số: ………/2026/HDMBHH/…….- HTC"`, `"Thời gian giao hàng: …….. giờ ngày …………….;"` — và
+trong bảng `nhãn | : | giá trị`. Agent dò 20 chỗ trống ở mẫu này, nhãn lấy từ mảnh câu
+quanh chỗ trống (hoặc **ô đầu hàng** nếu ở trong bảng) nên người điền biết đang điền gì.
+
+Ba chốt đã trả giá để biết, đừng bỏ:
+
+| Chốt | Vì sao |
+|---|---|
+| Ô GỘP chỉ tính **một** chỗ trống | python-docx trả ô gộp nhiều lần ⇒ một chỗ đếm thành ba ⇒ **mọi giá trị phía sau rơi sai ô** |
+| Dò và điền đi **cùng một đường** | Lệch thứ tự là giá trị vào sai chỗ — lỗi nguy hiểm nhất có thể có với hợp đồng |
+| `"..."` là dấu lược, **không** phải chỗ trống | "hàng mới 100%..." điền vào là hỏng câu. Chỉ nhận `…` hoặc ≥4 dấu chấm |
+| Chỗ trống chưa có thông tin **để nguyên `………`** | Xoá âm thầm = hợp đồng thiếu điều khoản mà trông như đã hoàn chỉnh. Card ghi rõ còn mấy chỗ trống |
+
 ## 4. Đăng ký agent với platform
 
 Chuẩn mới (P11) — **không đi xin enroll token của ai**:
@@ -325,10 +363,10 @@ Lưu ý vận hành:
 - [x] LSR_AGENT_TOKEN (mục 4) — ✅ agent `status=active` từ 14/08, **29 run** (đo 20/08)
 - [x] **Deploy bản mới lên VM** (mục 6) — ✅ 21/08, 21 module, S1 end-to-end OK
 - [ ] `instruction_block` đã publish (mục **3d** — chỉ làm trên Console) — **điều kiện golive thật**
-- [ ] **CLI `claude` trong image** — thiếu ⇒ S2–S5 chỉ trả "chưa rà soát được". Cần chủ subscription chạy `claude setup-token` rồi thêm `CLAUDE_CODE_OAUTH_TOKEN=` vào `/opt/ag-legal/.env` + thêm Node/Claude Code vào Dockerfile
+- [x] **CLI `claude` trong image** — ✅ 21/08: Node 22 + Claude Code 2.1.238 trong image; token **lease từ platform** (`sub-thi-canhan`), không dán vào `.env`, không vào git
 - [ ] **Scope `contact:user.id:readonly`** cho app `cli_aa0f9ac50cf8dee9` — để agent tự resolve open_id theo đúng app (xem mục 3, cái bẫy open_id)
 - [x] Sync lần đầu thành công (mục 5) — ✅ 19/08: 32 tài liệu nạp, 18 mục rỗng bị loại đúng
-- [ ] (Phase 3) **Mẫu hợp đồng .docx trong Drive** — chốt 21/08: mẫu ở **Drive, không phải Wiki**. Hai folder đều đọc được, hiện **cả hai còn trống**: `Hop dong mau` (`B9jvf…`) và `Legal - standard agreements` (`T8Dzf…`), cùng nằm trong folder cha `MIx2fFd8…`. Bỏ file `.docx` vào là S2 chạy được ngay — agent dò placeholder `{{...}}` trong file, không cần khai field
+- [x] (Phase 3) **Mẫu hợp đồng .docx trong Drive** — ✅ 21/08: **9 mẫu** đã nạp (Mua bán · Dịch vụ ×2 · Dịch vụ IT · Livestream ×2 · Thuê nhà ×2 · Nguyên tắc/In ấn), 9–34 chỗ trống mỗi mẫu. Đã chạy thử tạo bản thảo Mua bán end-to-end
 - [x] (Phase 5) Danh sách nguồn luật — ✅ **3 nguồn VN đang bật** (chinhphu.vn · thuvienphapluat · LuatVietnam RSS), đã lưu thật PDF ký số + toàn văn. Nước khác **thêm trên console agent** (chốt 21/08); văn bản bỏ tay vào folder con theo nước vẫn được index
 - [x] (Phase 6) Quy trình trình ký — ✅ `approval_code=0338BCF9…`, 4 node, 4 field form đã ghim vào `signing.py`; checklist đầu mục đã nạp (`seed_news.py`)
 - [ ] (Phase 6) **C5 — passthrough tenant token** để đọc form/file hồ sơ + ghi comment vào instance (`requests/C5-lark-tenant-passthrough.md`)

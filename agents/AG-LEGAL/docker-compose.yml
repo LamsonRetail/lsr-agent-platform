@@ -22,6 +22,9 @@ services:
       - ./data:/agent/data          # legalkb.db (mapping trích dẫn)
       # rw: notebooklm-py cần ghi lại cookie xoay vòng, nếu :ro phiên sẽ hết hạn sớm
       - ${NLM_AUTH_DIR:-./secrets/notebooklm}:/agent/secrets/notebooklm
+      # ro: credential model của platform. Agent chỉ ĐỌC theo secret_ref mà lease trả về;
+      # không copy secret vào image, vào .env hay vào git.
+      - ${LSR_SECRETS_HOST_DIR:-/opt/lsr-platform/secrets}:/secrets:ro
     networks: [lsr]
     restart: unless-stopped
 

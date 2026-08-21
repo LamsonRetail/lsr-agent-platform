@@ -208,6 +208,11 @@ class Platform:
             return data, f"Lark code={code} {data.get('msg') or ''}".strip()
         return data.get("data", data), None
 
+    def model_auth_lease(self):
+        """Xin credential model. Trả **tham chiếu** (secret_ref), KHÔNG trả secret."""
+        return self._quiet("POST", "/v1/self/model-auth/lease", {},
+                           what="model-auth/lease") or {}
+
     def lark_resolve(self, email):
         r = self._quiet("POST", "/v1/lark/resolve", {"email": email}, what="lark/resolve")
         return (r or {}).get("open_id")

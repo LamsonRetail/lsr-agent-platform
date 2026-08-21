@@ -32,6 +32,9 @@ class FakeEngine:
 
 
 class FakePlatform:
+    def model_auth_lease(self):
+        return {}          # test offline: không có credential
+
     """Đủ bề mặt để consumer chạy: bộ nhớ + job + Lark broker."""
 
     def __init__(self, ctx=None):
@@ -397,3 +400,53 @@ def test_no_fallback_configured_reports_failure(monkeypatch):
     pf = Platform(fallback=None)
     monkeypatch.setattr(pf, "call", lambda *a, **k: {"sent": False})
     assert pf.lark_send("oc_x", markdown="x") is False
+
+
+# ==================== credential model: lease, không dán token ====================
+
+def test_lease_reads_secret_by_reference_never_from_env_file(tmp_path, monkeypatch):
+    """Platform trả **tham chiếu**; secret nằm ở file trên VM (mount ro). Không ai phải
+    dán token vào .env của agent hay vào git."""
+    from legalkb import brain
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    (tmp_path / "model").mkdir()
+    (tmp_path / "model" / "sub-x.env").write_text("sk-ant-oat-GIA-LAP\n")
+    monkeypatch.setattr(brain, "SECRETS_DIR", str(tmp_path))
+
+    class PF:
+        def model_auth_lease(self):
+            return {"mode": "subscription", "credential_id": "sub-x",
+                    "secret_ref": "model/sub-x.env",
+                    "env_var": "CLAUDE_CODE_OAUTH_TOKEN"}
+    note = brain.lease_model_auth(PF())
+    assert "sub-x" in note and "subscription" in note
+    assert brain._lease["env"] == {"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat-GIA-LAP"}
+    brain._lease.update(env=None, note="reset")
+
+
+def test_lease_failure_is_reported_not_silent(tmp_path, monkeypatch):
+    """Không lease được nghĩa là router rơi về mặc định và S2–S5 chỉ trả "chưa rà soát
+    được" — degrade âm thầm là thứ khó phát hiện nhất."""
+    from legalkb import brain
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    monkeypatch.setattr(brain, "SECRETS_DIR", str(tmp_path))
+
+    class PF:
+        def model_auth_lease(self):
+            return {"mode": "subscription", "secret_ref": "model/khong-co.env",
+                    "env_var": "CLAUDE_CODE_OAUTH_TOKEN"}
+    note = brain.lease_model_auth(PF())
+    assert "không đọc được" in note and "mount" in note
+    assert brain._lease["env"] is None
+    brain._lease.update(env=None, note="reset")
+
+
+def test_existing_env_token_is_respected(monkeypatch):
+    from legalkb import brain
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "co-san")
+
+    class PF:
+        def model_auth_lease(self):
+            raise AssertionError("đã có token trong env thì không cần lease")
+    assert "có sẵn" in brain.lease_model_auth(PF())
+    brain._lease.update(env=None, note="reset")

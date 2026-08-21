@@ -105,6 +105,31 @@ def s2_create(b, q, sid, uref, chat_id):
     return contracts.summary(t, values)
 
 
+def _values_summary(t, values, cap=6):
+    """Tóm tắt cho người duyệt đọc — theo NHÃN, không theo key.
+
+    Trước đây card ghi `cho_trong_1=015; cho_trong_2=HAPAS` — người duyệt không có cách
+    nào biết đó là số hợp đồng hay tên bên A. Nhãn lấy từ chính mảnh câu quanh chỗ trống.
+    """
+    labels = {f["key"]: (f.get("label") or f["key"]) for f in (t.get("fields") or [])}
+    parts = []
+    for k, v in values.items():
+        if v in (None, ""):
+            continue
+        lbl = labels.get(k, k)
+        lbl = lbl.split(" — ")[0][:46].strip(" .;:")
+        parts.append(f"{lbl}: {v}")
+        if len(parts) >= cap:
+            break
+    return " · ".join(parts) or "(chưa điền field nào)"
+
+
+def _n_unfilled(t, values):
+    """Số chỗ trống CHƯA điền — phải nói ra, vì bản thảo vẫn còn dấu `………` trong file."""
+    return sum(1 for f in (t.get("fields") or [])
+               if values.get(f["key"]) in (None, ""))
+
+
 def _build_and_gate(b, t, values, sid, uref, chat_id, d):
     """Điền docx → upload Drive → mở gate Pháp chế. KHÔNG gửi cho người yêu cầu."""
     folder = os.environ.get(DRAFT_FOLDER_ENV)
@@ -126,7 +151,8 @@ def _build_and_gate(b, t, values, sid, uref, chat_id, d):
         round_no=round_no,
         title=f"{t['name']} (vòng {round_no})",
         payload={"chat_id": chat_id, "requester_name": _requester_name(b, uref),
-                 "summary": "; ".join(f"{k}={v}" for k, v in list(values.items())[:6]),
+                 "summary": _values_summary(t, values),
+                 "n_blank": _n_unfilled(t, values),
                  "file": url, "template": t["name"]})
     b.drafts.save(sid, status="pending_review", gate_id=gid, out_url=url, values=values)
     return (f"Đã soạn xong bản thảo **{t['name']}** (đóng dấu DRAFT) và **chuyển bộ phận "
