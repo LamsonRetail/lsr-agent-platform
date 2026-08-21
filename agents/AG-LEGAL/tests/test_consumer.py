@@ -188,9 +188,13 @@ def test_c9_exception_stays_narrow():
     thành "agent tự tích hợp Lark" như trước Phase 2A.
     """
     kb = (AGENT_DIR / "legalkb" / "lark_kb.py").read_text(encoding="utf-8")
-    assert kb.count("open-apis/im/") == 1, "chỉ được đúng 1 lời gọi IM API"
-    assert "def im_send_markdown" in kb
-    assert "ĐIỀU KIỆN XOÁ" in kb and "C9" in kb
+    # Danh sách ĐÓNG: mỗi ngoại lệ một hàm, mỗi hàm một ĐIỀU KIỆN XOÁ. Thêm hàm im thứ ba
+    # là test đỏ — để ngoại lệ không lặng lẽ phình ra thành "agent tự tích hợp Lark".
+    assert kb.count("open-apis/im/") == 2, "chỉ được đúng 2 lời gọi IM API"
+    assert "def im_send_markdown" in kb            # C9: gửi khi broker fail
+    assert "def chat_members" in kb                # C13: đọc open_id theo đúng app
+    assert kb.count("ĐIỀU KIỆN XOÁ") == 2, "mỗi ngoại lệ phải có điều kiện xoá"
+    assert "C9" in kb and "C5" in kb
     assert "def send_text" not in kb and "def recall" not in kb
 
 

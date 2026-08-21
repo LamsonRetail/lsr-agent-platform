@@ -149,6 +149,30 @@ class LarkKB:
     def drive_file_url(self, file_token, file_type="file"):
         return f"https://{self.tenant_domain}/{file_type}/{file_token}"
 
+    # ---------- NGOẠI LỆ C13: đọc thành viên group để nạp open_id ----------
+
+    def chat_members(self, chat_id, page_size=100):
+        """Thành viên group → `[(tên, open_id)]`. **Đọc**, không gửi gì.
+
+        ⚠️ Ngoại lệ có chủ ý: broker của platform có `/v1/lark/chats` (liệt kê nhóm) nhưng
+        KHÔNG có endpoint thành viên nhóm.
+
+        Vì sao không bỏ qua được: quyền duyệt kiểm bằng `sender_open_id`, mà open_id của
+        Lark **thuộc từng app**. `/v1/lark/resolve` của platform dùng app mặc định của
+        platform, không phải app của AG-LEGAL ⇒ open_id lấy về không khớp ⇒ **đúng người
+        vẫn bị từ chối lệnh duyệt**, và thông báo chỉ nói "chưa có quyền". Đã xảy ra thật
+        21/08: cả hai người duyệt đều sai open_id. Đọc thành viên group bằng CHÍNH app đang
+        nhận tin là cách duy nhất hiện có để lấy open_id đúng mà không cần thêm scope.
+
+        ĐIỀU KIỆN XOÁ: khi core mở passthrough tenant token (**C5**,
+        `requests/C5-lark-tenant-passthrough.md`) hoặc thêm `/v1/lark/chat/members`, thì
+        đổi sang gọi qua broker và xoá hàm này.
+        """
+        r = self._request("GET", f"/open-apis/im/v1/chats/{chat_id}/members"
+                                 f"?member_id_type=open_id&page_size={int(page_size)}")
+        return [(m.get("name") or "", m.get("member_id") or "")
+                for m in ((r or {}).get("items") or [])]
+
     # ---------- NGOẠI LỆ C9: gửi tin khi broker không gửi được ----------
 
     def im_send_markdown(self, chat_id, markdown):

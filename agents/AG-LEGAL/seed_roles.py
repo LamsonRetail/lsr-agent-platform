@@ -46,12 +46,61 @@ ROSTER = [
 # Lark, không phải người duyệt. Nếu để nó trong legal_roles thì agent tự duyệt gate của
 # chính mình — phá đúng cái tách vai mà toàn bộ khung "Pháp chế in the loop" dựa vào.
 # Danh sách này để consumer NHẬN RA và từ chối, chứ không phải để cấp quyền.
+# ⚠️ open_id của Lark thuộc TỪNG APP: cùng một người, mỗi app thấy một open_id khác. Nên
+# account của agent phải chặn theo open_id của **mọi app** từng gặp, không chỉ một.
 AGENT_OWN_OPEN_IDS = {
-    "ou_d386c1e6ddbea6160569647db6491f37": "ann_legal@hapas.vn (user account của AG-LEGAL)",
+    "ou_d386c1e6ddbea6160569647db6491f37": "ann_legal@hapas.vn (theo app Admin platform)",
+    "ou_6e62405ebd718453f6473554ea637e85": "ann_legal@hapas.vn (theo app AG-LEGAL "
+                                           "cli_aa0f9ac50cf8dee9 — app nhận tin)",
 }
 # Chặn theo cả EMAIL, không chỉ open_id: đổi/ tạo lại account là open_id đổi, còn email
 # thì thường giữ nguyên → chặn hai lớp cho chắc.
 AGENT_OWN_EMAILS = {"ann_legal@hapas.vn"}
+
+
+def _name_tokens(s):
+    import re as _re
+    drop = {"bod", "phap", "che", "chế", "pháp", "legal", "mr", "ms", "anh", "chi", "chị"}
+    toks = {t for t in _re.split(r"[^\w]+", (s or "").lower()) if len(t) > 1}
+    return toks - drop
+
+
+def sync_open_ids_from_group(kb, store, chat_id, log=print):
+    """Nạp open_id của người duyệt **theo đúng app đang nhận tin**, lấy từ thành viên group.
+
+    Vì sao cần: quyền duyệt kiểm bằng `sender_open_id`, mà open_id của Lark **thuộc từng
+    app**. `/v1/lark/resolve` của platform dùng app mặc định của platform, không phải app
+    của AG-LEGAL ⇒ open_id lấy về không khớp ⇒ **đúng người vẫn bị từ chối lệnh duyệt**,
+    và thông báo chỉ nói "chưa có quyền". Đã xảy ra thật: 21/08 cả hai người duyệt đều có
+    open_id sai.
+
+    Cách làm không cần thêm scope: đọc thành viên group bằng chính app đó rồi khớp theo
+    TÊN. Khớp theo tập token và đòi **bao trùm hoàn toàn** — "Nguyễn Trần Thi" với
+    "Nguyễn Thị Anh" trùng hai token nên khớp lỏng là gán sai người duyệt.
+    """
+    members = kb.chat_members(chat_id)
+    n = 0
+    for row in store.query("SELECT DISTINCT email, name FROM legal_roles"):
+        if (row["email"] or "").lower() in AGENT_OWN_EMAILS:
+            continue
+        want = _name_tokens(row["name"] or row["email"])
+        hit = [oid for nm, oid in members
+               if want and (want <= _name_tokens(nm) or _name_tokens(nm) <= want)]
+        if len(hit) != 1:
+            log(f"  ⚠️  {row['name'] or row['email']}: khớp {len(hit)} thành viên — bỏ qua "
+                f"(sửa tay bằng --map)")
+            continue
+        if hit[0] in AGENT_OWN_OPEN_IDS:
+            log(f"  ✗ TỪ CHỐI {row['email']}: khớp vào account của chính agent")
+            continue
+        cur = store.one("SELECT open_id FROM legal_roles WHERE email=?", (row["email"],))
+        if (cur or {}).get("open_id") == hit[0]:
+            log(f"  = {row['name']}: open_id đã đúng")
+            continue
+        store.write("UPDATE legal_roles SET open_id=? WHERE email=?", (hit[0], row["email"]))
+        log(f"  ✓ {row['name']}: open_id → {hit[0]}")
+        n += 1
+    return n
 
 
 def _housekeep(store):
@@ -87,6 +136,9 @@ def _housekeep(store):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--sync-from-group", action="store_true",
+                    help="nạp open_id người duyệt từ thành viên group, theo ĐÚNG app đang "
+                         "nhận tin (open_id của Lark thuộc từng app)")
     ap.add_argument("--map", nargs=2, metavar=("OPEN_ID", "EMAIL"),
                     help="gán open_id (theo app đang nhận tin) cho người đã có trong "
                          "legal_roles. Cần vì open_id của Lark thuộc TỪNG APP: đổi app "
@@ -102,6 +154,17 @@ def main():
         for r in rows:
             print(f"{r['email']:32} {r['role']:16} open_id={r['open_id'] or '-'} "
                   f"active={r['active']} {r['name'] or ''}")
+        return 0
+
+    if args.sync_from_group:
+        from legalkb.lark_kb import LarkKB
+        chat = os.environ.get("LEGAL_GROUP_CHAT_ID")
+        if not chat:
+            print("✗ thiếu LEGAL_GROUP_CHAT_ID", file=sys.stderr)
+            return 1
+        kb = LarkKB(os.environ["LARK_APP_ID"], os.environ["LARK_APP_SECRET"])
+        n = sync_open_ids_from_group(kb, store, chat)
+        print(f"Xong: cập nhật {n} người.")
         return 0
 
     if args.map:

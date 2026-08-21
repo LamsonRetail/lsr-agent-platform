@@ -165,6 +165,49 @@ AG-OPS sẽ cảnh báo.
 > bot vào nhóm nào là nhận ra nhóm đó ngay. `AGENT_GROUP_CHAT_IDS` chỉ còn dùng khi muốn
 > coi một chat là nhóm **trước khi** bot join.
 
+## 3b-bis. Nhắn với agent: nhắn **BOT**, không nhắn "Ann Nguyen"  ⚠️ dễ nhầm
+
+Trong group có **3 người + 1 bot**. "Ann Nguyen" xuất hiện như một **người**, nên ai cũng
+tưởng nhắn Ann là nói với agent. Không phải:
+
+| | "Ann Nguyen" (`ann_legal@hapas.vn`) | Bot của app `cli_aa0f9ac50cf8dee9` |
+|---|---|---|
+| Bản chất | **user account** — một con người trên Lark | **bot** — chính là agent |
+| Quyền (đo 21/08) | chỉ `approval:*` + `auth:user.id` + `offline_access` · **không có `im:*`** | gửi/nhận tin |
+| Nhắn vào thì sao | **không ai đọc** — không ai đăng nhập bằng account đó, và agent không có quyền đọc tin của nó | agent nhận job và trả lời |
+
+Account Ann chỉ để agent **đọc Lark Approval** dưới một danh tính máy (C8). Nó cố tình
+KHÔNG có quyền chat — cấp thêm `im:*` cho nó nghĩa là agent đọc/gửi tin dưới danh nghĩa
+một account người, đúng thứ chuẩn platform muốn tránh.
+
+⇒ Muốn chat 1-1 với agent: mở group → bấm vào **bot** trong danh sách thành viên → nhắn
+trực tiếp. (Hoặc tìm tên app trong ô tìm kiếm Lark.)
+
+### Vẫn chưa nhận được tin? Còn một việc trên Lark Developer Console
+
+Đo 21/08 trên `event_gateway_legal-1`: long-connection **đã kết nối**, nhưng Lark chỉ đẩy
+về `im.message.reaction.created_v1` (ai đó thả emoji) — **không có một
+`im.message.receive_v1` nào**. Gateway của core có sẵn handler cho event đó
+(`event_gateway/gateway.py:237 register_p2_im_message_receive_v1`), nên chỗ thiếu nằm ở
+cấu hình app:
+
+1. **Events & Callbacks** → thêm event **`im.message.receive_v1`** ("Message received").
+2. **Permissions** → `im:message` (nhận tin). Muốn agent nghe **mọi tin trong group** chứ
+   không chỉ tin có @mention nó thì thêm `im:message.group_msg`; không có scope đó thì
+   Lark **chỉ đẩy tin có @mention bot**, tức lệnh duyệt phải gõ `@bot #3 duyệt`.
+3. **Create version & publish** — không publish thì thay đổi không có hiệu lực.
+
+### open_id của người duyệt: nạp theo ĐÚNG app
+
+Đã sửa 21/08. Xem `## 3` để hiểu vì sao. Lệnh:
+
+```bash
+python3 seed_roles.py --sync-from-group
+```
+
+Đọc thành viên group bằng chính app đang nhận tin rồi khớp theo tên. Kết quả 21/08: cả
+**hai** người duyệt đều đang sai open_id, đã cập nhật.
+
 ## 3c. Danh tính Lark của agent (C8)  ✅ XONG 20/08
 
 Agent đọc Lark Approval dưới account **`ann_legal@hapas.vn`** ("Ann Nguyen") — account

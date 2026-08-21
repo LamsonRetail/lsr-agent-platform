@@ -240,3 +240,55 @@ def test_unknown_sender_is_told_the_actual_likely_cause(tmp_path):
         "sender_open_id": "ou_theo_app_MOI"}}, b)
     assert "ou_theo_app_MOI" in out, "phải in open_id thật để lần ra được"
     assert "thuộc từng" in out and "seed_roles.py --map" in out
+
+
+# ============ open_id theo TỪNG APP: nạp từ thành viên group ============
+
+class FakeKB:
+    def __init__(self, members):
+        self._m = members
+
+    def chat_members(self, chat_id, page_size=100):
+        return list(self._m)
+
+
+def test_open_ids_synced_from_group_members(tmp_path):
+    """Lỗi thật 21/08: cả hai người duyệt đều có open_id sai vì `/v1/lark/resolve` dùng app
+    mặc định của platform, không phải app nhận tin."""
+    import seed_roles
+    store, pf, g, b = make(tmp_path)
+    store.write("UPDATE legal_roles SET name='Nguyễn Trần Thi (BOD)', open_id='ou_SAI'")
+    store.write("INSERT INTO legal_roles (email, role, contract_type, open_id, name, active)"
+                " VALUES ('anhnt1@hapas.vn','approver','*','ou_SAI_2',"
+                "'Nguyễn Thị Anh (Pháp chế)',1)")
+    kb = FakeKB([("Nguyễn Trần Thi - BOD", "ou_THI_DUNG"),
+                 ("Nguyễn Thị Anh - Pháp chế", "ou_ANH_DUNG"),
+                 ("Ann Nguyen", "ou_6e62405ebd718453f6473554ea637e85")])
+    assert seed_roles.sync_open_ids_from_group(kb, store, "oc_x", log=lambda m: None) == 2
+    got = {r["email"]: r["open_id"] for r in store.query("SELECT email, open_id FROM legal_roles")}
+    assert got["thint@hapas.vn"] == "ou_THI_DUNG"
+    assert got["anhnt1@hapas.vn"] == "ou_ANH_DUNG"
+
+
+def test_agent_own_account_never_becomes_approver(tmp_path):
+    """"Ann Nguyen" là account của chính agent và CÓ trong group. Khớp vào nó là agent tự
+    duyệt việc của mình."""
+    import seed_roles
+    store, pf, g, b = make(tmp_path)
+    store.write("UPDATE legal_roles SET email='ann_legal@hapas.vn', name='Ann Nguyen'")
+    kb = FakeKB([("Ann Nguyen", "ou_6e62405ebd718453f6473554ea637e85")])
+    logs = []
+    assert seed_roles.sync_open_ids_from_group(kb, store, "oc_x", log=logs.append) == 0
+
+
+def test_similar_names_are_not_matched_loosely(tmp_path):
+    """"Nguyễn Trần Thi" và "Nguyễn Thị Anh" trùng hai token. Khớp lỏng là gán quyền duyệt
+    cho SAI NGƯỜI — không được đoán, phải bỏ qua và báo."""
+    import seed_roles
+    store, pf, g, b = make(tmp_path)
+    store.write("UPDATE legal_roles SET name='Nguyễn', open_id='ou_SAI'")
+    kb = FakeKB([("Nguyễn Trần Thi", "ou_A"), ("Nguyễn Thị Anh", "ou_B")])
+    logs = []
+    assert seed_roles.sync_open_ids_from_group(kb, store, "oc_x", log=logs.append) == 0
+    assert any("khớp 2 thành viên" in m for m in logs)
+    assert store.one("SELECT open_id FROM legal_roles")["open_id"] == "ou_SAI"
