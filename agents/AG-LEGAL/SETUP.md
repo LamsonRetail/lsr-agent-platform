@@ -215,7 +215,8 @@ Agent chạy tại `/opt/ag-legal` trên VM `digital-transformation-hosting`
 lark_client, store, sync). Toàn bộ việc từ đó tới nay — S2–S5, gates, addressing, voice,
 news, 3 adapter nguồn luật, approval — nằm ở `lsr-agent-platform/agents/AG-LEGAL/`.
 Lệnh cũ trỏ vào thư mục cũ nên **chạy xong vẫn là bản 12/08 mà tưởng đã cập nhật**. Nên
-xoá thư mục cũ đi cho khỏi nhầm lần sau.
+xoá thư mục cũ đi cho khỏi nhầm lần sau. (Chưa kiểm được VM đang chạy bản nào — việc đó
+cần SSH.)
 
 Cập nhật code lên VM (nguồn ĐÚNG là `lsr-agent-platform/agents/AG-LEGAL`):
 
