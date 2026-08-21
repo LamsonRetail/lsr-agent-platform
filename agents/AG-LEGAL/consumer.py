@@ -190,8 +190,15 @@ def handle_group(job, b):
 
     who = g.reviewer_by_open_id(sender)
     if not who:
-        return ("Bạn chưa có quyền quyết định trên AG-LEGAL. "
-                "Người được cấp quyền hiện tại do admin cấu hình trong `legal_roles`.")
+        # Nói RÕ open_id, vì lý do thường gặp nhất không phải "sai người" mà là
+        # **open_id của Lark thuộc từng APP**: `legal_roles` lưu open_id resolve bằng app
+        # khác với app đang nhận tin ⇒ đúng người vẫn bị từ chối. Chỉ báo "không có quyền"
+        # thì admin không có cách nào lần ra. Kèm luôn lệnh sửa.
+        return ("Bạn chưa có quyền quyết định trên AG-LEGAL.\n"
+                f"- open_id của bạn (theo app đang nhận tin): `{sender or 'không đọc được'}`\n"
+                "- Nếu bạn **đúng là** người được cấp quyền: open_id trong Lark thuộc từng "
+                "app, nên khi đổi app nhận tin thì phải nạp lại. Admin chạy:\n"
+                f"  `python3 seed_roles.py --map {sender or '<open_id>'} <email>`")
     gate_id, action, arg = cmd
 
     if action == "list":

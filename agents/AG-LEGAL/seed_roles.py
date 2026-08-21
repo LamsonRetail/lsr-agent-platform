@@ -87,6 +87,10 @@ def _housekeep(store):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--map", nargs=2, metavar=("OPEN_ID", "EMAIL"),
+                    help="gán open_id (theo app đang nhận tin) cho người đã có trong "
+                         "legal_roles. Cần vì open_id của Lark thuộc TỪNG APP: đổi app "
+                         "nhận tin là đúng người vẫn bị từ chối lệnh duyệt.")
     args = ap.parse_args()
 
     store = SourceStore(os.environ.get("LEGALKB_DB"))
@@ -98,6 +102,22 @@ def main():
         for r in rows:
             print(f"{r['email']:32} {r['role']:16} open_id={r['open_id'] or '-'} "
                   f"active={r['active']} {r['name'] or ''}")
+        return 0
+
+    if args.map:
+        open_id, email = args.map[0].strip(), args.map[1].strip().lower()
+        if open_id in AGENT_OWN_OPEN_IDS or email in AGENT_OWN_EMAILS:
+            print(f"✗ TỪ CHỐI: đây là user account của chính agent — agent không được tự "
+                  f"duyệt việc của mình.", file=sys.stderr)
+            return 1
+        rows = store.query("SELECT role FROM legal_roles WHERE lower(email)=?", (email,))
+        if not rows:
+            print(f"✗ {email} chưa có trong legal_roles. Thêm vào ROSTER rồi chạy "
+                  f"`seed_roles.py` trước.", file=sys.stderr)
+            return 1
+        store.write("UPDATE legal_roles SET open_id=? WHERE lower(email)=?",
+                    (open_id, email))
+        print(f"✓ {email}: open_id = {open_id} ({len(rows)} vai trò)")
         return 0
 
     # Chỉ CHẶN khi vừa thiếu email vừa thiếu open_id — lúc đó thật sự không xác định được

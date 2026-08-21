@@ -101,9 +101,30 @@ Chốt 17/08/2026: dùng **một group Lark** cho cả thông báo và phê duy�
 1. **Add bot AG-LEGAL vào group đó** (việc của admin Lark).
 2. Xác nhận: `GET /v1/lark/chats` bằng token agent phải thấy chat_id này. Consumer cũng
    tự kiểm lúc khởi động và in cảnh báo nếu bot chưa ở trong group.
-3. Nạp người duyệt: `python3 seed_roles.py` — hiện có Nguyễn Trần Thi (BOD) và
-   Nguyễn Thị Anh (Legal). **Cần email chính xác của chị Anh**; script cố tình báo lỗi
-   nếu còn placeholder, để không gửi phê duyệt cho sai người.
+3. Nạp người duyệt: `python3 seed_roles.py` — Nguyễn Trần Thi (BOD) và Nguyễn Thị Anh
+   (`anhnt1@hapas.vn`). Script cố tình báo lỗi nếu còn placeholder, để không gửi phê
+   duyệt cho sai người.
+
+### ⚠️ open_id của Lark thuộc TỪNG APP — cái bẫy im lặng nhất ở đây
+
+Quyền duyệt kiểm bằng `sender_open_id` của tin nhắn. **open_id không phải id toàn cục:
+cùng một người, mỗi app Lark thấy một open_id khác nhau.** Nên khi đổi app nhận tin
+(21/08 đổi sang `cli_aa0f9ac50cf8dee9`), `legal_roles.open_id` cũ có thể không còn khớp ⇒
+**đúng người vẫn bị từ chối lệnh duyệt**, mà thông báo chỉ nói "chưa có quyền".
+
+Bằng chứng đo được 21/08: `POST /v1/lark/resolve` trả `ou_cb1687f6…` cho
+`thint@hapas.vn`, còn trong DB là `ou_c4a4e1e0…` — hai giá trị cho cùng một email. Và
+`/v1/lark/resolve` của core **không nhận `app_id`** (dùng app mặc định của platform), nên
+không resolve được theo app đang nhận tin.
+
+Cách xử lý đã làm — để lỗi tự chỉ đường sửa:
+
+1. Ai gõ lệnh mà không có quyền, agent trả về **chính open_id của người đó** kèm lệnh sửa.
+2. Admin chạy: `python3 seed_roles.py --map <open_id> <email>`.
+
+Cách xử lý dứt điểm (cần admin Lark): thêm scope **`contact:user.id:readonly`** cho app
+`cli_aa0f9ac50cf8dee9` → **Create version & publish**. Có scope đó thì agent tự resolve
+open_id theo đúng app, không cần bước 1–2 nữa.
 
 > Telegram: **bỏ khỏi scope** (chốt 17/08/2026) — không tạo bot, không cấu hình.
 
@@ -223,11 +244,30 @@ set -a; source .env; set +a
 Kỳ vọng: report JSON `added` = số tài liệu trong wiki + folder, `errors` rỗng;
 mở notebook trên notebooklm.google.com thấy đủ sources.
 
-## 6. Deploy lên VM platform (đã làm 12/08/2026)
+## 6. Deploy lên VM platform  ✅ ĐÃ DEPLOY BẢN MỚI 21/08/2026
 
 Agent chạy tại `/opt/ag-legal` trên VM `digital-transformation-hosting`
-(project `ganesha-381907`, zone `asia-southeast1-b`), 2 container:
-`ag-legal-agent-1` (chat consumer) + `ag-legal-kb-sync-1` (sync KB 3h/lần).
+(project `ganesha-381907`, zone `asia-southeast1-b`), **một container**
+`ag-legal-agent-1` — chat + kb-sync + news-crawl + approval-watch + gate worker cùng
+tiến trình (NotebookLM chỉ cho một phiên mỗi tài khoản).
+
+Kết quả deploy 21/08 (kiểm live sau khi lên):
+
+| Thứ | Trạng thái |
+|---|---|
+| 21 module `legalkb/` | ✅ (trước đó VM chỉ có 5 module bản 12/08) |
+| kb-sync | ✅ inventory 62, 0 lỗi |
+| nhóm bot tham gia | ✅ 1 (tự phát hiện) |
+| approval-watch | ✅ danh tính `ann_legal@hapas.vn`, 5 phút/lần |
+| nguồn luật | ✅ 3 nguồn VN bật, chạy thứ 2 07:00 |
+| người duyệt | ✅ 2 người, có open_id |
+| hỏi đáp S1 end-to-end | ✅ trả lời có trích dẫn từ KB, ghi 2 lượt vào bộ nhớ |
+| mẫu hợp đồng | ⚠️ đọc được 2 folder, **0 file .docx** |
+| `instruction_block` | ❌ NULL — publish trên Console |
+| CLI `claude` trong image | ❌ **thiếu** → S2–S5 degrade (xem cuối mục này) |
+
+Bản đang chạy trước đó được sao lưu ở `/opt/ag-legal.bak-<ngày>-<giờ>` để rollback:
+`sudo rm -rf /opt/ag-legal && sudo mv /opt/ag-legal.bak-… /opt/ag-legal && cd /opt/ag-legal && sudo docker compose up -d`.
 
 ⚠️ **Đường dẫn nguồn deploy đã ĐỔI — kiểm 20/08.** Thư mục cũ
 `~/LSR Legal Agent/ag-legal/` là cây code **ngày 12/08** (chỉ có 6 module: engine,
@@ -283,7 +323,10 @@ Lưu ý vận hành:
 - [x] Danh tính Lark của agent (C8, mục 3c) — ✅ connected 20/08
 - [ ] Thông báo minh bạch "Ann Nguyen là account máy" (mục 3c)
 - [x] LSR_AGENT_TOKEN (mục 4) — ✅ agent `status=active` từ 14/08, **29 run** (đo 20/08)
+- [x] **Deploy bản mới lên VM** (mục 6) — ✅ 21/08, 21 module, S1 end-to-end OK
 - [ ] `instruction_block` đã publish (mục **3d** — chỉ làm trên Console) — **điều kiện golive thật**
+- [ ] **CLI `claude` trong image** — thiếu ⇒ S2–S5 chỉ trả "chưa rà soát được". Cần chủ subscription chạy `claude setup-token` rồi thêm `CLAUDE_CODE_OAUTH_TOKEN=` vào `/opt/ag-legal/.env` + thêm Node/Claude Code vào Dockerfile
+- [ ] **Scope `contact:user.id:readonly`** cho app `cli_aa0f9ac50cf8dee9` — để agent tự resolve open_id theo đúng app (xem mục 3, cái bẫy open_id)
 - [x] Sync lần đầu thành công (mục 5) — ✅ 19/08: 32 tài liệu nạp, 18 mục rỗng bị loại đúng
 - [ ] (Phase 3) **Mẫu hợp đồng .docx trong Drive** — chốt 21/08: mẫu ở **Drive, không phải Wiki**. Hai folder đều đọc được, hiện **cả hai còn trống**: `Hop dong mau` (`B9jvf…`) và `Legal - standard agreements` (`T8Dzf…`), cùng nằm trong folder cha `MIx2fFd8…`. Bỏ file `.docx` vào là S2 chạy được ngay — agent dò placeholder `{{...}}` trong file, không cần khai field
 - [x] (Phase 5) Danh sách nguồn luật — ✅ **3 nguồn VN đang bật** (chinhphu.vn · thuvienphapluat · LuatVietnam RSS), đã lưu thật PDF ký số + toàn văn. Nước khác **thêm trên console agent** (chốt 21/08); văn bản bỏ tay vào folder con theo nước vẫn được index

@@ -228,3 +228,15 @@ def test_normal_question_outside_group_still_goes_to_s1(tmp_path):
                                        "chat_id": "web-console",
                                        "sender_open_id": "ou_nhanvien"}}, b)
     assert "Theo tài liệu" in out and "chưa có quyền" not in out
+
+
+def test_unknown_sender_is_told_the_actual_likely_cause(tmp_path):
+    """Lý do bị từ chối thường gặp nhất KHÔNG phải "sai người" mà là open_id của Lark
+    thuộc TỪNG APP: đổi app nhận tin thì đúng người vẫn bị từ chối. Chỉ báo "không có
+    quyền" thì admin không có cách nào lần ra."""
+    store, pf, g, b = make(tmp_path)
+    out = consumer.handle_group({"id": 1, "channel": "lark", "payload": {
+        "text": "#1 duyệt", "chat_id": consumer.GROUP_CHAT_ID,
+        "sender_open_id": "ou_theo_app_MOI"}}, b)
+    assert "ou_theo_app_MOI" in out, "phải in open_id thật để lần ra được"
+    assert "thuộc từng" in out and "seed_roles.py --map" in out

@@ -4,6 +4,9 @@
 # Không tách container sync: NotebookLM xoay cookie sau mỗi phiên nên hai tiến
 # trình dùng song song cùng tài khoản sẽ vô hiệu hoá phiên của nhau.
 #
+# ⚠️ KHÔNG có cờ "dry run". Trước đây .env có DRY_RUN=true nhưng KHÔNG code nào đọc nó —
+# ai đọc .env sẽ tưởng đang chạy an toàn, thực tế agent gửi tin Lark thật. Đã bỏ hẳn.
+#
 # Trên VM platform: 2 container join mạng nội bộ lsr-platform_default và gọi
 # platform_api:8090 trực tiếp (edge Caddy chặn API từ ngoài → phải đi đường trong).
 # Chạy ở máy khác: đặt LSR_PLATFORM_URL=https://platform... trong .env và bỏ
@@ -15,7 +18,6 @@ services:
     environment:
       LSR_PLATFORM_URL: ${LSR_PLATFORM_URL:-http://platform_api:8090}
       LSR_AGENT_ID: AG-LEGAL
-      DRY_RUN: ${DRY_RUN:-true}
     volumes:
       - ./data:/agent/data          # legalkb.db (mapping trích dẫn)
       # rw: notebooklm-py cần ghi lại cookie xoay vòng, nếu :ro phiên sẽ hết hạn sớm
