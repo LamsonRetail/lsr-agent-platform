@@ -1192,3 +1192,69 @@ def test_manual_ingest_dedupes_by_recovered_doc_no(tmp_path):
     keys = news.ingest_drive_folder(store, b.lark, "root", log=lambda m: None)
     assert len(keys) == 1, "hai file cùng số hiệu → một bản ghi"
     assert store.one("SELECT doc_no FROM legal_news_items")["doc_no"] == "45/2019/QH14"
+
+
+# ==================== mẫu hợp đồng: NHIỀU folder Drive ====================
+
+class MultiFolderDrive:
+    def __init__(self, folders):
+        self.folders = folders
+        self.downloads = []
+
+    def drive_files(self, token):
+        if token not in self.folders:
+            raise RuntimeError(f"1061004 forbidden: {token}")
+        return self.folders[token]
+
+    def drive_download(self, token):
+        self.downloads.append(token)
+        return docx_with("Bên A: {{ten_ben_a}} — giá trị {{gia_tri}}")
+
+    def drive_file_url(self, token, file_type="file"):
+        return f"https://tenant/file/{token}"
+
+
+def test_templates_scanned_from_every_configured_folder(tmp_path):
+    """Chốt 21/08: mẫu ở Drive, và có HAI folder tên đều hợp lý. Đoán sai một cái là S2
+    không thấy mẫu nào mà vẫn báo thành công."""
+    store, pf, eng, g, b = make(tmp_path)
+    drive = MultiFolderDrive({
+        "fA": [{"token": "t1", "name": "HĐ thuê mặt bằng.docx", "type": "file"}],
+        "fB": [{"token": "t2", "name": "HĐ cung cấp dịch vụ.docx", "type": "file"}],
+    })
+    r = contracts.sync_templates(drive, store, "fA,fB", log=lambda m: None)
+    assert r["templates"] == 2
+    names = {t["name"] for t in contracts.templates(store)}
+    assert names == {"HĐ thuê mặt bằng", "HĐ cung cấp dịch vụ"}
+
+
+def test_draft_subfolder_is_never_scanned_as_a_template(tmp_path):
+    """Folder bản thảo agent tự xuất nằm TRONG folder mẫu. Quét đệ quy = bản thảo của
+    chính mình thành mẫu cho lần sau, sai lệch tích luỹ mà không ai thấy."""
+    store, pf, eng, g, b = make(tmp_path)
+    drive = MultiFolderDrive({
+        "fA": [{"token": "t1", "name": "HĐ mẫu thật.docx", "type": "file"},
+               {"token": "fDraft", "name": "BAN THAO DRAFT (agent xuat)",
+                "type": "folder"}],
+        "fDraft": [{"token": "d9", "name": "HĐ ABC DRAFT.docx", "type": "file"}],
+    })
+    contracts.sync_templates(drive, store, "fA", log=lambda m: None)
+    assert {t["name"] for t in contracts.templates(store)} == {"HĐ mẫu thật"}
+
+
+def test_one_unreadable_folder_does_not_lose_the_other(tmp_path):
+    store, pf, eng, g, b = make(tmp_path)
+    drive = MultiFolderDrive({"fA": [{"token": "t1", "name": "HĐ X.docx", "type": "file"}]})
+    logs = []
+    r = contracts.sync_templates(drive, store, "fA,fKhongCoQuyen", log=logs.append)
+    assert r["templates"] == 1
+    assert any("không đọc được folder" in m for m in logs)
+
+
+def test_empty_template_folders_say_so_instead_of_silent_success(tmp_path):
+    """0 mẫu mà im lặng thì người vận hành tưởng S2 đã sẵn sàng."""
+    store, pf, eng, g, b = make(tmp_path)
+    drive = MultiFolderDrive({"fA": [], "fB": []})
+    logs = []
+    assert contracts.sync_templates(drive, store, "fA,fB", log=logs.append)["templates"] == 0
+    assert any("chưa bỏ mẫu vào" in m for m in logs)

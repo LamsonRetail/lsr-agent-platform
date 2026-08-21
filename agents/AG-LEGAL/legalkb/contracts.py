@@ -88,10 +88,30 @@ def fill_docx(data, values, mark=DRAFT_MARK):
 # ---------------- registry ----------------
 
 def sync_templates(lark, store, folder_token, log=print):
-    """Nạp registry template từ Drive folder → bảng contract_templates."""
-    if not folder_token:
+    """Nạp registry template từ Drive → bảng contract_templates.
+
+    `folder_token` nhận **nhiều folder**, cách nhau bằng dấu phẩy. Lý do: trong Drive pháp
+    chế có hai folder tên đều hợp lý cho mẫu hợp đồng ("Hop dong mau" và "Legal - standard
+    agreements"), và đoán sai một cái là S2 không thấy mẫu nào mà vẫn báo thành công. Quét
+    cả hai thì mẫu bỏ vào đâu cũng nhận được.
+
+    **Không quét đệ quy vào folder con** — có chủ ý: folder bản thảo agent tự xuất
+    ("BAN THAO DRAFT") nằm TRONG folder mẫu, quét đệ quy là bản thảo của chính mình thành
+    mẫu cho lần sau, sai lệch tích luỹ mà không ai thấy.
+    """
+    tokens = [t.strip() for t in (folder_token or "").split(",") if t.strip()]
+    if not tokens:
         return {"templates": 0, "skipped": "chưa cấu hình LEGAL_TEMPLATE_FOLDER"}
-    files = lark.drive_files(folder_token)
+    files, seen = [], set()
+    for tok in tokens:
+        try:
+            for f in lark.drive_files(tok):
+                if f.get("type") == "folder" or f.get("token") in seen:
+                    continue
+                seen.add(f.get("token"))
+                files.append(f)
+        except Exception as exc:
+            log(f"[template] không đọc được folder {tok[:12]}…: {exc}")
     specs = {f["name"]: f for f in files if f["name"].endswith(".fields.json")}
     n = 0
     for f in files:
@@ -119,6 +139,8 @@ def sync_templates(lark, store, folder_token, log=print):
              json.dumps(fields, ensure_ascii=False), f.get("modified_time"), time.time()))
         n += 1
         log(f"[template] {stem}: {len(fields)} field")
+    if not n:
+        log(f"[template] {len(tokens)} folder, 0 file .docx — legal team chưa bỏ mẫu vào")
     return {"templates": n}
 
 

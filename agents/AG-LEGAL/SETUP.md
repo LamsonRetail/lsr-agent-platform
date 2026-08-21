@@ -17,8 +17,21 @@ Wiki space pháp chế: `7595876759661186785`
    → bấm **Create version & publish** để scopes có hiệu lực.
 4. Điền `LARK_APP_ID` / `LARK_APP_SECRET` của app đó vào `.env`.
 
-Folder Drive văn bản luật `MIx2fFd8rlzWJBd9bQGlcLQegCd` bot đã đọc được — nếu đổi
-app, share folder cho bot mới (Manage collaborators → add bot → Can view).
+Cây folder Drive pháp chế (đo 21/08) — `MIx2fFd8rlzWJBd9bQGlcLQegCd` là folder **cha**:
+
+```
+MIx2fFd8…  (cha, link legal team hay đưa)
+├── Hop dong mau/                B9jvfFfYwlMG16d9Pchlm5npgKc  ← mẫu HĐ (trống)
+├── Van ban luat/                GUYFfiGeqlnyiOd8rU9lMLDvgwf  ← kho văn bản luật (ghi được)
+│   ├── VN/   GFX8fVIORlfHLsdxeRbltMGlgih
+│   └── TH/   GaZQfCgZYlpstDdgHKylprbSgqd
+└── Legal - standard agreements/  T8DzfOysElvbf4dMHB7lomb7grc  ← mẫu HĐ (trống)
+    └── BAN THAO DRAFT (agent xuat)/  NHe5fRCSclUMvNdDmhul5njvg7c
+```
+
+`LEGAL_TEMPLATE_FOLDER` khai **cả hai** folder mẫu (cách nhau dấu phẩy) — hai tên đều hợp
+lý, đoán sai một cái là S2 không thấy mẫu nào mà vẫn báo thành công. Đổi app thì share lại
+folder cho bot mới (Manage collaborators → add bot).
 
 ## 2. NotebookLM — đăng nhập tài khoản Google cá nhân
 
@@ -272,7 +285,7 @@ Lưu ý vận hành:
 - [x] LSR_AGENT_TOKEN (mục 4) — ✅ agent `status=active` từ 14/08, **29 run** (đo 20/08)
 - [ ] `instruction_block` đã publish (mục **3d** — chỉ làm trên Console) — **điều kiện golive thật**
 - [x] Sync lần đầu thành công (mục 5) — ✅ 19/08: 32 tài liệu nạp, 18 mục rỗng bị loại đúng
-- [ ] (Phase 3) **Nội dung 8 mẫu hợp đồng trong Wiki** — hiện rỗng (12 ký tự/node). Mẫu lấy từ Wiki được (export Lark Doc → docx đã kiểm OK), không cần Drive folder riêng
+- [ ] (Phase 3) **Mẫu hợp đồng .docx trong Drive** — chốt 21/08: mẫu ở **Drive, không phải Wiki**. Hai folder đều đọc được, hiện **cả hai còn trống**: `Hop dong mau` (`B9jvf…`) và `Legal - standard agreements` (`T8Dzf…`), cùng nằm trong folder cha `MIx2fFd8…`. Bỏ file `.docx` vào là S2 chạy được ngay — agent dò placeholder `{{...}}` trong file, không cần khai field
 - [x] (Phase 5) Danh sách nguồn luật — ✅ **3 nguồn VN đang bật** (chinhphu.vn · thuvienphapluat · LuatVietnam RSS), đã lưu thật PDF ký số + toàn văn. Nước khác **thêm trên console agent** (chốt 21/08); văn bản bỏ tay vào folder con theo nước vẫn được index
 - [x] (Phase 6) Quy trình trình ký — ✅ `approval_code=0338BCF9…`, 4 node, 4 field form đã ghim vào `signing.py`; checklist đầu mục đã nạp (`seed_news.py`)
 - [ ] (Phase 6) **C5 — passthrough tenant token** để đọc form/file hồ sơ + ghi comment vào instance (`requests/C5-lark-tenant-passthrough.md`)
