@@ -183,6 +183,22 @@ một account người, đúng thứ chuẩn platform muốn tránh.
 ⇒ Muốn chat 1-1 với agent: mở group → bấm vào **bot** trong danh sách thành viên → nhắn
 trực tiếp. (Hoặc tìm tên app trong ô tìm kiếm Lark.)
 
+### Bốn thứ khác nhau trên Lark Console mà hay bị nhầm là một
+
+Đo 21/08 sau khi owner báo "đã cấp quyền Lark": chỉ **một** trong bốn thứ dưới đây thay đổi.
+Cấp scope ≠ mở phạm vi dữ liệu ≠ đăng ký event ≠ publish version.
+
+| Thứ | Ở đâu trong console | Kiểm bằng cách nào |
+|---|---|---|
+| **Scope** (app được gọi API nào) | Permissions & Scopes | gọi API → `99991672 Access denied … scopes is required` = thiếu scope |
+| **Phạm vi dữ liệu** (app *thấy* được nhân sự nào) | Data Scope / phạm vi khả dụng | `contact/v3/users/batch_get_id` trả `code:0` nhưng `user_id: None` = có scope, **không có phạm vi dữ liệu** |
+| **Event đăng ký** (Lark đẩy loại event nào về) | Events & Callbacks | log gateway chỉ thấy `im.message.reaction.created_v1`, không có `im.message.receive_v1` |
+| **Publish version** | nút Create version & publish | không publish thì cả ba thứ trên đều không có hiệu lực |
+
+Đã loại trừ nguyên nhân "kết nối cũ": restart `lsr-platform-event_gateway_legal-1` lúc
+10:17, long-connection nối lại sạch nhưng vẫn không có event tin nhắn ⇒ thiếu ở **đăng ký
+event**, không phải ở kết nối.
+
 ### Vẫn chưa nhận được tin? Còn một việc trên Lark Developer Console
 
 Đo 21/08 trên `event_gateway_legal-1`: long-connection **đã kết nối**, nhưng Lark chỉ đẩy
