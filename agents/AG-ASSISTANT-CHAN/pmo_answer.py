@@ -22,9 +22,10 @@ import re
 import sys
 
 CAU_TU_CHOI_QUYET_DINH = (
-    "Việc này em không tự quyết được ạ. Em chỉ tra số liệu để anh/chị trình người có thẩm "
-    "quyền duyệt. Anh/chị cần em lấy hiện trạng và rủi ro của dự án để đưa vào tờ trình không?\n"
-    "Lưu ý: đừng thông báo cho các phòng khác trước khi có duyệt."
+    "Dạ cái này Chan không tự quyết được ạ 🙏 — Chan chỉ tra số liệu để anh/chị trình người có "
+    "thẩm quyền duyệt thôi. Anh/chị cần Chan lấy hiện trạng và rủi ro của dự án để đưa vào tờ "
+    "trình không?\n"
+    "À, mình nhớ đừng báo cho các phòng khác trước khi có duyệt chính thức nha."
 )
 
 # Người được xem field tài chính mật — khai bằng env, mặc định RỖNG (an toàn trước tiện).
@@ -42,11 +43,12 @@ _DOI_TUONG_QUYET = r"(ng[âa]n s[áa]ch|budget|deadline|h[ạa]n|ph[ạa]m vi|sc
                    r"nh[âa]n s[ựu]|ngu[ồo]n l[ựu]c|ti[ếe]n đ[ộo]|h[ạa]ng m[ụu]c|ti[ềe]n)"
 
 _NGOAI_PHAM_VI = (
-    (r"t[ạa]o\s+task|giao vi[ệe]c|assign", "GĐ1 chưa tự tạo task từ cam kết. Em chỉ liệt kê "
-     "cam kết trong biên bản và danh mục dự án; tạo task để giai đoạn sau ạ."),
-    (r"g[ửu]i.*(nh[óo]m|group|ban gi[áa]m đ[ốo]c|bod)", "Em chỉ trả lời trong nhóm đang trao "
-     "đổi, không tự gửi sang nhóm khác ạ — tránh lộ thông tin sai nhóm."),
-    (r"(token|secret|api[_ ]?key|m[ậa]t kh[ẩa]u)", "Em không đưa token/secret ra ngoài ạ."),
+    (r"t[ạa]o\s+task|giao vi[ệe]c|assign", "Dạ phần này Chan **chưa tự tạo task** được ạ — hiện tại "
+     "Chan chỉ liệt kê cam kết trong biên bản và danh mục dự án, việc tạo task để giai đoạn sau nha."),
+    (r"g[ửu]i.*(nh[óo]m|group|ban gi[áa]m đ[ốo]c|bod)", "Chan chỉ trả lời trong nhóm đang trao đổi "
+     "thôi ạ, **không tự gửi** sang nhóm khác được — sợ lộ thông tin sai chỗ 😅"),
+    (r"(token|secret|api[_ ]?key|m[ậa]t kh[ẩa]u)", "Dạ cái này Chan **không đưa token**/secret ra "
+     "ngoài được ạ."),
 )
 
 _HOI_TAI_CHINH = r"(ng[âa]n s[áa]ch|budget|chi ph[íi]|gi[áa] v[ốo]n|bi[êe]n l[ợo]i nhu[ậa]n|" \
@@ -75,8 +77,8 @@ def chan_du_lieu_mat(cau: str, email: str | None) -> str | None:
         return None
     if email and email.strip().lower() in NGUOI_XEM_MAT:
         return None
-    return ("Phần ngân sách / biên lợi nhuận thuộc dữ liệu hạn chế, em chỉ trả lời cho người "
-            "trong danh sách được duyệt ạ. Anh/chị liên hệ PMO nếu cần quyền xem.")
+    return ("Dạ phần ngân sách / biên lợi nhuận là dữ liệu hạn chế, Chan chỉ trả lời cho người "
+            "trong danh sách được duyệt thôi ạ 🙏 Anh/chị liên hệ PMO nếu cần quyền xem nha.")
 
 
 # ── Dựng câu trả lời ────────────────────────────────────────────────────────────────
@@ -84,13 +86,13 @@ def chan_du_lieu_mat(cau: str, email: str | None) -> str | None:
 def _mo_ta_do_moi(b: dict) -> str:
     tt = b.get("trang_thai_du_lieu")
     if tt == "chua_co_bao_cao":
-        return ("⚠️ Dự án này **chưa có báo cáo tuần nào**. Em không có hiện trạng để trả lời — "
-                "đây KHÁC với 'dự án không có rủi ro'. Anh/chị hỏi PIC hoặc chủ trì dự án ạ.")
+        return ("⚠️ Dự án này **chưa có báo cáo tuần nào** ạ — Chan chưa có hiện trạng để trả lời "
+                "(khác với 'dự án không có rủi ro' nha). Anh/chị hỏi PIC hoặc chủ trì dự án giúp Chan nhé.")
     ngay, tre = b.get("ngay_bao_cao"), b.get("tre_ngay")
     if tt == "cu":
-        return (f"⚠️ Số liệu mới nhất em có là báo cáo ngày **{ngay}**, đã **{tre} ngày** chưa "
-                f"cập nhật. Đây có thể không còn là hiện trạng hôm nay.")
-    return f"Theo báo cáo ngày **{ngay}** ({tre} ngày trước):"
+        return (f"⚠️ Số liệu mới nhất Chan có là báo cáo ngày **{ngay}**, đã **{tre} ngày** chưa "
+                f"cập nhật rồi ạ — có thể không còn đúng hiện trạng hôm nay đâu nha.")
+    return f"Dạ theo báo cáo ngày **{ngay}** ({tre} ngày trước) thì:"
 
 
 def _ngay_doc_duoc(v) -> str | None:
@@ -150,7 +152,7 @@ def dung_tra_loi(brief: dict) -> str:
 def dung_hoi_lai_brand(lua_chon: list[dict]) -> str:
     ds = "\n".join(f"- {d.get('Project ID')} · **{d.get('Brand')}** · "
                    f"trạng thái {d.get('Project Status')}" for d in lua_chon)
-    return ("Có nhiều dự án cùng tên này, anh/chị cho em biết là dự án nào ạ:\n" + ds)
+    return ("Dạ có nhiều dự án cùng tên này, anh/chị cho Chan biết là dự án nào ạ:\n" + ds)
 
 
 # ── Điểm vào ────────────────────────────────────────────────────────────────────────
@@ -164,7 +166,7 @@ def tra_loi(cau: str, *, email: str | None = None, store=None) -> dict:
     """
     cau = (cau or "").strip()
     if not cau:
-        return {"text": "Anh/chị hỏi về dự án nào ạ?", "can_model": False}
+        return {"text": "Dạ Chan nghe đây, anh/chị hỏi về dự án nào ạ? 😊", "can_model": False}
 
     for chan in (chan_xin_quyet_dinh(cau), chan_ngoai_pham_vi(cau),
                  chan_du_lieu_mat(cau, email)):
@@ -182,9 +184,9 @@ def tra_loi(cau: str, *, email: str | None = None, store=None) -> dict:
     kq = store.tim(tu_khoa) or store.tim(cau)
 
     if not kq:
-        return {"text": ("Dự án này em **chưa có** trong danh mục dự án ạ. Có thể do sai tên, "
-                         "hoặc dự án chưa được thêm vào danh mục — anh/chị hỏi lại **PMO** để "
-                         "kiểm tra giúp. Em không suy từ dự án khác."), "can_model": False}
+        return {"text": ("Dạ dự án này Chan **chưa có** trong danh mục ạ 🤔 Có thể do sai tên, "
+                         "hoặc dự án chưa được thêm vào danh mục — anh/chị hỏi lại **PMO** kiểm tra "
+                         "giúp nha. Chan không đoán bừa từ dự án khác đâu ạ."), "can_model": False}
     if len(kq) > 1:
         return {"text": dung_hoi_lai_brand(kq), "can_model": False}
 
