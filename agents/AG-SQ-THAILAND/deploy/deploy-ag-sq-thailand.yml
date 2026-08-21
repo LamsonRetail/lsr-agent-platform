@@ -1,0 +1,132 @@
+name: Deploy AG-SQ-THAILAND (Ploy) to VM
+
+# Đưa Ploy — trợ lý thị trường Thái Lan — lên VM chạy 24/7.
+# Copy theo khuôn của AG-INVENTORY-DAYS (agents/AG-INVENTORY-DAYS/deploy/), khác 3 điểm:
+#   1. Ploy KHÔNG cầm credential Lark. Gateway của platform giữ app secret; Ploy chỉ cần
+#      LSR_AGENT_TOKEN để poll /v1/self/jobs. Nên không có secret Lark nào ở đây.
+#   2. Ploy tra số sống BigQuery bằng service account riêng → cần GCP_SA_JSON_THAILAND.
+#      Thiếu secret này thì vẫn chạy, chỉ mất phần số sống (không crash).
+#   3. Model: Ploy gọi Claude Code CLI bằng subscription của owner. Trong container KHÔNG
+#      có CLI đó → LSR_MODEL_MODE=off, Ploy trả lời thuần luật. Xem "Việc còn treo" ở dưới.
+#
+# ⚠️ CHỐNG CHẠY TRÙNG: cùng một agent_token mà có 2 consumer (VM + máy owner) thì hai bên
+# giành job trên cùng hàng đợi — bản cũ trả lời trước, người dùng thấy câu sai/cũ. Đã gặp
+# thật 19/08. Vì vậy DRY_RUN mặc định 'true'. Trước khi bật 'false':
+#   1) tắt consumer trên máy owner: pkill -f consumer.py
+#   2) đặt biến repo AG_SQ_THAILAND_DRY_RUN=false rồi chạy lại workflow.
+#
+# Container: ploy-sq-thailand · ~80MB RAM · không mở port · chỉ gọi ra platform + BigQuery.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "agents/AG-SQ-THAILAND/**"
+      - ".github/workflows/deploy-ag-sq-thailand.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-ag-sq-thailand
+  cancel-in-progress: false
+
+env:
+  AGENT_DIR: agents/AG-SQ-THAILAND
+  REMOTE_DIR: /opt/lsr-agents/AG-SQ-THAILAND
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Kiểm tra secret bắt buộc
+        env:
+          TOKEN: ${{ secrets.LSR_AGENT_TOKEN_THAILAND }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Thiếu secret LSR_AGENT_TOKEN_THAILAND — thêm ở Settings > Secrets and variables > Actions"
+            exit 1
+          fi
+          if [ -z "${{ secrets.GCP_SA_JSON_THAILAND }}" ]; then
+            echo "::warning::Chưa có GCP_SA_JSON_THAILAND — Ploy sẽ chạy nhưng KHÔNG tra được số sống BigQuery"
+          fi
+
+      # Cổng chất lượng: bộ 39 case + 6 luồng nhiều lượt chạy offline (PLOY_OFFLINE=1 tắt
+      # BigQuery để kết quả tất định). Sai thì dừng ở đây, không đẩy bản lỗi vào nhóm Lark.
+      - name: Test offline (39 case + luồng nhiều lượt)
+        run: |
+          cd "$AGENT_DIR"
+          PLOY_OFFLINE=1 python3 tests/run_offline.py
+          PLOY_OFFLINE=1 python3 tests/selfcheck_flows.py
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.LSR_DEPLOY_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.LSR_DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Rsync agent → VM (giữ .env và service account trên VM)
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.LSR_DEPLOY_USER }}@${{ secrets.LSR_DEPLOY_HOST }}" \
+            "mkdir -p $REMOTE_DIR"
+          rsync -az --delete \
+            --exclude='.env' --exclude='env/' --exclude='__pycache__' \
+            --exclude='*.log' --exclude='.cache' \
+            -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new" \
+            "$AGENT_DIR/" \
+            "${{ secrets.LSR_DEPLOY_USER }}@${{ secrets.LSR_DEPLOY_HOST }}:$REMOTE_DIR/"
+
+      # .env + service account ghi từ secret — không ai gõ tay secret lên VM, và secret
+      # không bao giờ nằm trong git.
+      - name: Ghi .env trên VM từ secret
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.LSR_DEPLOY_USER }}@${{ secrets.LSR_DEPLOY_HOST }}" \
+            "umask 077 && cat > $REMOTE_DIR/.env" <<EOF
+          LSR_AGENT_TOKEN=${{ secrets.LSR_AGENT_TOKEN_THAILAND }}
+          LSR_AGENT_ID=AG-SQ-THAILAND
+          DRY_RUN=${{ vars.AG_SQ_THAILAND_DRY_RUN || 'true' }}
+          LSR_MODEL_MODE=off
+          GOOGLE_CLOUD_PROJECT=surya-495408
+          GOOGLE_APPLICATION_CREDENTIALS=env/bq-service-account.json
+          EOF
+
+      # `secrets` KHÔNG dùng được trực tiếp trong `if:` của Actions — phải map qua env trước.
+      - name: Ghi service account BigQuery (nếu có secret)
+        env:
+          SA: ${{ secrets.GCP_SA_JSON_THAILAND }}
+        if: env.SA != ''
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.LSR_DEPLOY_USER }}@${{ secrets.LSR_DEPLOY_HOST }}" \
+            "umask 077 && mkdir -p $REMOTE_DIR/env && cat > $REMOTE_DIR/env/bq-service-account.json" \
+            <<< '${{ secrets.GCP_SA_JSON_THAILAND }}'
+
+      - name: docker compose up (build)
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.LSR_DEPLOY_USER }}@${{ secrets.LSR_DEPLOY_HOST }}" \
+            "cd $REMOTE_DIR && sudo docker compose up -d --build && sudo docker compose ps"
+
+      # Container 'Up' chưa đủ: token sai thì vẫn Up mà bên trong `poll 401` liên tục.
+      # Phải thấy đúng dòng banner khởi động của Ploy.
+      - name: Verify Ploy đã chạy
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.LSR_DEPLOY_USER }}@${{ secrets.LSR_DEPLOY_HOST }}" \
+            "cd $REMOTE_DIR
+             for i in \$(seq 1 12); do
+               if sudo docker compose logs --tail 200 2>&1 | grep -q 'Squad Thái Lan chạy'; then
+                 if sudo docker compose logs --tail 200 2>&1 | grep -q 'poll 401'; then
+                   echo '✗ Lên được nhưng token bị từ chối (poll 401) — kiểm LSR_AGENT_TOKEN_THAILAND:'
+                   sudo docker compose logs --tail 30; exit 1
+                 fi
+                 echo '✓ Ploy đang chạy:'; sudo docker compose logs --tail 20; exit 0
+               fi
+               sleep 5
+             done
+             echo '✗ Ploy không khởi động được sau 60s:'
+             sudo docker compose logs --tail 60
+             exit 1"
