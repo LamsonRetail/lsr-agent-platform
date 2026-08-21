@@ -3,6 +3,24 @@
 > Người yêu cầu: AG-LEGAL (owner `thint@hapas.vn`) · 20/08/2026
 > Thay thế hoàn toàn mô tả C5 cũ ("broker Approval"). **Lý do thay: kết luận cũ sai** —
 > xem phần "Đo lại" dưới.
+>
+> ## ⬇️ HẠ ƯU TIÊN — cập nhật 21/08/2026
+>
+> Admin Lark đã cấp scope **`approval:approval`** cho app AG-LEGAL, và đo thật thì tenant
+> token **đọc được** những thứ trước đây bị chặn:
+>
+> ```
+> GET /approval/v4/approvals/{code}   → "Review và phê duyệt hợp đồng", 4 node  ✅
+> GET /approval/v4/instances?…        → 0 instance (gọi được, chưa ai nộp phiếu)  ✅
+> ```
+>
+> ⇒ **Không còn chặn S5.** Việc đọc hồ sơ trình ký làm được ngay bằng `legalkb/lark_kb.py`
+> (module ngoại lệ đã có kiểm soát, mỗi hàm một ĐIỀU KIỆN XOÁ).
+>
+> C5 vẫn nên làm, nhưng vì lý do **kiến trúc chứ không phải tính năng**: mỗi thứ agent phải
+> gọi trực tiếp là thêm một ngoại lệ so với chuẩn "mọi tương tác Lark qua platform".
+> `POST /v1/lark/call` gộp cả 4 ngoại lệ hiện tại (C1 Wiki/Drive · C9 gửi fallback ·
+> C13 thành viên group · Approval) về một chỗ có audit ở platform. Ưu tiên: **thấp**.
 
 ## Một câu
 
