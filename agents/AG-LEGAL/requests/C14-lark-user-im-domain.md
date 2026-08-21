@@ -31,6 +31,41 @@ Tên scope **phải lấy từ user token đang chạy thật** trong tenant (`l
 không đoán — đúng bài học đã ghi ở `docs/LARK_USER_BROKER.md` (đoán `approval:instance:readonly`
 thì nhận `invalid_scope`).
 
+## ⛔ ĐỌC TRƯỚC: C14 như mô tả dưới đây **KHÔNG** giải quyết được việc chat 1-1
+
+Đo thật 21/08. Muốn agent trả lời tin nhắn gửi cho account Ann thì phải vượt **ba** lớp,
+và lớp thứ ba là tường cứng:
+
+| Lớp | Chặn ở đâu | Bằng chứng | Gỡ được không |
+|---|---|---|---|
+| 1. Grant của broker | platform trả 403 | `path /open-apis/im/v1/chats… ngoài phạm vi được cấp: ['/open-apis/approval/v4/']` | ✅ admin gọi `POST /v1/lark/user/grants` thêm prefix |
+| 2. Scope token của Ann | `_LARK_USER_SCOPES` chỉ có `approval` | scope hiện tại không có `im:*` nào | ✅ chính là C14 |
+| 3. **Không có cách BIẾT có ai nhắn** | Lark | xem dưới | ❌ **không** |
+
+Lớp 3, đo bằng hai phép thử:
+
+* **Event**: Lark chỉ đẩy event cho **app/bot**. Không có kênh event cho một account người.
+* **Poll**: `GET /open-apis/im/v1/chats` **chỉ trả GROUP**. Bot vừa tạo một chat 1-1 với
+  owner xong, gọi lại API này thì chat đó **không xuất hiện** (1 chat trả về, `mode=group`).
+  Không liệt kê được chat 1-1 ⇒ không biết `chat_id` ⇒ không đọc được tin trong đó, dù có
+  đủ scope.
+
+⇒ Với một account người, **không** có đường nào để agent phát hiện tin nhắn riêng gửi tới
+nó. Làm xong lớp 1 + lớp 2 thì agent gửi được tin **dưới danh nghĩa Ann**, nhưng vẫn không
+**nhận** được — tức vẫn không chat được.
+
+### Vậy cái gì mới chạy được
+
+Chỉ một cách: có **một phiên đăng nhập THẬT của account đó** (session/cookie của Lark
+client) — vì khi đó chính client của account nhận luồng tin, không cần event hay poll. Đây
+là cùng loại giải pháp với `storage_state.json` của NotebookLM: giữ phiên đăng nhập, không
+giữ mật khẩu trong code.
+
+Nếu chọn đường này thì **phiên phải do platform giữ** (mã hoá, tự làm mới), giống C8 giữ
+user token — agent không được cầm. Đó là một capability mới của core, không phải việc agent
+tự làm, và cần chốt chính sách trước: `docs/LARK_USER_BROKER.md` yêu cầu người trong nhóm
+được thông báo rõ có account máy tham gia.
+
 ## ⚠️ Hạn chế kỹ thuật phải biết TRƯỚC khi làm
 
 **Lark không đẩy event cho user account.** Long-connection / webhook là cơ chế **cấp app**,
