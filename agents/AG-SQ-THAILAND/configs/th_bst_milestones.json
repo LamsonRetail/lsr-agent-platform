@@ -1,16 +1,19 @@
 {
   "owner_config": "Khôi (Sản phẩm)",
-  "source": "TIẾN ĐỘ TRIỂN KHAI HAPAS THÁI LAN (bảng mốc 23/07) · BC KQKD Weekly tới 18/08 · Base Booking KOL/KOC · Base KOC Affiliate — đọc thật 19/08/2026",
+  "source": "TIẾN ĐỘ TRIỂN KHAI HAPAS THÁI LAN (bảng mốc 23/07) · BC KQKD Weekly tới 18/08 · Base Booking KOL/KOC · Base KOC Affiliate — đọc thật 19/08/2026 · Wiki HỌP TỔNG HỢP DỰ ÁN bản họp 20/08 + CM WEEKLY REPORT kỳ 21.8 — đọc thật 22/08/2026",
   "source_url": "https://o4pvcegwn6b.sg.larksuite.com/wiki/GC9uw2uyQieYPLkcCj9lq891goe",
-  "as_of": "2026-08-19",
+  "as_of": "2026-08-22",
   "khung_9_moc_chuan": "Kick-off sản phẩm (D-120) → Chốt sản phẩm BST → Kick-off dự án team (D-75) → Kết quả khảo sát SP (D-75) → Bán test lấy tỷ trọng → Xuống đơn hàng PO (D-73) → Hàng về cho KOC (D-21) → Mở bán chính thức (D-20) → Hàng về SLL (D-10) → Launching Day",
   "dinh_chinh_hieu_sai": [
     "KHÔNG có mốc riêng tên 'chốt KOC'. Mốc '17/08' là **Hàng về cho KOC (D-21)** của BST Tote.",
-    "Travel bag KHÔNG có tên 'Packed_With_Love' ở bất kỳ nguồn nào. Tên chính thức: **BST Travel bag**, SKU SORA / KAIA / LYRA.",
+    "⚠️ ĐÃ CẬP NHẬT 22/08: tên 'PACK WITH LOVE' LÀ CÓ THẬT. Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 đặt tiêu đề **'BST PACK WITH LOVE (TRAVEL BAG)'** và CM WEEKLY REPORT kỳ 21.8 gọi là **'BST Packed with love'**. Bảng mốc 23/07 vẫn dùng tên 'BST Travel bag', SKU SORA / KAIA / LYRA. Cần Vinh chốt 1 tên chuẩn.",
     "BST T10: mốc 'Chốt sản phẩm BST' là **20/07/2026** (quá hạn), không phải 20/08; và không có mốc 'chốt 3/7 mẫu'.",
     "✅ Ngày Travel bag **05/09 CÓ THẬT** — trong sheet launching nhúng của CM WEEKLY REPORT (kỳ 16.8 & 21.8), chốt ở họp 16.8 để dồn cho ngày sale 09/09. Lần tra đầu chỉ tìm trong wiki tiến độ nên không thấy.",
     "⚠️ BST T10: wiki ghi **08/10**, sheet CM Weekly ghi **07/10**, thân bài CM Weekly kỳ 07.8 ghi **23/10** (CEO chốt giảm T10-T11, tăng T12) → 3 phiên bản.",
-    "✅ Tote launching = **23/09/2026** — Vinh (CM) chốt trong nhóm Lark 19/08. Bản 07/09 là cũ."
+    "✅ Tote launching = **23/09/2026** — Vinh (CM) chốt trong nhóm Lark 19/08. Bản 07/09 là cũ.",
+    "✅ 22/08: Travel bag launching 05/09 được CM WEEKLY REPORT kỳ 21.8 xác nhận lại ('Đúng tiến độ Booking/AFF, hàng hoá — Launching 5/9'). Bản 23-25/08 của wiki tiến độ 23/07 đã lạc hậu.",
+    "⚠️ 22/08: Plan content Travel bag ghi '22/8 Teaser, 23/8 Launching' — đây là nhịp CONTENT/branding, KHÔNG phải mốc launching BST (cùng tài liệu ghi Launching Day = 05/09). Không nhầm 2 mốc này.",
+    "🆕 22/08: Xuất hiện **BST 14/2 (Valentine)** trong wiki họp 20/08 — CHƯA kick off, Hương update timeline sau khi làm việc với PM. BST này CHƯA có trong bảng mốc 23/07 và chưa tính vào tổng target 51 tỷ."
   ],
   "milestones": [
     {
@@ -436,6 +439,186 @@
       "source_url": "https://o4pvcegwn6b.sg.larksuite.com/docx/XUtUd5MrMogxFYxTNIVlJDixgAu",
       "status": "Tote/ROAM",
       "done": false
+    },
+    {
+      "bst": "BST Travel bag / PACK WITH LOVE (Sora/Kaia/Lyra)",
+      "launch": "2026-09-05",
+      "milestone": "Launching Day",
+      "date": "2026-09-05",
+      "source": "CM WEEKLY REPORT kỳ 21.8 (mục 2.3 Tiến độ dự án) — 21/08/2026",
+      "status": "XÁC NHẬN LẠI — 'Đúng tiến độ Booking/AFF, hàng hoá. Launching 5/9'. Target 5 tỷ VND",
+      "done": false
+    },
+    {
+      "bst": "BST Travel bag / PACK WITH LOVE (Sora/Kaia/Lyra)",
+      "launch": "2026-09-05",
+      "milestone": "Trả đủ demo KOC (37/37 TikTok + 5/5 IG)",
+      "date": "2026-08-28",
+      "source": "Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 + CM WEEKLY REPORT kỳ 21.8 — 21/08/2026",
+      "status": "Booking on progress 80%. PIC Hạnh + Nghĩa. Đã nhận hàng 100%, chốt list 10 viral + 27 mini",
+      "done": false
+    },
+    {
+      "bst": "BST Travel bag / PACK WITH LOVE (Sora/Kaia/Lyra)",
+      "launch": "2026-09-05",
+      "milestone": "KOC IG — check outfit/background + 100% gửi ảnh",
+      "date": "2026-08-24",
+      "source": "Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 — 21/08/2026",
+      "status": "3 mốc liên tiếp 21/8 · 24/8 · 28/8. PIC Nghĩa. Đã chốt 5 KOC IG (3 bạn có thêm video), đã gửi hàng toàn bộ",
+      "done": false
+    },
+    {
+      "bst": "BST Travel bag / PACK WITH LOVE (Sora/Kaia/Lyra)",
+      "launch": "2026-09-05",
+      "milestone": "Hoàn thiện kịch bản seeding",
+      "date": "2026-08-27",
+      "source": "Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 — 21/08/2026",
+      "status": "Đã chốt gói hợp tác cùng vendor. PIC Nghĩa",
+      "done": false
+    },
+    {
+      "bst": "BST Travel bag / PACK WITH LOVE (Sora/Kaia/Lyra)",
+      "launch": "2026-09-05",
+      "milestone": "Content Teaser (branding, không phải launching)",
+      "date": "2026-08-22",
+      "source": "CM WEEKLY REPORT kỳ 21.8 — 21/08/2026",
+      "status": "Plan content Travel Bag",
+      "done": false
+    },
+    {
+      "bst": "BST Travel bag / PACK WITH LOVE (Sora/Kaia/Lyra)",
+      "launch": "2026-09-05",
+      "milestone": "Content Launching (branding, không phải launching BST)",
+      "date": "2026-08-23",
+      "source": "CM WEEKLY REPORT kỳ 21.8 — 21/08/2026",
+      "status": "⚠️ Cùng tài liệu ghi Launching Day BST = 05/09",
+      "done": false
+    },
+    {
+      "bst": "BST Travel bag / PACK WITH LOVE (Sora/Kaia/Lyra)",
+      "launch": "2026-09-05",
+      "milestone": "Push đủ ~500 video affiliate trước launching",
+      "date": "2026-09-04",
+      "source": "Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 — 21/08/2026",
+      "status": "Hiện 285 video (Kaia 28 | Lyra 230 | Sora 27), 99 KOC đã gửi hàng. Trước T9 push thêm 115 video; 1-4/9 push thêm 100 video",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": "2026-09-23",
+      "milestone": "Xuất 30 sp Roam nâu đậm gửi KOC (đường hàng không)",
+      "date": "2026-08-22",
+      "source": "Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 — 21/08/2026",
+      "status": "Đã có NCC nhận vận chuyển, ĐANG ĐỢI báo chi phí và sếp duyệt phương án",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": "2026-09-23",
+      "milestone": "Gửi hàng 50 KOC affiliate",
+      "date": "2026-08-23",
+      "source": "Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 — 21/08/2026",
+      "status": "Cửa sổ 20-23/08, để đủ 100 video trước 31/08. Hiện mới gửi 8/150 KOC",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": "2026-09-23",
+      "milestone": "Đủ 100 video launching",
+      "date": "2026-08-31",
+      "source": "Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 — 21/08/2026",
+      "status": "🔴 RỦI RO chậm tiến độ — mới gửi hàng 8/150 KOC",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": "2026-09-23",
+      "milestone": "Gửi hàng 100 KOC còn lại",
+      "date": "2026-08-31",
+      "source": "Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 — 21/08/2026",
+      "status": "Cửa sổ 23-31/08, để đủ 500 video launching trước 23/09. Chỉ tiêu KOC tăng từ 100 → 150",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": "2026-09-23",
+      "milestone": "Final 25 KOC mini",
+      "date": "2026-09-01",
+      "source": "Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 — 21/08/2026",
+      "status": "PIC Hạnh + Nghĩa",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": "2026-09-23",
+      "milestone": "Chốt chân dung celeb (Engfa) + deal giá tối đa 460K baht",
+      "date": "2026-08-21",
+      "source": "Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 (CM Weekly 21.8 ghi 450K baht) — 21/08/2026",
+      "status": "PIC Nghĩa. Rủi ro không deal được giá kỳ vọng → cần back-up; phải làm lại P&L nếu book celeb",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": "2026-09-23",
+      "milestone": "Xuất 100 sp (trong 70 con còn thiếu gửi affiliate) — đường hàng không",
+      "date": "2026-09-12",
+      "source": "Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 — 21/08/2026",
+      "status": "Dự kiến 18/09 về tới kho và nhập tồn trong ngày",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": "2026-09-23",
+      "milestone": "Hàng nâu đậm về kho (dự kiến lên tồn)",
+      "date": "2026-09-23",
+      "source": "CM WEEKLY REPORT kỳ 21.8 — 21/08/2026",
+      "status": "Trùng đúng ngày launching 23/09 — rủi ro sát nút",
+      "done": false
+    },
+    {
+      "bst": "BST Tote bag - VN (Roam/Kerry/Sienna)",
+      "launch": "2026-09-23",
+      "milestone": "30 video AFF + 120 video inhouse bắt đầu chạy",
+      "date": "2026-08-24",
+      "source": "CM WEEKLY REPORT kỳ 21.8 — 21/08/2026",
+      "status": "Kỳ vọng bổ sung 40K DT",
+      "done": false
+    },
+    {
+      "bst": "BST T11 (Thu Đông)",
+      "launch": null,
+      "milestone": "Dựng mẫu lấy giá vốn (Graduation Charm / Camel Gift Set)",
+      "date": "2026-08-21",
+      "source": "Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 — 21/08/2026",
+      "status": "2 option: OP1 Mua Camel tặng Graduation Charm để check-in ngày nhận bằng; OP2 Camel Graduation Gift Set (Camel + ví)",
+      "done": false
+    },
+    {
+      "bst": "BST T11 (Thu Đông)",
+      "launch": null,
+      "milestone": "Ra mẫu đối",
+      "date": "2026-09-12",
+      "source": "Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 — 21/08/2026",
+      "status": "Chưa đến hạn",
+      "done": false
+    },
+    {
+      "bst": "BST 14/2 (Valentine) — BST MỚI",
+      "launch": null,
+      "milestone": "Kick-off",
+      "date": null,
+      "source": "Wiki HỌP TỔNG HỢP DỰ ÁN bản 20/08 — 21/08/2026",
+      "status": "🆕 CHƯA kick off. Hương update timeline dự án sau khi làm việc với PM. Chưa có trong bảng mốc 23/07, chưa tính vào target 51 tỷ",
+      "done": false
+    },
+    {
+      "bst": "BST Giáng Sinh / Năm mới",
+      "launch": "2026-12-01",
+      "milestone": "Update lại sản phẩm (chưa chốt SP)",
+      "date": "2026-08-28",
+      "source": "CM WEEKLY REPORT kỳ 21.8 — 21/08/2026",
+      "status": "'Chưa chốt sản phẩm (sản phẩm cũ), sang tuần SP update lại'. Đã kick off tuần trước",
+      "done": false
     }
   ],
   "tong_target_bst": "51.000.000.000 VND (chưa gồm BST Tết VN — TBD). Nguồn: dòng TỔNG TARGET bảng mốc 23/07",
@@ -462,5 +645,6 @@
     "Q3": "Travel 11,4 tỷ · Tote 12,9 tỷ · T10 6,9 tỷ · Noel 10 tỷ",
     "Q4": "Travel 8,25 tỷ · Tote 10,7 tỷ · T10 6,8 tỷ · T11 5 tỷ · Noel 10 tỷ",
     "unit": "VND"
-  }
+  },
+  "ghi_chu_quet_22_08": "Bản họp 20/08 của wiki HỌP TỔNG HỢP DỰ ÁN đổi cấu trúc: theo dõi theo 3 dự án chính (PACK WITH LOVE/Travel bag · TOTE BAG · BST THÁNG 10) + bảng TỔNG HỢP RỦI RO/SỰ CỐ theo 4 trục (Sản phẩm · Kế hoạch hàng hoá · Marketing · Kinh doanh). Đây là nguồn vận hành chi tiết nhất hiện có cho Travel bag và Tote."
 }

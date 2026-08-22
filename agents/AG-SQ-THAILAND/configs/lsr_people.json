@@ -1,19 +1,72 @@
 {
   "_chu_thich": "Danh bạ LIÊN PHÒNG BAN (ngoài squad Thái Lan) — chỉ tên + chức danh + bộ phận, phục vụ việc biết hỏi ai. KHÔNG lưu email cá nhân, số điện thoại, lương, đánh giá. Nguồn: danh bạ Lark (tra dưới danh tính Vinh, ngày 19/08/2026).",
-  "cap_nhat": "2026-08-19",
+  "cap_nhat": "2026-08-22",
   "gioi_han": "Lark không cho app đọc cả danh bạ (thiếu scope contact:contact.base:readonly) → đây là danh sách người đã tra, không phải toàn bộ công ty. Tên chưa có thì ghi vào memory/nguoi-chua-biet.md, tác vụ quét 08:07 hôm sau bổ sung.",
   "nguoi": [
-    { "ten": "Mai Quang Tín", "chuc_danh": "Head of Supply Chain (Shine Trust)", "bo_phan": "VẬN HÀNH" },
-    { "ten": "Nguyễn Thị Tống Linh", "chuc_danh": "TN Sourcing", "bo_phan": "Sourcing" },
-    { "ten": "Lê Nguyễn Nhật Vy", "chuc_danh": "PMO", "bo_phan": "PMO" },
-    { "ten": "Phạm Sơn Tùng (B)", "chuc_danh": "Creative Services Manager", "bo_phan": "CREATIVE SERVICES" },
-    { "ten": "Hoàng Tinh", "chuc_danh": "Quản lý Chất lượng", "bo_phan": "QC" },
-    { "ten": "Trần An Na (B)", "chuc_danh": "TN Thương mại điện tử HAPAS", "bo_phan": "TMĐT - Office" },
-    { "ten": "Bùi Thị Hiền Dung", "chuc_danh": "Vận hành sàn TMĐT", "bo_phan": "Thương mại điện tử" },
-    { "ten": "Đặng Thị Vân Anh", "chuc_danh": "TN Vận hành TMĐT", "bo_phan": "Thương mại điện tử" },
-    { "ten": "Nguyễn Bích Ngọc (B)", "chuc_danh": "Thiết kế", "bo_phan": "PHÁT TRIỂN SẢN PHẨM" },
-    { "ten": "Lê Nho Huy", "chuc_danh": "Nhân viên Tài chính", "bo_phan": "KẾ TOÁN" },
-    { "ten": "Nguyễn Duy", "chuc_danh": "TN Phát triển mạng lưới", "bo_phan": "KINH DOANH BÁN LẺ" },
-    { "ten": "Nguyễn Việt Cường", "chuc_danh": "Cửa hàng trưởng", "bo_phan": "HNO03 VC Times City Mall" }
+    {
+      "ten": "Mai Quang Tín",
+      "chuc_danh": "Head of Supply Chain (Shine Trust)",
+      "bo_phan": "VẬN HÀNH"
+    },
+    {
+      "ten": "Nguyễn Thị Tống Linh",
+      "chuc_danh": "TN Sourcing",
+      "bo_phan": "Sourcing"
+    },
+    {
+      "ten": "Lê Nguyễn Nhật Vy",
+      "chuc_danh": "PMO",
+      "bo_phan": "PMO"
+    },
+    {
+      "ten": "Phạm Sơn Tùng (B)",
+      "chuc_danh": "Creative Services Manager",
+      "bo_phan": "CREATIVE SERVICES"
+    },
+    {
+      "ten": "Hoàng Tinh",
+      "chuc_danh": "Quản lý Chất lượng",
+      "bo_phan": "QC"
+    },
+    {
+      "ten": "Trần An Na (B)",
+      "chuc_danh": "TN Thương mại điện tử HAPAS",
+      "bo_phan": "TMĐT - Office"
+    },
+    {
+      "ten": "Bùi Thị Hiền Dung",
+      "chuc_danh": "Vận hành sàn TMĐT",
+      "bo_phan": "Thương mại điện tử"
+    },
+    {
+      "ten": "Đặng Thị Vân Anh",
+      "chuc_danh": "TN Vận hành TMĐT",
+      "bo_phan": "Thương mại điện tử"
+    },
+    {
+      "ten": "Nguyễn Bích Ngọc (B)",
+      "chuc_danh": "Thiết kế",
+      "bo_phan": "PHÁT TRIỂN SẢN PHẨM"
+    },
+    {
+      "ten": "Lê Nho Huy",
+      "chuc_danh": "Nhân viên Tài chính",
+      "bo_phan": "KẾ TOÁN"
+    },
+    {
+      "ten": "Nguyễn Duy",
+      "chuc_danh": "TN Phát triển mạng lưới",
+      "bo_phan": "KINH DOANH BÁN LẺ"
+    },
+    {
+      "ten": "Nguyễn Việt Cường",
+      "chuc_danh": "Cửa hàng trưởng",
+      "bo_phan": "HNO03 VC Times City Mall"
+    },
+    {
+      "ten": "Phạm Sơn Tùng",
+      "chuc_danh": "Creative Services Manager",
+      "bo_phan": "CREATIVE SERVICES"
+    }
   ]
 }

@@ -1,27 +1,83 @@
 {
-  "as_of": "2026-08-21",
-  "quet_luc": "2026-08-21 12:05",
-  "khoang_quet": "19/08 22:00 → 21/08 12:00 (chạy bù, gộp 2 ngày)",
+  "as_of": "2026-08-22",
+  "quet_luc": "2026-08-22 10:05",
+  "khoang_quet": "21/08 10:05 → 22/08 10:05 (24 giờ)",
   "diem_chinh": [
-    "Đối tác vận chuyển báo KHÔNG thuận tiện vào nhận hàng buổi chiều/tối (20/08 20:41) — lặp lại tình trạng 19/08 'không có xe vào nhận hàng'",
-    "Kho được yêu cầu ưu tiên xử lý và bàn giao đơn cho hãng vận chuyển ngay trong ngày (20/08, nhóm HAPAS_TH & FFM BST)",
-    "4 nhóm cung ứng/nhập hàng (VẬN HÀNH CUNG ỨNG · HAPAS X FLASH FFM · NHẬP HÀNG HAPAS THÁI LAN · KD HAPAS THAILAND) im lặng từ 19/08 22:00 — không có mốc/số mới",
-    "Nhóm [TH] COUNTRY LEADER TEAM có link Base mới sáng 21/08 nhưng là bảng tuyển dụng/hồ sơ ứng viên → LOẠI TRỪ theo luật, không nạp"
+    "Wiki HỌP TỔNG HỢP DỰ ÁN có bản họp 20/08 (Vinh trùng lịch họp tài chính nên nhận nội dung qua nhóm 21/08) — cập nhật đầy đủ 4 BST + bảng rủi ro.",
+    "CM WEEKLY REPORT có kỳ mới 21.8.2026: DT tới hết 20/8 = 7,2 tỷ VND (MTD 107%) nhưng tốc độ tụt còn ~200-250tr/ngày → dự kiến cuối tháng chỉ 9,5 tỷ, THIẾU 500tr; LNĐG 960tr (MTD 75%) → dự kiến 1,6 tỷ.",
+    "🔴 SCG: xin phê duyệt ngân sách bổ sung thanh toán dứt điểm 1.901.418.428 VND, chia 3 đợt 22/08 · 25/08 · 31/08. 31/08 là NGÀY CHUYẾN XE CUỐI CÙNG RỜI KHO SCG. Sơn (GDKD) đã OK nhưng yêu cầu ưu tiên chuyển được hàng trước.",
+    "🔴 Flash: 7 đơn đã bấm 'đã giao' từ hôm qua nhưng hệ thống Flash vẫn 'chưa xử lý' và đã QUÁ HẠN; đêm 21/08 gọi xe nhưng KHÔNG có xe vào (chỉ có xe Kerry). Kho bấm 'phát hàng hoàn tất' trước khi bàn giao thật → lệch trạng thái 2 hệ thống.",
+    "Tote affiliate mới gửi hàng 8/150 KOC → rủi ro không đủ 100 video trước 31/08; kế hoạch gửi 50 KOC 20-23/08 và 100 KOC còn lại 23-31/08 để đủ 500 video trước launching 23/09."
   ],
-  "so_moi": [],
-  "moc_thay_doi": [],
-  "quyet_dinh": [],
+  "so_moi": [
+    {"chi_so": "DT", "gia_tri": "7,2 tỷ VND (MTD 107%) — đơn thành công, tốc độ hiện ~200-250tr/ngày, dự kiến cuối tháng 9,5 tỷ (thiếu 500tr)", "ngay": "2026-08-20", "nguon": "CM WEEKLY REPORT kỳ 21.8"},
+    {"chi_so": "LNĐG", "gia_tri": "960 triệu VND (MTD 75%) — dự kiến cuối tháng 1,6 tỷ", "ngay": "2026-08-20", "nguon": "CM WEEKLY REPORT kỳ 21.8"},
+    {"chi_so": "GMV", "gia_tri": "93 triệu VND · DT thuần 86 triệu · 70 đơn · 0 đơn hoàn", "ngay": "2026-08-21", "nguon": "BigQuery (Ploy trả lời nhóm TL HAPAS SQUAD)"},
+    {"chi_so": "GMV theo BST", "gia_tri": "Travel bag (Pack With Love): DT gộp 144.558 ฿, sau huỷ/hoàn còn ~107.406 ฿ (TikTok 87,6%)", "ngay": "2026-08-20", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08"},
+    {"chi_so": "GMV", "gia_tri": "Livestream 18-20/8 KHÔNG đạt: 850K/1,1M THB", "ngay": "2026-08-20", "nguon": "CM WEEKLY REPORT kỳ 21.8"},
+    {"chi_so": "tỷ trọng SKU", "gia_tri": "Camel chiếm 30% tổng doanh số (tăng từ 20% sau khi Mother's Day hết nhịp). Top bán chạy: Camel · Mother day (14-15/8) · Ivy · Neutral", "ngay": "2026-08-20", "nguon": "CM WEEKLY REPORT kỳ 21.8"},
+    {"chi_so": "tỷ trọng SKU", "gia_tri": "Lyra màu Cream/White chiếm 50,2% doanh số dòng Travel bag → dừng đẩy traffic Sora, dồn ngân sách sang Lyra", "ngay": "2026-08-20", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08"},
+    {"chi_so": "tồn kho", "gia_tri": "Ngày tồn kho 157 ngày (giảm 40 ngày so tuần trước); doanh thu TB ngày tăng 20%", "ngay": "2026-08-20", "nguon": "CM WEEKLY REPORT kỳ 21.8 (khớp bản 16.8)"},
+    {"chi_so": "chi phí kho", "gia_tri": "Phí lưu kho ~6,7 THB/sp/tháng (10 baht/CBM/ngày, 1 sp = 0,022 CBM) — CHƯA gồm soạn xuất hàng & vận chuyển. Giảm 9.000 sp = tiết kiệm 90.000 THB/tháng tiền thuê kho", "ngay": "2026-08-21", "nguon": "Họp S&OP Thái Lan"},
+    {"chi_so": "chi phí", "gia_tri": "Đem hàng tồn về VN chịu thêm thuế nhập khẩu, tổng lên tới ~40% → giảm giá 50% bán tại Thái vẫn lãi hơn đem về VN (Khôi đã có file tính)", "ngay": "2026-08-21", "nguon": "Họp S&OP Thái Lan"},
+    {"chi_so": "công nợ", "gia_tri": "Tổng cần thanh toán dứt điểm đối tác SCG: 1.901.418.428 VND (LSR đang tận dụng vốn đối tác 4 tháng 5/6/7/8)", "ngay": "2026-08-21", "nguon": "KD HAPAS THAILAND"},
+    {"chi_so": "booking KOC", "gia_tri": "Travel bag: KOC đã gửi hàng 99 · video hiện có 285 (Kaia 28 | Lyra 230 | Sora 27); chốt list 10 viral + 27 mini; 5 KOC IG (3 bạn có thêm video). Mục tiêu trước launching ~500 video", "ngay": "2026-08-20", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08"},
+    {"chi_so": "booking KOC", "gia_tri": "Tote: tăng chỉ tiêu KOC từ 100 → 150; MỚI gửi hàng 8 KOC", "ngay": "2026-08-20", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08"},
+    {"chi_so": "chi phí MKT", "gia_tri": "Celeb Engfa cho BST Tote: deal giá tối đa 460K baht (CM Weekly 21.8 ghi 450K baht)", "ngay": "2026-08-21", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08 + CM WEEKLY REPORT kỳ 21.8"}
+  ],
+  "moc_thay_doi": [
+    {"bst": "BST Tote bag - VN (Roam/Kerry/Sienna)", "milestone": "Xuất 30 sp Roam nâu đậm gửi KOC (đường hàng không)", "ngay_moi": "2026-08-22", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08", "ghi_chu": "Đã có NCC nhận vận chuyển, ĐANG ĐỢI báo chi phí và sếp duyệt phương án"},
+    {"bst": "BST Tote bag - VN (Roam/Kerry/Sienna)", "milestone": "Xuất trước 100 sp (trong 70 con còn thiếu gửi affiliate) — đường hàng không", "ngay_moi": "2026-09-12", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08", "ghi_chu": "Dự kiến 18/9 về tới kho và nhập tồn trong ngày"},
+    {"bst": "BST Tote bag - VN (Roam/Kerry/Sienna)", "milestone": "Hàng nâu đậm về kho (dự kiến lên tồn)", "ngay_moi": "2026-09-23", "nguon": "CM WEEKLY REPORT kỳ 21.8", "ghi_chu": "Trùng ngày launching 23/09"},
+    {"bst": "BST Tote bag - VN (Roam/Kerry/Sienna)", "milestone": "Final 25 KOC mini", "ngay_moi": "2026-09-01", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08", "ghi_chu": "PIC Hạnh + Nghĩa"},
+    {"bst": "BST Tote bag - VN (Roam/Kerry/Sienna)", "milestone": "Chốt chân dung celeb (Engfa) + deal giá", "ngay_moi": "2026-08-21", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08", "ghi_chu": "PIC Nghĩa; rủi ro không deal được giá kỳ vọng → cần back-up"},
+    {"bst": "BST Travel bag / PACK WITH LOVE (Sora/Kaia/Lyra)", "milestone": "Trả đủ demo KOC (37/37 TikTok + 5/5 IG) + 100% gửi demo", "ngay_moi": "2026-08-28", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08 + CM WEEKLY REPORT kỳ 21.8", "ghi_chu": "PIC Hạnh + Nghĩa; booking on progress 80%"},
+    {"bst": "BST Travel bag / PACK WITH LOVE (Sora/Kaia/Lyra)", "milestone": "Hoàn thiện kịch bản seeding", "ngay_moi": "2026-08-27", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08", "ghi_chu": "PIC Nghĩa; đã chốt gói hợp tác cùng vendor"},
+    {"bst": "BST Travel bag / PACK WITH LOVE (Sora/Kaia/Lyra)", "milestone": "Content Teaser", "ngay_moi": "2026-08-22", "nguon": "CM WEEKLY REPORT kỳ 21.8", "ghi_chu": "Plan content branding, KHÔNG phải launching bán hàng"},
+    {"bst": "BST Travel bag / PACK WITH LOVE (Sora/Kaia/Lyra)", "milestone": "Content Launching (branding)", "ngay_moi": "2026-08-23", "nguon": "CM WEEKLY REPORT kỳ 21.8", "ghi_chu": "⚠️ Cùng doc ghi Launching Day = 05/09. 22-23/8 là nhịp CONTENT, không phải mốc launching BST"},
+    {"bst": "BST Travel bag / PACK WITH LOVE (Sora/Kaia/Lyra)", "milestone": "Launching Day", "ngay_moi": "2026-09-05", "nguon": "CM WEEKLY REPORT kỳ 21.8 (mục 2.3)", "ghi_chu": "Xác nhận lại 05/09 — 'Đúng tiến độ Booking/AFF, hàng hoá'"},
+    {"bst": "BST T11 (Thu Đông)", "milestone": "Dựng mẫu lấy giá vốn (Graduation Charm / Gift Set)", "ngay_moi": "2026-08-21", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08", "ghi_chu": "OP1 Mua Camel tặng Graduation Charm; OP2 Camel Graduation Gift Set (Camel + ví)"},
+    {"bst": "BST T11 (Thu Đông)", "milestone": "Ra mẫu đối", "ngay_moi": "2026-09-12", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08", "ghi_chu": ""},
+    {"bst": "BST 14/2 (Valentine) — BST MỚI chưa có trong bảng mốc", "milestone": "Kick-off", "ngay_moi": null, "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08", "ghi_chu": "CHƯA kick off. Hương update timeline dự án sau khi làm việc với PM"}
+  ],
+  "quyet_dinh": [
+    {"noi_dung": "Duyệt hướng thanh toán dứt điểm SCG 1,901 tỷ VND theo 3 đợt (22/08 · 25/08 · 31/08), nhưng ƯU TIÊN chuyển được hàng ra khỏi kho SCG trước để không ảnh hưởng kinh doanh", "ai_chot": "Nguyễn Tuấn Việt Sơn (GDKD) — đợi anh Thi (BOD) + chị Hoà (KTT) phê duyệt ngân sách chính thức", "nguon": "KD HAPAS THAILAND 21/08"},
+    {"noi_dung": "Dừng đẩy traffic cho mã Sora, dồn ngân sách sang Lyra màu Cream/White (chiếm 50,2% doanh số dòng Travel bag)", "ai_chot": "Họp tổng hợp dự án 20/08", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08"},
+    {"noi_dung": "Hạ giá thực tế Shopee về ngang TikTok bằng voucher + freeship (Travel bag); Shopee chiết khấu deal mở bán 100 THB đến hết tháng 8 (Tote)", "ai_chot": "Họp tổng hợp dự án 20/08", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08"},
+    {"noi_dung": "Vẫn chuyển 300 Roam - Nâu về Thái để bán bớt; số lượng còn lại để lại cho Việt Nam", "ai_chot": "Họp trước, tái xác nhận 20/08", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08"},
+    {"noi_dung": "Dừng tập trung Mother's Day (chỉ bán được 14-15/8), chuyển sang sản phẩm KEY + 2 BST mới", "ai_chot": "CM Weekly 21.8", "nguon": "CM WEEKLY REPORT kỳ 21.8"},
+    {"noi_dung": "Mở lại chương trình tặng Ví Pretty Jeans khi mua Camel (đã dừng tặng túi giấy), duy trì giá 14xx cho ngày daily, thiết kế combo 2 túi + ghép ví", "ai_chot": "Khuê (Vận hành TMĐT) + CM Weekly", "nguon": "HAPAS THAILAND 300 TỎI + CM WEEKLY REPORT kỳ 21.8"},
+    {"noi_dung": "Không có nhân sự chạy ads → tuyển Freelance trong lúc chờ; Booking/Operation định hướng thuê ngoài như agency, giao đề bài + phiếu giao việc rõ ràng", "ai_chot": "Vinh (CM) / họp 21.8", "nguon": "CM WEEKLY REPORT kỳ 21.8 + Wiki 20/08"},
+    {"noi_dung": "Kho KHÔNG được bấm 'phát hàng hoàn tất' trước khi bàn giao thật cho hãng vận chuyển — để trạng thái sàn và Flash khớp nhau", "ai_chot": "Dịu (TNKH) yêu cầu; quản lý kho (Nichada) đã nhận và sẽ nhắc nhân viên", "nguon": "HAPAS_TH & FFM BST 22/08"},
+    {"noi_dung": "Team HAPAS Thailand họp định kỳ đầu tuần 11:00 mỗi thứ 2, bắt đầu từ 24/08/2026", "ai_chot": "Nguyễn Thị Thu (Admin Officer)", "nguon": "OFFICE - HAPAS THAILAND 21/08"}
+  ],
   "rui_ro": [
-    {
-      "noi_dung": "Xe không vào nhận hàng buổi chiều/tối — đã xảy ra 2 ngày liên tiếp (19/08 và 20/08). Đơn dồn sang ngày sau → rủi ro trượt SLA giao hàng.",
-      "nguon": "HAPAS_TH & FFM BST 20/08"
-    }
+    {"noi_dung": "🔴 SCG đóng kho cuối tháng 8 — 31/08 là ngày chuyến xe cuối cùng rời kho SCG. Nếu chưa chuyển hết hàng và chưa thanh toán dứt điểm 1,901 tỷ thì kẹt cả hàng lẫn hồ sơ đối tác", "nguon": "KD HAPAS THAILAND 21/08"},
+    {"noi_dung": "🔴 Flash: 7 đơn (585619852107679102, 585643182954546926, 585650157335512140, 585651721171535561, 585652480604211017, 585653631858607635, 585653719384360120) đã bấm shipped từ 21/08 nhưng hệ thống Flash vẫn 'chưa xử lý' và ĐÃ QUÁ HẠN", "nguon": "HAPAS_TH & FFM BST 22/08"},
+    {"noi_dung": "🔴 Đêm 21/08 kho đã gọi xe nhưng KHÔNG có xe vào nhận hàng (chỉ có xe Kerry) — ngày thứ 3 lặp lại tình trạng này (19, 20, 21/08)", "nguon": "HAPAS_TH & FFM BST 22/08"},
+    {"noi_dung": "🔴 Tote affiliate: mới gửi hàng 8/150 KOC → rủi ro không kịp 100 video trước 31/08", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08"},
+    {"noi_dung": "🔴 Doanh thu tụt tốc (chỉ ~200-250tr/ngày) → dự kiến cuối tháng 9,5 tỷ, THIẾU 500tr so với nhịp; tháng 8 không còn nhịp launching cuối tháng", "nguon": "CM WEEKLY REPORT kỳ 21.8"},
+    {"noi_dung": "BST T10: chưa có tỷ trọng test, cần kéo dài thời gian test → rủi ro hàng hoá bán số lượng lớn KHÔNG KỊP xuống đơn", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08"},
+    {"noi_dung": "Travel bag: lệch tỷ trọng booking — mã Sora về sau nên tốc độ gửi hàng/lên video chậm hơn (Sora mới 27 video vs Lyra 230)", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08"},
+    {"noi_dung": "Tote: chân dung celeb (Engfa) có thể không deal được giá như kỳ vọng (trần 450-460K baht) → cần back-up plan + làm lại P&L nếu book celeb", "nguon": "Wiki HỌP TỔNG HỢP DỰ ÁN 20/08"},
+    {"noi_dung": "Chung: không có nhân sự chạy ads; số bài branding up trên 2 kênh quá ít (1 bài/tuần) do thiếu nhân sự phụ trách content tại Thái", "nguon": "Wiki 20/08 + CM WEEKLY REPORT kỳ 21.8"},
+    {"noi_dung": "Nhập kho: inbound AN2608200NEN1A17O phải relabel barcode 2000000000985 → 2000214261448 và chỉnh số lượng đơn cho khớp thực nhận", "nguon": "HAPAS_TH & FFM BST 21-22/08"},
+    {"noi_dung": "CSKH: khách mua đơn tối 7/8 minigame nhưng không có tên trong danh sách trúng thưởng, liên tục đòi quà và doạ review 1 sao — chưa có phương án xử lý", "nguon": "HAPAS THAILAND 300 TỎI 21/08"}
   ],
   "cho_vinh_quyet": [
-    "Chốt khung giờ nhận hàng cố định với đối tác vận chuyển, hay chấp nhận cut-off sớm hơn trong ngày?"
+    "Duyệt phương án + chi phí vận chuyển hàng không cho 30 sp Roam nâu đậm xuất 22/08 gửi KOC (đang đợi NCC báo giá — hạn là HÔM NAY)",
+    "Duyệt phương án xuất 100 sp Tote ngày 12/9 bằng đường hàng không (về kho 18/9)",
+    "Chốt 1 nguồn chuẩn cho ngày launching Travel bag: 05/09 (CM Weekly 21.8 + 16.8) vs 23-25/08 (wiki tiến độ 23/07 — nay đã lạc hậu)",
+    "Chốt tên chính thức BST Travel bag: nguồn 20-21/08 dùng 'PACK WITH LOVE' / 'Packed with love' — cần thống nhất với tên 'BST Travel bag' trong bảng mốc",
+    "Quyết định về hàng tồn: giảm giá 50% bán tại Thái (vẫn lãi hơn đem về VN sau thuế nhập khẩu ~40%) hay đem về VN — Khôi đã gửi file stock_disposition_pv.html và đang đợi họp",
+    "Xác nhận có book celeb Engfa cho Tote hay không (trần 450-460K baht) sau khi Nghĩa hoàn thiện P&L + back-up plan",
+    "Chốt BST 14/2 có làm hay không và timeline (Hương đang chờ làm việc với PM)"
   ],
-  "khong_doc_duoc": [],
-  "loai_tru_theo_luat": [
-    "Base tuyển dụng/hồ sơ ứng viên chia sẻ trong [TH] COUNTRY LEADER TEAM 21/08 (CV, email, điện thoại, kết quả phỏng vấn) — thuộc nhóm con người/hồ sơ cá nhân"
+  "khong_doc_duoc": [
+    "HQ x TH OPS — tin duy nhất trong 24h là nội dung về lương KPI nhân sự → LOẠI TRỪ theo luật cấm, không trích",
+    "Nhiều tin trong nhóm HAPAS_TH & FFM BST là ẢNH (screenshot đơn/tồn/inbound bill) — không đọc được nội dung trong ảnh",
+    "Các sheet nhúng trong wiki và CM Weekly (token X1EkszqXnhnm0PtuHQklT2gGgfg, CvagsYEOnhyuF5tX5AUlNpo6gzb) chưa đọc chi tiết từng dòng — chỉ lấy phần text đã tóm tắt trong tài liệu",
+    "Nhóm THAILAND - VẬN HÀNH CUNG ỨNG · HAPAS X FLASH FFM · Check in tiến độ QT kho Thái · NHẬP HÀNG HAPAS THÁI LAN · NHẬP HÀNG MATE MADE THAILAN: đọc được nhưng KHÔNG có tin mới trong 24h",
+    "[TH] COUNTRY LEADER TEAM: trong 24h chỉ có 1 link Base, không có nội dung text"
   ]
 }

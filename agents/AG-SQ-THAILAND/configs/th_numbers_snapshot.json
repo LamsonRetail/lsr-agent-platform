@@ -1,8 +1,8 @@
 {
   "owner_config": "Hương (Trưởng KD HAPAS TH)",
-  "as_of": "2026-08-19",
+  "as_of": "2026-08-22",
   "scope": "TỔNG kênh TMĐT Thái Lan (Shopee + TikTok) — số trước 19/08 còn gộp MATE MADE TH (đã đóng 19/08)",
-  "canh_bao": "Đây là SNAPSHOT chốt ngày 19/08/2026, không phải số sống. Khi trả lời phải nói rõ 'số đến ngày 19/08'. Số mới hơn phải mở BC KQKD Daily.",
+  "canh_bao": "SNAPSHOT chốt ngày 22/08/2026 dựa trên CM WEEKLY REPORT kỳ 21.8 (số tới hết 20/08) + BigQuery ngày 21/08. Khi trả lời phải nói rõ mốc ngày của số. Số mới hơn phải mở BC KQKD Daily.",
   "sources": {
     "daily": "https://o4pvcegwn6b.sg.larksuite.com/wiki/RtGZwGfsciypgekQJ9FlHEGpgPf",
     "weekly": "https://o4pvcegwn6b.sg.larksuite.com/wiki/Ivx2wb92piowcKkyXEnlLMlSgmd",
@@ -14,19 +14,25 @@
       "lndg": "2,4 triệu THB",
       "ap_tu": "05/08/2026"
     },
-    "thuc_hien_19_08": {
-      "dt": "8,4 triệu THB",
-      "dt_mtd": "127%",
-      "lndg": "1,1 triệu THB",
-      "lndg_mtd": "73%",
-      "lndg_mtd_don_tao": "76%",
-      "nguon": "BC KQKD Daily 19/08"
-    },
     "du_kien_cuoi_thang": {
-      "lndg": "1,8 triệu THB / target 2,4 triệu THB",
-      "nguon": "BC KQKD Daily 19/08"
+      "dt": "9,5 tỷ VND — THIẾU 500 triệu so với nhịp",
+      "lndg": "1,6 tỷ VND",
+      "nguon": "CM WEEKLY REPORT kỳ 21.8",
+      "ghi_chu": "Tháng 8 không còn nhịp launching cuối tháng; mục tiêu là giữ doanh số ổn định"
     },
     "lich_su_gan": [
+      {
+        "ngay": "21/08",
+        "dt": "GMV 93 triệu VND · DT thuần 86 triệu · 70 đơn · 0 đơn hoàn (số trong ngày)",
+        "lndg": "—",
+        "nguon": "BigQuery (Ploy, nhóm TL HAPAS SQUAD)"
+      },
+      {
+        "ngay": "19/08",
+        "dt": "8,4 triệu THB (MTD 127%)",
+        "lndg": "1,1 triệu THB (MTD 73%)",
+        "nguon": "BC KQKD Daily 19/08"
+      },
       {
         "ngay": "18/08",
         "dt": "8,2 triệu THB (MTD 116%)",
@@ -50,13 +56,25 @@
       "dt": "7,3 / 8 triệu THB (91%)",
       "lndg": "1,3 / 1,5 triệu THB (83%)",
       "nguon": "Weekly 3/8"
+    },
+    "thuc_hien_20_08": {
+      "dt": "7,2 tỷ VND (MTD 107%) — đơn thành công",
+      "dt_mtd": "107%",
+      "lndg": "960 triệu VND (MTD 75%)",
+      "lndg_mtd": "75%",
+      "toc_do_hien_tai": "~200-250 triệu VND/ngày (đang TỤT)",
+      "nguon": "CM WEEKLY REPORT kỳ 21.8 (số tới hết ngày 20.8)"
     }
   },
   "🔴_van_de_dang_thay": [
-    "DOANH THU vượt nhịp (MTD 127%) nhưng LỢI NHUẬN hụt (MTD 73%, dự kiến cuối tháng chỉ 1,8/2,4 triệu THB). Đây là khoảng cách đáng chú ý nhất của tháng 8.",
-    "Dữ kiện liên quan tới việc lợi nhuận hụt (từ CM Weekly, KHÔNG phải suy đoán): tồn kho Mother's Day 4 tỷ VND dự kiến không clear hết trong T8 → **đã giảm giá đẩy 2–3 ngày**; CIR TikTok theo KPI T8 là 51,42% (Shopee 36,03%); tốc độ bán 217 sp/ngày; ngày tồn kho 157 (đã giảm 40 ngày so với tuần trước).",
-    "Camel chiếm 20% tổng doanh số (giảm từ 35% tháng trước vì có BST mới) — nguồn CM Weekly 16.8.",
-    "DT HAPAS trên TikTok Shop đứng thứ 18 (CM Weekly 07.8)."
+    "DOANH THU vẫn trên nhịp (MTD 107% tới 20/08) nhưng ĐANG TỤT TỐC còn ~200-250tr/ngày → dự kiến cuối tháng chỉ 9,5 tỷ, thiếu 500tr. LỢI NHUẬN hụt rõ hơn: MTD 75%, dự kiến 1,6/2,4 triệu THB tương đương.",
+    "Camel chiếm 30% tổng doanh số (tăng từ 20% sau khi Mother's Day hết nhịp) — nguồn CM Weekly 21.8. Top bán chạy: Camel · Mother day (chỉ 14-15/8) · Ivy · Neutral.",
+    "Mother's Day chỉ bán được 14-15/8, sau đó hết nhu cầu → đã dừng tập trung, chuyển sang SP KEY + 2 BST mới.",
+    "Livestream 18-20/8 KHÔNG đạt: 850K/1,1M THB.",
+    "Ngày tồn kho 157 ngày (giảm 40 ngày so tuần trước); doanh thu trung bình ngày tăng 20%.",
+    "Chi phí lưu kho: ~6,7 THB/sp/tháng (10 baht/CBM/ngày, 1 sp = 0,022 CBM), chưa gồm soạn xuất + vận chuyển. Giảm 9.000 sp = tiết kiệm 90.000 baht/tháng.",
+    "Đem tồn về VN chịu thuế nhập khẩu, tổng ~40% → giảm giá 50% bán tại Thái vẫn lãi hơn (Khôi, S&OP 21/08).",
+    "Công nợ SCG 1.901.418.428 VND phải trả dứt điểm trước 31/08 (ngày chuyến xe cuối rời kho SCG)."
   ],
   "kenh": {
     "kpi_t8_theo_kenh": "TikTok 5,974 tỷ VND (LN 67%, CIR 51,42%, LNĐG 15,58%) · Shopee 3,399 tỷ (LN 66,5%, CIR 36,03%) · Facebook 1,030 tỷ · tổng TMĐT KPI 10,403 tỷ VND (12.922.981 THB)",
@@ -88,5 +106,85 @@
     "luot_xem_tuan": "1,1 triệu",
     "nguon": "CM Weekly 07.8 + 16.8"
   },
-  "thay_doi_pham_vi": "MATE MADE Thái Lan ĐÓNG 19/08/2026 (Vinh thông báo). Ploy chỉ còn phụ trách **HAPAS Thailand**. Câu hỏi về MATE MADE **Việt Nam** là NGOÀI phạm vi Ploy — số do Jenny (AG-JENNY-BOD) / Data Support (AG-DATA-SUPPORT) giữ."
+  "thay_doi_pham_vi": "MATE MADE Thái Lan ĐÓNG 19/08/2026 (Vinh thông báo). Ploy chỉ còn phụ trách **HAPAS Thailand**. Câu hỏi về MATE MADE **Việt Nam** là NGOÀI phạm vi Ploy — số do Jenny (AG-JENNY-BOD) / Data Support (AG-DATA-SUPPORT) giữ.",
+  "ke_hoach_tuan_21_31_08": {
+    "nguon": "CM WEEKLY REPORT kỳ 21.8",
+    "muc": [
+      "30 video AFF + 120 video inhouse BST Tote từ 24/08 — kỳ vọng bổ sung 40K DT",
+      "50 video AFF + 120 video inhouse BST Packed with love từ 21/08 — kỳ vọng bổ sung 40K DT",
+      "Triển khai tặng ví lại từ 21/08 — kỳ vọng doanh thu tăng x1,3 (~200K)",
+      "Bổ sung Key Livestream ngày 24-25 trên TikTok — nhận định chỉ tăng được ~700K/2 ngày",
+      "Hoàn thiện kế hoạch kinh doanh tháng 9"
+    ]
+  },
+  "jtbd_tot_nghiep": {
+    "nguon": "CM WEEKLY REPORT kỳ 21.8 mục 2.4 + Wiki HỌP TỔNG HỢP DỰ ÁN 20/08",
+    "insight": "Tốt nghiệp không phải 'dịp lễ' mà là 'dịp cột-mốc'",
+    "mua": "Mùa trao bằng T9–T11 (Chula 1–2/10 · Mahidol 5–6/10 · KU 5–8/10)",
+    "quy_mo": "Trần lý thuyết túi + ví ~10–30 tỷ VND",
+    "hai_job": "Tân cử nhân TỰ THƯỞNG · Người thân/bạn bè TẶNG QUÀ",
+    "hanh_dong": "Test vào tháng 11 (BST cũ + truyền thông khác đi). OP1 Mua Camel tặng Graduation Charm; OP2 Camel Graduation Gift Set (Camel + ví)"
+  },
+  "tuyen_dung_dang_thieu": {
+    "nguon": "CM WEEKLY REPORT kỳ 21.8 mục 2.5 (headcount theo vị trí — không có thông tin lương)",
+    "vi_tri": [
+      {
+        "bo_phan": "Marketing",
+        "vi_tri": "Content (Thái)",
+        "headcount": 1,
+        "uu_tien": 1,
+        "offer": 0,
+        "onboard": 0
+      },
+      {
+        "bo_phan": "Marketing",
+        "vi_tri": "Booking KOC (Thái)",
+        "headcount": 1,
+        "uu_tien": 1,
+        "offer": 1,
+        "onboard": 0
+      },
+      {
+        "bo_phan": "Marketing",
+        "vi_tri": "Marketing manager (Thái)",
+        "headcount": 1,
+        "uu_tien": 3,
+        "offer": 0,
+        "onboard": 0
+      },
+      {
+        "bo_phan": "KD",
+        "vi_tri": "Booking AFF (Thái)",
+        "headcount": 1,
+        "uu_tien": 1,
+        "offer": 1,
+        "onboard": 0
+      },
+      {
+        "bo_phan": "KD",
+        "vi_tri": "TikTok ads (Việt)",
+        "headcount": 1,
+        "uu_tien": 1,
+        "offer": 1,
+        "onboard": 0
+      },
+      {
+        "bo_phan": "Logistics",
+        "vi_tri": "Cung ứng (thay vị trí của Thái + gom việc Khôi KHHH thành 1 người) (Việt)",
+        "headcount": 1,
+        "uu_tien": 2,
+        "offer": 0,
+        "onboard": 0
+      },
+      {
+        "bo_phan": "HR",
+        "vi_tri": "HR generalist (Thái)",
+        "headcount": 1,
+        "uu_tien": 2,
+        "offer": 0,
+        "onboard": 0
+      }
+    ],
+    "ghi_chu": "Không có nhân sự chạy ads → tuyển Freelance trong lúc chờ"
+  }
 }

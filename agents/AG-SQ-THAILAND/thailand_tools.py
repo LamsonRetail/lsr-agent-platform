@@ -171,12 +171,15 @@ def th_base_targets() -> str:
 
 @tool("báo-cáo")
 def th_numbers_snapshot() -> str:
-    """Số KQKD chốt tới 19/08: DT/LNĐG/%MTD + vấn đề đang thấy + tồn kho + dòng tiền."""
+    """Số KQKD chốt gần nhất: DT/LNĐG/%MTD + vấn đề đang thấy + tồn kho + dòng tiền."""
     s = load_config("th_numbers_snapshot")
     if not s:
         return NO_CONFIG.format(key="th_numbers_snapshot")
     m8 = s.get("thang_8_2026", {})
-    tg, th = m8.get("target", {}), m8.get("thuc_hien_19_08", {})
+    # khoá thực hiện mang ngày chốt (thuc_hien_<dd>_<mm>) — lấy bản mới nhất, không hardcode ngày
+    done_keys = sorted(k for k in m8 if k.startswith("thuc_hien_"))
+    tg = m8.get("target", {})
+    th = m8.get(done_keys[-1], {}) if done_keys else {}
     lines = [f"**Số tới {s.get('as_of')}** ({s.get('scope', '')}):",
              f"- DT **{th.get('dt')}** / target {tg.get('dt')} — MTD **{th.get('dt_mtd')}**",
              f"- LNĐG **{th.get('lndg')}** / target {tg.get('lndg')} — MTD **{th.get('lndg_mtd')}**",
