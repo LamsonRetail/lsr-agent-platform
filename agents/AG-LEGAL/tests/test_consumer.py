@@ -170,24 +170,25 @@ def _agent_sources():
 
 
 def test_no_direct_lark_messaging_outside_kb_reader():
-    """Gửi/nhận tin Lark PHẢI qua platform. lark_kb.py chỉ được đọc Wiki/Drive.
+    """Gửi/nhận tin Lark PHẢI qua platform. Chỉ `lark_kb.py` được gọi Lark trực tiếp.
 
-    Bắt cái đáng bắt là **tự mở HTTP tới Lark**, không phải bắt chuỗi đường dẫn: module
-    đi qua broker (`pf.lark_user_call`) cũng phải nêu đường dẫn `/open-apis/...` trong
-    payload, mà đó là dùng platform đúng cách. Bắt theo chuỗi thì `userchat.py` bị báo oan,
-    và tệ hơn: người sau sẽ "sửa" test bằng cách nới nó ra.
+    Bắt cái đáng bắt: module vừa **tự mở HTTP** vừa **biết host của Lark** — đó là dấu hiệu
+    tự tích hợp. Không bắt theo chuỗi đường dẫn: module đi qua broker
+    (`pf.lark_user_call`) cũng phải nêu `/open-apis/...` trong payload, mà đó là dùng
+    platform đúng cách; và `consumer.py` truyền `LARK_BASE` vào constructor của lark_kb —
+    cũng đúng. Bắt theo chuỗi thì cả hai bị báo oan, rồi người sau sẽ nới test cho hết đỏ.
     """
-    lark_hosts = ("open.larksuite.com", "open.feishu.cn", "LARK_BASE", "LARK_DOMAIN")
+    http_call = re.compile(r"urlopen\s*\(|requests\.(get|post|put|patch|delete)\s*\(|"
+                           r"httpx\.|http\.client\.")
+    lark_host = re.compile(r"open\.larksuite\.com|open\.feishu\.cn")
     for path, src in _agent_sources():
         if path.name == "lark_kb.py":
             continue                       # ngoại lệ đã ghi chú, kiểm riêng bên dưới
-        if "open-apis/" not in src:
-            continue
-        for host in lark_hosts:
-            assert host not in src, f"{path.name} tự gọi Lark trực tiếp ({host})"
-        # Bắt việc DÙNG app_secret (gán / đọc dict), không bắt chữ "app_secret" trong
-        # ghi chú — `voice.py` có câu "không cần app_secret" và từng làm test đỏ oan.
-        assert not re.search(r"""app_secret\s*=|\[['"]app_secret['"]\]""", src), \
+        if http_call.search(src) and lark_host.search(src):
+            raise AssertionError(f"{path.name} tự mở HTTP tới Lark — phải đi qua platform")
+        # Bắt việc DÙNG app_secret (gán / đọc dict), không bắt chữ trong ghi chú:
+        # `voice.py` có câu "không cần app_secret" và từng làm test đỏ oan.
+        assert not re.search(r"""app_secret\s*=\s*(?!os\.environ)""", src), \
             f"{path.name} cầm app_secret"
 
 

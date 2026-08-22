@@ -19,6 +19,21 @@ mã hoá + tự refresh + audit từng lời gọi); agent chỉ gọi `POST /v1
 **không bao giờ thấy token**. Đúng chuẩn §2.3, và thu hồi được tức thì bằng
 `/v1/lark/user/identities/<subject>/revoke`.
 
+## Chat RIÊNG không nằm trong `list_chats` — phải tự mở trước
+
+Đây là chi tiết quyết định, và `agent/jenny/lark_user_bot.py` nói thẳng trong docstring:
+*"Chat riêng không nằm trong API list_chats"*. Đo lại đúng như vậy: account Ann tham gia
+3 group, `list_chats` trả về **đúng 3 group, 0 chat riêng** — kể cả chat riêng đã có tin.
+
+Nên không có cách nào "nghe" một chat riêng mà mình chưa biết `chat_id`. Cách duy nhất
+(Jenny cũng làm y vậy): **agent chủ động nhắn trước** theo `open_id`. Lark tự mở chat riêng
+và **trả về `chat_id`** ngay trong response — lưu lại rồi poll `chat_id` đó về sau.
+
+Hệ quả phải nói rõ với người dùng: **agent chỉ trả lời chat riêng của người đã được mở
+trước**. Muốn thêm ai thì thêm `open_id` vào `USERCHAT_P2P_OPEN_IDS`, hoặc thêm họ vào
+group mà agent đang theo dõi (`USERCHAT_SEED_GROUPS`). Cố ý KHÔNG tự mở với toàn bộ công
+ty: mở chat là **gửi một tin chào tới từng người**, không phải việc agent tự quyết.
+
 ## Bốn cái bẫy của vòng poll (lấy từ code đang chạy của Jenny)
 
 1. **Chat mới thấy thì bỏ qua lịch sử** — cursor khởi tạo bằng `now`, không phải 0. Nếu
@@ -108,6 +123,97 @@ def send_text(pf, chat_id, text):
     if err:
         return None, err
     return (data or {}).get("message_id"), None
+
+
+def chat_members(pf, chat_id):
+    """Thành viên một chat, dưới danh tính account agent → `(list[(tên, open_id)], error)`.
+
+    open_id trả về nằm trong **không gian id của app đã cấp token cho account** — đúng thứ
+    `send_text_to_user()` cần. Lấy open_id từ app khác là Lark trả "user not found".
+    """
+    data, err = _get(pf, f"/chats/{chat_id}/members?member_id_type=open_id&page_size=100")
+    if err:
+        return [], err
+    return [(m.get("name") or "", m.get("member_id") or "")
+            for m in ((data or {}).get("items") or [])], None
+
+
+def send_text_to_user(pf, open_id, text):
+    """Nhắn riêng theo `open_id` — Lark **tự mở chat riêng** và trả `chat_id`.
+
+    Đây là cách duy nhất để có `chat_id` của một chat riêng (API không liệt kê chúng).
+    """
+    body = {"receive_id": open_id, "msg_type": "text",
+            "content": json.dumps({"text": text}, ensure_ascii=False)}
+    data, err = pf.lark_user_call(subject(), "POST",
+                                  IM + "/messages?receive_id_type=open_id", body)
+    if err:
+        return None, None, err
+    return (data or {}).get("chat_id"), (data or {}).get("message_id"), None
+
+
+P2P_GREETING = (
+    "Xin chào, mình là **trợ lý pháp chế** của LSR (account máy `{subj}`, không phải người).\n"
+    "Chat riêng đã mở — anh/chị nhắn mình bất cứ lúc nào: hỏi quy định nội bộ, nhờ soạn "
+    "bản thảo hợp đồng từ mẫu, nhờ rà soát hợp đồng đối tác, hoặc tra văn bản pháp luật.\n"
+    "_Nội dung trao đổi được ghi log và Pháp chế có thể xem để soát chất lượng._")
+
+
+def p2p_partners(pf, store, log=print):
+    """Những `open_id` được chat riêng: khai tay + thành viên các group hạt giống.
+
+    Lấy thành viên group là để không phải khai tay từng người — nhưng **chỉ những group
+    được khai tường minh** ở `USERCHAT_SEED_GROUPS` (mặc định: group Pháp chế/Admin).
+    Không quét mọi group Ann tham gia: Ann ở trong "LAMSON RETAIL TEAM" nên làm vậy là gửi
+    tin chào cho cả công ty.
+    """
+    ids, seen = [], set()
+    for raw in os.environ.get("USERCHAT_P2P_OPEN_IDS", "").split(","):
+        oid = raw.strip()
+        if oid and oid not in seen:
+            seen.add(oid)
+            ids.append((oid, ""))
+    groups = [g.strip() for g in os.environ.get(
+        "USERCHAT_SEED_GROUPS", os.environ.get("LEGAL_GROUP_CHAT_ID", "")).split(",")
+        if g.strip()]
+    me = (store.get_meta("uc:me") or "").strip()
+    for gid in groups:
+        members, err = chat_members(pf, gid)
+        if err:
+            log(f"[userchat] không đọc được thành viên {gid[:14]}: {err}")
+            continue
+        for name, oid in members:
+            if not oid or oid in seen or oid == me:
+                continue
+            seen.add(oid)
+            ids.append((oid, name))
+    return ids
+
+
+def ensure_p2p(pf, store, log=print):
+    """Mở chat riêng với người chưa có, trả về list `chat_id` để poll.
+
+    Tin chào gửi **một lần cho mỗi người** — khoá bằng `meta`, nên restart không gửi lại.
+    """
+    out = []
+    for oid, name in p2p_partners(pf, store, log=log):
+        key = f"uc:p2p:{oid}"
+        cid = store.get_meta(key)
+        if cid:
+            out.append(cid)
+            continue
+        cid, mid, err = send_text_to_user(pf, oid, P2P_GREETING.replace("{subj}", subject()))
+        if err or not cid:
+            log(f"[userchat] không mở được chat riêng với {name or oid}: {err}")
+            continue
+        store.set_meta(key, cid)
+        # Ghi lại tin chào là "của mình". Thiếu dòng này thì vòng poll đọc tin chào như tin
+        # mới và **agent trả lời chính tin chào của nó** — đã xảy ra thật 22/08 08:32→08:33.
+        if mid:
+            store.set_meta(f"uc:sent:{mid}", "1")
+        out.append(cid)
+        log(f"[userchat] đã mở chat riêng với {name or oid} → {cid}")
+    return out
 
 
 def text_of(msg):

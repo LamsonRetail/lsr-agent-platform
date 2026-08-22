@@ -191,3 +191,81 @@ def test_list_chats_includes_p2p():
     chats, err = userchat.list_chats(pf)
     assert err is None and len(chats) == 2
     assert [userchat.is_group_chat(c) for c in chats] == [True, False]
+
+
+# ---------------- chat riêng: phải tự mở trước ----------------
+
+def test_p2p_chat_is_opened_by_greeting_and_remembered(tmp_path, monkeypatch):
+    """Chat riêng không có trong list_chats (Jenny cũng vậy). Cách duy nhất có chat_id:
+    agent nhắn trước theo open_id, Lark trả chat_id trong response."""
+    monkeypatch.setenv("USERCHAT_SEED_GROUPS", "oc_admin")
+    store, _pf, eng, g, b = make(tmp_path)
+    pf = PF()
+    pf.members = [("Thi", "ou_thi"), ("Anh", "ou_anh")]
+
+    def call(subject, method, path, body=None):
+        pf.calls.append((method, path, body))
+        if "/members" in path:
+            return {"items": [{"name": n, "member_id": o} for n, o in pf.members]}, None
+        if method == "POST" and "receive_id_type=open_id" in path:
+            return {"chat_id": "oc_p2p_" + body["receive_id"], "message_id": "om_x"}, None
+        return {}, None
+    pf.lark_user_call = call
+    ids = userchat.ensure_p2p(pf, store, log=lambda m: None)
+    assert sorted(ids) == ["oc_p2p_ou_anh", "oc_p2p_ou_thi"]
+    # Tin chào phải được ghi là "của mình", không thì agent trả lời chính tin chào đó
+    assert store.get_meta("uc:sent:om_x") == "1"
+    assert store.get_meta("uc:p2p:ou_thi") == "oc_p2p_ou_thi"
+    # chào MỘT LẦN cho mỗi người — restart không gửi lại
+    greetings = len([c for c in pf.calls if "receive_id_type=open_id" in c[1]])
+    userchat.ensure_p2p(pf, store, log=lambda m: None)
+    assert len([c for c in pf.calls if "receive_id_type=open_id" in c[1]]) == greetings
+
+
+def test_seed_groups_default_to_admin_group_only(monkeypatch, tmp_path):
+    """Ann ở trong "LAMSON RETAIL TEAM" — quét mọi group là gửi tin chào cho cả công ty."""
+    store, _pf, eng, g, b = make(tmp_path)
+    monkeypatch.delenv("USERCHAT_SEED_GROUPS", raising=False)
+    monkeypatch.setenv("LEGAL_GROUP_CHAT_ID", "oc_admin")
+    pf = PF()
+    asked = []
+
+    def call(subject, method, path, body=None):
+        if "/members" in path:
+            asked.append(path.split("/chats/")[1].split("/")[0])
+            return {"items": []}, None
+        return {}, None
+    pf.lark_user_call = call
+    userchat.p2p_partners(pf, store, log=lambda m: None)
+    assert asked == ["oc_admin"], asked
+
+
+def test_agent_never_opens_a_chat_with_itself(tmp_path, monkeypatch):
+    monkeypatch.setenv("USERCHAT_SEED_GROUPS", "oc_admin")
+    store, _pf, eng, g, b = make(tmp_path)
+    store.set_meta("uc:me", "ou_ann")
+    pf = PF()
+
+    def call(subject, method, path, body=None):
+        if "/members" in path:
+            return {"items": [{"name": "Ann Nguyen", "member_id": "ou_ann"},
+                              {"name": "Thi", "member_id": "ou_thi"}]}, None
+        return {"chat_id": "oc_" + body["receive_id"]}, None
+    pf.lark_user_call = call
+    ids = userchat.ensure_p2p(pf, store, log=lambda m: None)
+    assert ids == ["oc_ou_thi"], "không được mở chat riêng với chính mình"
+
+
+def test_agent_never_answers_its_own_message(tmp_path):
+    """Lỗi THẬT 22/08: tin chào lúc mở chat riêng không được ghi lại nên agent đọc nó như
+    tin mới và trả lời chính nó. Chốt chính là kiểm NGƯỜI GỬI."""
+    store, _pf, eng, g, b = make(tmp_path)
+    store.set_meta("uc:me", "ou_ann")
+    chat = {"chat_id": "oc_p2p", "chat_type": "p2p", "chat_mode": "p2p"}
+    pf = PF(chats=[chat])
+    b.pf = pf
+    consumer._userchat_message(b, chat, msg("om_greet", "Xin chào, mình là trợ lý",
+                                            sender="ou_ann"))
+    assert not pf.sent, "tin do chính account gửi phải bị bỏ"
+    consumer._userchat_message(b, chat, msg("om_hoi", "cho hỏi", sender="ou_nguoi"))
+    assert len(pf.sent) == 1

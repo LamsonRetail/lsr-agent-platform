@@ -616,6 +616,15 @@ def userchat_loop(b):
     print(("userchat: " + why) if ok else ("ℹ️  userchat chưa bật — " + why), flush=True)
     if not ok:
         return
+    # open_id của CHÍNH account agent, để không tự mở chat riêng với mình. Phải khai qua
+    # env: nó thuộc không gian id của app đã cấp token (khác app nhận tin của bot), và
+    # `/open-apis/authen/` nằm ngoài phạm vi grant nên không tự đọc được.
+    me = os.environ.get("AGENT_LARK_OPEN_ID", "").strip()
+    if me:
+        b.store.set_meta("uc:me", me)
+    else:
+        print("⚠️  chưa đặt AGENT_LARK_OPEN_ID — agent có thể tự mở chat riêng với chính "
+              "nó (vô hại nhưng vô ích)", file=sys.stderr, flush=True)
     cursors, chats, next_refresh = {}, [], 0.0
     while True:
         try:
@@ -627,10 +636,15 @@ def userchat_loop(b):
                     print(f"[userchat] không đọc được danh sách chat: {err}",
                           file=sys.stderr, flush=True)
                 else:
-                    chats = got
-                    n_p2p = sum(1 for c in chats if not userchat.is_group_chat(c))
-                    print(f"[userchat] theo dõi {len(chats)} chat ({n_p2p} chat riêng)",
-                          flush=True)
+                    # Chat riêng KHÔNG có trong list_chats — phải tự mở trước mới biết
+                    # chat_id (xem userchat.py). Nên ghép hai nguồn lại.
+                    p2p = userchat.ensure_p2p(b.pf, b.store,
+                                              log=lambda m: print(m, flush=True))
+                    known = {c.get("chat_id") for c in got}
+                    chats = got + [{"chat_id": cid, "chat_mode": "p2p", "chat_type": "p2p"}
+                                   for cid in p2p if cid not in known]
+                    print(f"[userchat] theo dõi {len(chats)} chat "
+                          f"({len(chats) - len(got)} chat riêng)", flush=True)
             for chat in chats:
                 cid = chat.get("chat_id")
                 if not cid:
@@ -659,6 +673,12 @@ def _userchat_message(b, chat, msg):
     if not mid:
         return
     # Tin của CHÍNH MÌNH: bỏ, không thì agent trả lời câu trả lời của nó, lặp vô hạn.
+    # Kiểm theo NGƯỜI GỬI trước, vì nó chặn được mọi tin của account bất kể gửi bằng đường
+    # nào — kiểm theo message_id đã lưu là chốt phụ, và đã từng lọt: tin chào lúc mở chat
+    # riêng không được ghi lại nên agent trả lời chính nó (22/08).
+    me = b.store.get_meta("uc:me")
+    if me and ((msg.get("sender") or {}).get("id") or "") == me:
+        return
     if b.store.get_meta(f"uc:sent:{mid}"):
         return
     if b.store.get_meta(f"uc:seen:{mid}"):        # poll gối đầu — không xử lý hai lần

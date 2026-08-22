@@ -224,6 +224,38 @@ python3 seed_roles.py --sync-from-group
 Đọc thành viên group bằng chính app đang nhận tin rồi khớp theo tên. Kết quả 21/08: cả
 **hai** người duyệt đều đang sai open_id, đã cập nhật.
 
+## 3b-ter. Chat với **account Ann** — ✅ CHẠY ĐƯỢC 22/08 (poll)
+
+Cách nó chạy (`legalkb/userchat.py` + `consumer.userchat_loop`), theo mẫu
+`LamsonRetail/jenny-bod-assistant`:
+
+1. Token của account (C8) có scope `im:chat:readonly im:message im:message:readonly
+   im:resource`, và grant mở prefix `/open-apis/im/v1/`.
+2. `GET /im/v1/chats` bằng **user token** → các **group** account tham gia.
+3. **Chat riêng KHÔNG có trong API đó.** Cách duy nhất có `chat_id`: agent **nhắn trước**
+   theo `open_id`, Lark tự mở chat riêng và trả `chat_id` — lưu lại rồi poll về sau.
+4. Poll 10s: đọc tin mới → đi qua **đúng `handle()`** → trả lời với tư cách account.
+
+⚠️ **Agent chỉ trả lời chat riêng của người đã được mở trước.** Thêm người:
+`USERCHAT_P2P_OPEN_IDS`, hoặc thêm họ vào group ở `USERCHAT_SEED_GROUPS` (mặc định: group
+Pháp chế/Admin). Cố ý không tự mở với cả công ty — mở chat là **gửi một tin chào tới từng
+người**, không phải việc agent tự quyết.
+
+`open_id` khai ở đây phải thuộc **không gian id của app đã cấp token cho account**
+(`cli_aaff13891ff85ee6`), không phải app nhận tin của bot. Lấy đúng bằng cách đọc thành
+viên group dưới danh tính account. Ann: `ou_28c573f04c2adac03df32accd68d2634`.
+
+Bốn cái bẫy của vòng poll (đều đã gặp thật, có test khoá):
+
+| Bẫy | Không xử lý thì |
+|---|---|
+| Chat mới thấy → cursor từ **now** | Lần chạy đầu trả lời lại **toàn bộ lịch sử chat của cả công ty** |
+| Bỏ tin của **chính account** (kiểm `sender.id`) | Agent trả lời chính nó. **Đã xảy ra 22/08 08:32→08:33**: tin chào lúc mở chat không được ghi lại nên bị đọc như tin mới |
+| Cursor **luôn tiến** (`max(latest, now)`) | Tin xử lý lỗi đọc lại mãi |
+| Dedupe theo `message_id` | Poll gối đầu → xử lý hai lần |
+
+> Hệ quả của bẫy thứ nhất: tin gửi **trước** lúc bật sẽ không được trả lời. Nhắn lại là xong.
+
 ## 3c. Danh tính Lark của agent (C8)  ✅ XONG 20/08
 
 Agent đọc Lark Approval dưới account **`ann_legal@hapas.vn`** ("Ann Nguyen") — account
