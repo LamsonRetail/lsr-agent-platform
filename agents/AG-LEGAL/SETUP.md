@@ -249,14 +249,18 @@ Bốn cái bẫy của vòng poll (đều đã gặp thật, có test khoá):
 
 | Bẫy | Không xử lý thì |
 |---|---|
-| Chat mới thấy → cursor từ **now** | Lần chạy đầu trả lời lại **toàn bộ lịch sử chat của cả công ty** |
+| Chat mới thấy → nhìn lùi **10 phút**, không phải từ 0 cũng không phải từ "bây giờ" | Từ 0 = trả lời lại toàn bộ lịch sử của cả công ty. Từ "bây giờ" = add Ann vào group rồi hỏi ngay thì **mất câu hỏi đó**, vì agent chỉ quét lại danh sách chat mỗi 2 phút (đã xảy ra 22/08). Cửa sổ phải ≥ chu kỳ quét |
+| Cursor lưu trong **`meta`**, không giữ trong RAM | Deploy/restart làm cursor nhảy về "bây giờ" ⇒ **tin gửi lúc container đang xuống mất vĩnh viễn** (đã xảy ra 22/08) |
 | Bỏ tin của **chính account** (kiểm `sender.id`) | Agent trả lời chính nó. **Đã xảy ra 22/08 08:32→08:33**: tin chào lúc mở chat không được ghi lại nên bị đọc như tin mới |
 | Cursor **luôn tiến** (`max(latest, now)`) | Tin xử lý lỗi đọc lại mãi |
 | Dedupe theo `message_id` | Poll gối đầu → xử lý hai lần |
 
-> Hệ quả của bẫy thứ nhất: tin gửi **trước lần đầu thấy chat** sẽ không được trả lời.
-> Nhắn lại là xong. Còn tin gửi lúc container **đang restart** thì KHÔNG mất nữa — cursor
-> lưu trong `meta` (`uc:cur:<chat_id>`), restart đọc lại đúng chỗ cũ.
+> ⚠️ **Đừng sửa cursor bằng tay.** Đặt sai một con số là agent đọc lại lịch sử và trả lời
+> hàng loạt tin cũ. Đã xảy ra thật 22/08: sửa cursor mà gõ mốc thời gian **sai năm**
+> (2025 thay vì 2026) ⇒ agent trả lời lại 5 tin từ hôm trước, 5 tin liền nhau trong chat
+> riêng của owner. Muốn agent xử lý lại một chat thì **xoá** hẳn dòng cursor
+> (`DELETE FROM meta WHERE k='uc:cur:<chat_id>'`) và để cửa sổ nhìn lùi 10 phút lo — an
+> toàn hơn tự tính epoch.
 
 ### Người MỚI nhắn Ann thì sao?
 

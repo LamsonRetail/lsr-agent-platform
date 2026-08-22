@@ -653,11 +653,13 @@ def userchat_loop(b):
                 # lần deploy/restart cursor nhảy về "bây giờ" và **tin gửi lúc container
                 # đang xuống bị mất vĩnh viễn** — đã xảy ra thật 22/08: tin 08:34:56 rơi
                 # đúng lúc restart 08:36 nên không bao giờ được xử lý.
-                # Chat CHƯA từng thấy thì vẫn bắt đầu từ "bây giờ": lần đầu bật không được
-                # trả lời lại toàn bộ lịch sử chat của cả công ty.
+                # Chat CHƯA từng thấy: nhìn lùi một cửa sổ NGẮN, không phải từ 0 (đọc cả
+                # lịch sử của cả công ty) cũng không phải từ "bây giờ" — vì người ta add
+                # Ann vào group rồi hỏi ngay, mà agent chỉ quét lại danh sách chat mỗi 2
+                # phút. Xem `userchat.FIRST_LOOKBACK_SECONDS`.
                 ckey = f"uc:cur:{cid}"
                 saved = b.store.get_meta(ckey)
-                since = float(saved) if saved else now
+                since = float(saved) if saved else now - userchat.FIRST_LOOKBACK_SECONDS
                 if not saved:
                     b.store.set_meta(ckey, str(since))
                 msgs, err = userchat.list_messages(b.pf, cid, since)

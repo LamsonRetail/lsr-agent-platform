@@ -325,3 +325,30 @@ def test_first_ever_run_skips_history(tmp_path, monkeypatch):
     old = msg("om_cu", "tin từ tuần trước", ts=time.time() - 7 * 86400)
     _loop_once(b, [chat], {"oc_moi": [old]}, monkeypatch)
     assert not b.pf.sent, "không được trả lời lịch sử ở lần đầu thấy chat"
+
+
+def test_new_chat_looks_back_a_short_window(tmp_path, monkeypatch):
+    """Lỗi THẬT 22/08: add Ann vào group rồi hỏi ngay, nhưng agent chỉ quét lại danh sách
+    chat mỗi 2 phút — tới lúc phát hiện thì câu hỏi đã ở quá khứ và bị bỏ."""
+    store, _pf, eng, g, b = make(tmp_path)
+    b.pf = PF()
+    monkeypatch.setenv("USERCHAT_SEED_GROUPS", "")
+    chat = {"chat_id": "oc_moi", "chat_mode": "group"}
+    asked = msg("om_hoi", "Ann xem giúp mình cái này", ts=time.time() - 90)
+    _loop_once(b, [chat], {"oc_moi": [asked]}, monkeypatch)
+    assert b.pf.sent, "câu hỏi 90 giây trước lúc phát hiện group vẫn phải được trả lời"
+
+
+def test_lookback_window_covers_the_refresh_gap():
+    """Cửa sổ nhìn lùi phải ≥ chu kỳ quét lại danh sách chat, nếu không vẫn còn khe."""
+    assert userchat.FIRST_LOOKBACK_SECONDS >= userchat.CHAT_REFRESH_SECONDS
+
+
+def test_new_chat_still_ignores_old_history(tmp_path, monkeypatch):
+    store, _pf, eng, g, b = make(tmp_path)
+    b.pf = PF()
+    monkeypatch.setenv("USERCHAT_SEED_GROUPS", "")
+    chat = {"chat_id": "oc_moi2", "chat_mode": "group"}
+    old = msg("om_cu", "Ann ơi câu hỏi từ tuần trước", ts=time.time() - 7 * 86400)
+    _loop_once(b, [chat], {"oc_moi2": [old]}, monkeypatch)
+    assert not b.pf.sent, "tin từ tuần trước vẫn không được trả lời"

@@ -54,6 +54,15 @@ NEED_SCOPES = ("im:chat:readonly", "im:message")   # tên scope lấy từ Jenny
 
 POLL_SECONDS = float(os.environ.get("USERCHAT_POLL_SECONDS", "10"))
 CHAT_REFRESH_SECONDS = float(os.environ.get("USERCHAT_CHAT_REFRESH_SECONDS", "120"))
+# Chat MỚI thấy: nhìn lùi bao lâu. Không phải 0 (đọc cả lịch sử) cũng không phải "bây giờ".
+#
+# Vì sao cần: người ta add Ann vào group rồi hỏi ngay trong vài giây, nhưng agent chỉ quét
+# lại danh sách chat mỗi CHAT_REFRESH_SECONDS — nên tới lúc phát hiện group thì câu hỏi đã
+# nằm trong quá khứ và bị bỏ. Đã xảy ra thật 22/08: câu "chào mọi người đi nha Ann" lúc
+# 01:50:04 rơi đúng khe đó.
+#
+# Cửa sổ phải ≥ CHAT_REFRESH_SECONDS, nếu không vẫn còn khe. Để 10 phút cho chắc.
+FIRST_LOOKBACK_SECONDS = float(os.environ.get("USERCHAT_FIRST_LOOKBACK_SECONDS", "600"))
 
 
 def subject():
