@@ -42,7 +42,12 @@ class PF:
             return {"items": self.chats, "has_more": False}, None
         if "/messages?" in path:
             cid = path.split("container_id=")[1].split("&")[0]
-            return {"items": self.messages.get(cid, [])}, None
+            # Lark LỌC theo start_time — fake không lọc thì test cursor vô nghĩa.
+            since = float(path.split("start_time=")[1].split("&")[0]) \
+                if "start_time=" in path else 0
+            items = [m for m in self.messages.get(cid, [])
+                     if int(m.get("create_time", 0)) / 1000 >= since]
+            return {"items": items}, None
         return {}, None
 
     # --- phần platform mà handle() dùng ---
@@ -269,3 +274,54 @@ def test_agent_never_answers_its_own_message(tmp_path):
     assert not pf.sent, "tin do chính account gửi phải bị bỏ"
     consumer._userchat_message(b, chat, msg("om_hoi", "cho hỏi", sender="ou_nguoi"))
     assert len(pf.sent) == 1
+
+
+# ---------------- cursor phải sống qua restart ----------------
+
+def _loop_once(b, chats, messages, monkeypatch):
+    """Chạy đúng MỘT vòng poll rồi thoát, để kiểm hành vi cursor."""
+    import itertools
+    pf = b.pf
+    pf.chats, pf.messages = chats, messages
+    stop = itertools.count()
+
+    def fake_sleep(_s):
+        if next(stop) >= 0:
+            raise KeyboardInterrupt
+    monkeypatch.setattr(consumer.time, "sleep", fake_sleep)
+    try:
+        consumer.userchat_loop(b)
+    except KeyboardInterrupt:
+        pass
+
+
+def test_cursor_survives_restart(tmp_path, monkeypatch):
+    """Lỗi THẬT 22/08: cursor giữ trong RAM nên deploy làm nó nhảy về "bây giờ", và tin
+    gửi lúc container đang xuống bị mất vĩnh viễn."""
+    store, _pf, eng, g, b = make(tmp_path)
+    b.pf = PF()
+    chat = {"chat_id": "oc_p2p", "chat_type": "p2p", "chat_mode": "p2p"}
+    monkeypatch.setenv("USERCHAT_SEED_GROUPS", "")
+
+    _loop_once(b, [chat], {"oc_p2p": []}, monkeypatch)
+    first = store.get_meta("uc:cur:oc_p2p")
+    assert first, "vòng đầu phải ghi cursor xuống đĩa"
+
+    # "restart": loop mới, cùng store → phải đọc lại cursor cũ, KHÔNG nhảy về now
+    b2_pf = PF()
+    b.pf = b2_pf
+    late = msg("om_late", "tin gửi lúc container đang xuống",
+               ts=float(first) + 1)
+    _loop_once(b, [chat], {"oc_p2p": [late]}, monkeypatch)
+    assert b2_pf.sent, "tin sau cursor cũ phải được xử lý sau khi restart"
+
+
+def test_first_ever_run_skips_history(tmp_path, monkeypatch):
+    """Chat chưa từng thấy: vẫn bắt đầu từ "bây giờ" — không trả lời lại lịch sử."""
+    store, _pf, eng, g, b = make(tmp_path)
+    b.pf = PF()
+    chat = {"chat_id": "oc_moi", "chat_type": "p2p", "chat_mode": "p2p"}
+    monkeypatch.setenv("USERCHAT_SEED_GROUPS", "")
+    old = msg("om_cu", "tin từ tuần trước", ts=time.time() - 7 * 86400)
+    _loop_once(b, [chat], {"oc_moi": [old]}, monkeypatch)
+    assert not b.pf.sent, "không được trả lời lịch sử ở lần đầu thấy chat"

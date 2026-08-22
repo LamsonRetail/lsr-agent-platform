@@ -254,7 +254,32 @@ Bốn cái bẫy của vòng poll (đều đã gặp thật, có test khoá):
 | Cursor **luôn tiến** (`max(latest, now)`) | Tin xử lý lỗi đọc lại mãi |
 | Dedupe theo `message_id` | Poll gối đầu → xử lý hai lần |
 
-> Hệ quả của bẫy thứ nhất: tin gửi **trước** lúc bật sẽ không được trả lời. Nhắn lại là xong.
+> Hệ quả của bẫy thứ nhất: tin gửi **trước lần đầu thấy chat** sẽ không được trả lời.
+> Nhắn lại là xong. Còn tin gửi lúc container **đang restart** thì KHÔNG mất nữa — cursor
+> lưu trong `meta` (`uc:cur:<chat_id>`), restart đọc lại đúng chỗ cũ.
+
+### Người MỚI nhắn Ann thì sao?
+
+**Chưa nhận được** — và đây là giới hạn của Lark, không phải thiếu quyền: chat riêng không
+liệt kê được, nên agent chỉ biết `chat_id` của những chat **nó đã mở trước**.
+
+Muốn phủ hết mọi người thì phải mở trước với từng người, tức **agent gửi một tin chào tới
+từng người**. Ann đang ở 3 group:
+
+| Group | Số người |
+|---|---|
+| LSR Legal - admin group | 3 ← đang bật |
+| LAMSON RETAIL TEAM | 93 |
+| CUNG ỨNG | 95 |
+
+Bật cho cả công ty = thêm chat_id group vào `USERCHAT_SEED_GROUPS`, và agent sẽ nhắn chào
+~150 người (một lần mỗi người, khoá bằng `meta`). Đây là việc **gửi tin ra ngoài ở quy mô
+lớn** nên phải do owner quyết, không phải mặc định.
+
+**Group thì KHÔNG cần gì cả**: Ann được add vào group nào là `list_chats` thấy trong ≤120s
+và agent hoạt động ngay — không có danh sách trắng, không có bước duyệt. Trong group vẫn
+giữ luật "được gọi tên mới trả lời" (chốt trước đó của owner), còn chat riêng thì trả lời
+mọi tin.
 
 ## 3c. Danh tính Lark của agent (C8)  ✅ XONG 20/08
 

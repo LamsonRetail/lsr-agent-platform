@@ -625,7 +625,7 @@ def userchat_loop(b):
     else:
         print("⚠️  chưa đặt AGENT_LARK_OPEN_ID — agent có thể tự mở chat riêng với chính "
               "nó (vô hại nhưng vô ích)", file=sys.stderr, flush=True)
-    cursors, chats, next_refresh = {}, [], 0.0
+    chats, next_refresh = [], 0.0
     while True:
         try:
             now = time.time()
@@ -649,9 +649,17 @@ def userchat_loop(b):
                 cid = chat.get("chat_id")
                 if not cid:
                     continue
-                # Chat mới thấy: bắt đầu từ BÂY GIỜ. Nếu lấy từ 0 thì lần chạy đầu agent
+                # Cursor LƯU BỀN trong `meta`, không giữ trong RAM. Giữ trong RAM thì mỗi
+                # lần deploy/restart cursor nhảy về "bây giờ" và **tin gửi lúc container
+                # đang xuống bị mất vĩnh viễn** — đã xảy ra thật 22/08: tin 08:34:56 rơi
+                # đúng lúc restart 08:36 nên không bao giờ được xử lý.
+                # Chat CHƯA từng thấy thì vẫn bắt đầu từ "bây giờ": lần đầu bật không được
                 # trả lời lại toàn bộ lịch sử chat của cả công ty.
-                since = cursors.setdefault(cid, now)
+                ckey = f"uc:cur:{cid}"
+                saved = b.store.get_meta(ckey)
+                since = float(saved) if saved else now
+                if not saved:
+                    b.store.set_meta(ckey, str(since))
                 msgs, err = userchat.list_messages(b.pf, cid, since)
                 if err:
                     print(f"[userchat] đọc chat {cid[:14]} lỗi: {err}", file=sys.stderr,
@@ -661,7 +669,8 @@ def userchat_loop(b):
                 for m in msgs:
                     latest = max(latest, int(m.get("create_time", 0) or 0) / 1000 + 1)
                     _userchat_message(b, chat, m)
-                cursors[cid] = max(latest, now)      # luôn tiến, không đọc lại mãi
+                # Luôn tiến (không đọc lại mãi), và ghi xuống đĩa ngay để restart không lùi.
+                b.store.set_meta(ckey, str(max(latest, since)))
         except Exception as exc:
             print(f"[userchat] vòng poll lỗi: {exc}", file=sys.stderr, flush=True)
         time.sleep(userchat.POLL_SECONDS)
